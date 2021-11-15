@@ -21,8 +21,14 @@ from elektronn3.data import transforms
 logger = logging.getLogger('elektronn3log')
 
 
-# Codes: BG: 0, MxEnc: 1, QtEnc: 2
-
+# Codes: MxEnc: 0, QtEnc: 1
+ECODE = {'mx': 0, 'qt': 1}
+EFULLNAMES = {
+    'mx': 'MxEnc',
+    'qt': 'QtEnc',
+    0: 'MxEnc',
+    1: 'QtEnc'
+}
 
 MMMT3_TYPE = '1xMmMT3'
 # MMMT3_TYPE = '2xMmMT3'
@@ -33,6 +39,83 @@ if MMMT3_TYPE == '1xMmMT3':
 elif MMMT3_TYPE == '2xMmMT3':
     VALID_NUMS = [70, 75, 80, 85]
     #            [qt, qt, mx, mx]
+
+
+
+class Patches(data.Dataset):
+    """Image-level classification dataset loader for small patches, similar to MNIST"""
+    def __init__(
+            self,
+            # data_root: str,
+            descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1'),
+            train: bool = True,
+            transform=transforms.Identity(),
+            inp_dtype=np.float32,
+            target_dtype=np.int64,
+            epoch_multiplier=20,  # Pretend to have more data in one epoch
+    ):
+        super().__init__()
+        # self.data_root = data_root
+        self.train = train
+        self.transform = transform
+        self.inp_dtype = inp_dtype
+        self.target_dtype = target_dtype
+        self.epoch_multiplier = epoch_multiplier
+
+        sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
+        self._sheet = sheet
+        meta = sheet.copy()
+
+        if self.train:
+            logger.info('\nTraining data:')
+            meta = meta[meta.train]
+        else:
+            logger.info('\nValidation data:')
+            meta = meta[meta.test]
+
+        self.meta = meta
+
+        # self.root_path = Path(data_root).expanduser()
+        self.root_path = Path(descr_sheet[0]).parent
+
+        self.inps = []
+        self.targets = []
+
+        for patch_meta in self.meta.itertuples():
+            inp = imageio.imread(self.root_path / 'raw' / patch_meta.patch_fname)
+            target = ECODE[patch_meta.enctype]
+            self.inps.append(inp)
+            self.targets.append(target)
+        
+        self.inps = np.stack(self.inps).astype(self.inp_dtype)
+        self.targets = np.stack(self.targets).astype(self.target_dtype)
+
+        logger.info(f'MxEnc: {meta[meta.enctype == "mx"].shape[0]}')
+        logger.info(f'QtEnc: {meta[meta.enctype == "qt"].shape[0]}')
+
+
+
+    def __getitem__(self, index):
+        index %= len(self.meta)  # Wrap around to support epoch_multiplier
+        inp = self.inps[index]
+        target = self.targets[index]
+        fname = self.meta.patch_fname.iloc[index]
+        label_name = EFULLNAMES[target]
+        fname = f'{fname} ({label_name})'
+        inp = inp[None]  # (C=1, H, W)
+        # Pass None instead of target because scalar targets are not to be augmented.
+        inp, _ = self.transform(inp, None)
+        sample = {
+            'inp': torch.as_tensor(inp),
+            'target': torch.as_tensor(target),
+            'fname': fname,
+        }
+        return sample
+
+    def __len__(self):
+        return len(self.meta) * self.epoch_multiplier
+
+
 
 class XTifDirData2d(data.Dataset):
     """Using a special TIF file directory structure for segmentation data loading.
