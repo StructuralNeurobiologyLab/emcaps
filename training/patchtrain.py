@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 
 
+# TODO
+
+# https://github.com/lucidrains/vit-pytorch#cct
+# --> https://arxiv.org/abs/2104.05704
+
+# 
+
+########
+
+
 """
 Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles
 
