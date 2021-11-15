@@ -79,15 +79,21 @@ EC_MIN_AREA = 200
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
 
-# Temporary, only for dataset v1:
 
-image_numbers = range(16, 54 + 1)
+# image_numbers = range(16, 54 + 1)
+# MXENC_NUMS = list(range(31, 40 + 1)) + list(range(51, 53 + 1))
+# QTENC_NUMS = list(range(16, 30 + 1)) + list(range(41, 50 + 1)) + [54]
 
-MXENC_NUMS = list(range(31, 40 + 1)) + list(range(51, 53 + 1))
-QTENC_NUMS = list(range(16, 30 + 1)) + list(range(41, 50 + 1)) + [54]
+
+# Data v2: Include all 1xMmMT3 data (exclude only 1..15)
+
+image_numbers = range(16, 69 + 1)
+
+MXENC_NUMS = list(range(31, 40 + 1)) + list(range(51, 53 + 1)) + list(range(60, 69 + 1))
+QTENC_NUMS = list(range(16, 30 + 1)) + list(range(41, 50 + 1)) + list(range(54, 59 + 1))
 
 img_paths = eul([
-    f'~/tumdata/{i}/{i}.tif' for i in image_numbers
+    f'~/tumdata2/{i}/{i}.tif' for i in image_numbers
 ])
 
 def get_enctype(path: str) -> str:
@@ -102,7 +108,7 @@ def get_enctype(path: str) -> str:
 
 patch_out_path = os.path.expanduser('~/tum/patches_v2')
 
-for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/blind_samples']:
+for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples']:
     os.makedirs(p, exist_ok=True)
 
 model_variant = 'final.pt'
@@ -180,7 +186,7 @@ for model_path in model_paths:
     predictor = Predictor(
         model=model_path,
         device='cuda',
-        # float16=True,
+        float16=True,
         transform=pre_predict_transform,
         # verbose=True,
         augmentations=3 if apply_softmax else None,
@@ -189,6 +195,10 @@ for model_path in model_paths:
 
     for img_path in tqdm.tqdm(img_paths, position=0, desc='Image'):
         enctype = get_enctype(img_path)
+        img_path = Path(img_path)
+        if not img_path.is_file():
+            img_path = img_path.with_suffix('.TIF')
+        img_path = str(img_path)
         inp = np.array(imageio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
         out = predictor.predict(inp)
@@ -249,8 +259,8 @@ meta = pd.DataFrame(
     meta,
     columns=PatchMeta._fields,
 )
-meta.convert_dtypes()
-meta.astype({'img_num': int})  # Int64
+meta = meta.convert_dtypes()
+meta = meta.astype({'img_num': int})  # Int64
 meta.to_excel(f'{patch_out_path}/patchmeta.xlsx', index_label='patch_id')
 
 
@@ -271,5 +281,27 @@ for entry in shuffled_samples.itertuples():
 
 grid = image_grid(imgs, 8, 12)
 grid.save(f'{patch_out_path}/samples_grid.png')
+
+
+# Try to build a balanced patch dataset with train/test split
+
+meta['train'] = True
+meta['test'] = False
+
+meta.iloc[mixed_samples.index, meta.columns.get_loc('test')] = True
+meta.iloc[mixed_samples.index, meta.columns.get_loc('train')] = False
+# There are always more MxEnc examples than QtEnc samples
+assert meta[meta.enctype == 'mx'].shape[0] > meta[meta.enctype == 'qt'].shape[0]
+# -> Do not train on all available mx patches to better balance classes
+_n_qt_train_samples = meta[(meta.enctype == 'qt') & (meta.test == False)].shape[0]
+_mx_train_samples = meta[meta.enctype == 'mx'].sample(_n_qt_train_samples)
+_mx_exclude_idxs = set(meta[meta.enctype == 'mx'].index) - set(_mx_train_samples.index)
+# meta.loc[_mx_exclude_idxs, meta.columns.get_loc('train')] = False
+
+meta.loc[meta.index.isin(_mx_exclude_idxs), 'train'] = False
+
+meta = meta.convert_dtypes()
+
+meta.to_excel(f'{patch_out_path}/patchmeta_traintest.xlsx', index_label='patch_id')
 
 import IPython; IPython.embed(); exit()
