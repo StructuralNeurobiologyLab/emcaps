@@ -85,32 +85,6 @@ def get_enctype(path: str) -> str:
         raise ValueError(f'Image {path} not found in any list')
 
 
-def emb_to_rgb_pca(emb):
-    # emb.shape: batch, emb_dim, x, y, z (or z,y,x?)
-    emb_flat = emb.swapaxes(1, -1).reshape((-1, emb.shape[1]))
-    U, S, V = torch.pca_lowrank(emb_flat)
-
-    V_3 = V[:, :3]
-    emb_projected_pca = torch.tensordot(emb, V_3, ([1], [0]))
-    emb_projected_pca = emb_projected_pca.moveaxis(-1, 1)
-    # alternative #1: (emb.swapaxes(1, -1) @ (V_3).swapaxes(1, -1))[0]
-    # alternative #2:
-    # emb_projected_flat = torch.matmul(emb_flat, V[:, :3])
-    # emb_projected_reshaped =   emb_projected_flat.reshape(  (emb.shape[0],  emb.shape[2], emb.shape[3], emb.shape[4], 3)).swapaxes(1,2).swapaxes(2,3)
-
-    fig, ax = plt.subplots(constrained_layout=True, figsize=(10, 10))
-    import IPython; IPython.embed(); raise SystemExit
-    ax.imshow(emb_projected_pca)
-    plt.imsave('emb.png')
-    plt.show()
-
-    # emb_middle = get_middle(emb)
-    # emb_middle_flat= #todo: tsne is expensive -> just on plotted (middle) slice
-    # emb_tsne_flat = TSNE(n_components=3, learning_rate="auto").fit_transform(emb_flat) # todo: use tsnecuda package
-    # emb_tsne_reshaped = emb_tsne_flat.reshape((emb.shape[0], emb.shape[2], emb.shape[3], emb.shape[4], 3)
-    #                     ).swapaxes(1, 2).swapaxes(2, 3)
-    return emb_projected_pca  # , emb_tsne_reshaped
-
 
 # image_numbers = [22, 32, 42]
 image_numbers = range(16, 54 + 1)
@@ -241,7 +215,9 @@ for model_path in model_paths:
         for c in range(feat.shape[1]):
             feat[0, c][mask == 0] = 0
         # raw = raw.astype(np.float16)
-        raw[mask == 0] = 0
+
+        ## Uncomment to get black background:
+        # raw[mask == 0] = 0
 
         # outputs[enctype]['mask'].append(mask)
         # outputs[enctype]['feat'].append(feat)

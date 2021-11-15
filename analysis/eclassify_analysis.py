@@ -189,7 +189,6 @@ def emb_to_rgb_umap(emb):  # todo: run on sep. process on cpu, takes ~20 s
         emb = emb[None]
     emb_flat = emb.swapaxes(1, -1).reshape((-1, emb.shape[1]))
     emb_umap_flat = umap.UMAP(n_components=3).fit_transform(emb_flat)  # todo: use cuml not umap
-    import IPython ; IPython.embed(); raise SystemExit
     emb_umap_reshaped = emb_umap_flat.reshape(
         (emb.shape[0], emb.shape[2], emb.shape[3], 3)
     ).swapaxes(-1, 1)

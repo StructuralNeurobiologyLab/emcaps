@@ -56,11 +56,22 @@ multi_label_names = {
     5: 'cytoplasmic_region',
 }
 
-image_numbers = [22, 32, 42]
+# image_numbers = [22, 32, 42]  # validation images, held out from training data
+image_numbers = range(16, 70 + 1)  # all images from 1xMmMT3 subset (also including training data!), exluding first 15 images
 
 img_paths = eul([
     f'~/tumdata/{i}/{i}.tif' for i in image_numbers
 ])
+
+DESIRED_OUTPUTS = [
+    'raw',
+    'thresh',
+    'lab',
+    'overlays',
+    'error_maps',
+    'probmaps',
+    'metrics',
+]
 
 label_name = 'encapsulins'
 
@@ -68,13 +79,13 @@ results_path = os.path.expanduser('~/tumresults')
 
 
 # TODO: 15to54 models use final.pt
-# model_variant = 'final.pt'
-model_variant = 'best.pt'
+model_variant = 'final.pt'
+# model_variant = 'best.pt'
 # model_variant = ''
 
 
 model_paths = eul([
-    # f'~/tumtrainings/15to54_encapsulins__UNet__21-09-16_03-10-26/model_{model_variant}',
+    f'~/tumtrainings/15to54_encapsulins__UNet__21-09-16_03-10-26/model_{model_variant}',
     # f'~/tumtrainings/D_15to54_encapsulins__UNet__21-09-16_04-02-24/model_{model_variant}',
     # f'~/tumtrainings/M___UNet__21-09-13_04-32-52/model_{model_variant}',
 ])
@@ -128,7 +139,8 @@ for model_path in model_paths:
 
             out_path = eu(f'{results_path}/{basename}_{modelname}_{kind}.png')
             print(f'Writing inference result to {out_path}')
-            imageio.imwrite(out_path, cout)
+            if 'thresh' in DESIRED_OUTPUTS:
+                imageio.imwrite(out_path, cout)
 
             if is_distmap:
                 dmap_path = eu(f'{results_path}/{basename}_{modelname}_distmap.png')
@@ -149,49 +161,51 @@ for model_path in model_paths:
             lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
 
             raw_img = imageio.imread(img_path)
-            imageio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
-            imageio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
+            if 'raw' in DESIRED_OUTPUTS:
+                imageio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
+            if 'lab' in DESIRED_OUTPUTS:
+                imageio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
 
-            # Create overlay images
-            lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
-            pred_overlay = label2rgb(cout > 0, raw_img, bg_label=0, alpha=0.5, colors=['green'])
-            # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
-            raw_img_01 = raw_img.astype(np.float64) / 255.
-            lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
-            pred_overlay[cout == 0, :] = raw_img_01[cout == 0, None]
-            # Convert from [0, 1] float to [0, 255] uint8 for imageio
-            lab_overlay = (lab_overlay * 255.).astype(np.uint8)
-            pred_overlay = (pred_overlay * 255.).astype(np.uint8)
+            if 'overlays' in DESIRED_OUTPUTS:
+                # Create overlay images
+                lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                pred_overlay = label2rgb(cout > 0, raw_img, bg_label=0, alpha=0.5, colors=['green'])
+                # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
+                raw_img_01 = raw_img.astype(np.float64) / 255.
+                lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
+                pred_overlay[cout == 0, :] = raw_img_01[cout == 0, None]
+                # Convert from [0, 1] float to [0, 255] uint8 for imageio
+                lab_overlay = (lab_overlay * 255.).astype(np.uint8)
+                pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-            imageio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.png'), lab_overlay)
-            imageio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.png'), pred_overlay)
+                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.png'), lab_overlay)
+                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.png'), pred_overlay)
 
-            # Create error image
-            error_img = lab_img != cout
-            error_img = (error_img.astype(np.uint8)) * 255
-            imageio.imwrite(eu(f'{results_path}/{basename}_error.png'), error_img)
+            if 'error_maps' in DESIRED_OUTPUTS:
+                # Create error image
+                error_img = lab_img != cout
+                error_img = (error_img.astype(np.uint8)) * 255
+                imageio.imwrite(eu(f'{results_path}/{basename}_error.png'), error_img)
 
-            # Create false positive (fp) image
-            fp_error_img = (lab_img > 0) & (cout == 0)
-            fp_error_img = (fp_error_img.astype(np.uint8)) * 255
-            imageio.imwrite(eu(f'{results_path}/{basename}_fp_error.png'), fp_error_img)
-            # Create false positive (fp) image overlay
-            fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
-            fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
-            fp_overlay = (fp_overlay * 255.).astype(np.uint8)
-            imageio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.png'), fp_overlay)
+                # Create false positive (fp) image
+                fp_error_img = (lab_img > 0) & (cout == 0)
+                fp_error_img = (fp_error_img.astype(np.uint8)) * 255
+                imageio.imwrite(eu(f'{results_path}/{basename}_fp_error.png'), fp_error_img)
+                # Create false positive (fp) image overlay
+                fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
+                fp_overlay = (fp_overlay * 255.).astype(np.uint8)
+                imageio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.png'), fp_overlay)
 
-
-
-            # Create false negative (fn) image
-            fn_error_img = (lab_img == 0) & (cout > 0)
-            fn_error_img = (fn_error_img.astype(np.uint8)) * 255
-            imageio.imwrite(eu(f'{results_path}/{basename}_fn_error.png'), fn_error_img)
-            # Create false negative (fn) image overlay
-            fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
-            fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
-            fn_overlay = (fn_overlay * 255.).astype(np.uint8)
-            imageio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.png'), fn_overlay)
+                # Create false negative (fn) image
+                fn_error_img = (lab_img == 0) & (cout > 0)
+                fn_error_img = (fn_error_img.astype(np.uint8)) * 255
+                imageio.imwrite(eu(f'{results_path}/{basename}_fn_error.png'), fn_error_img)
+                # Create false negative (fn) image overlay
+                fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
+                fn_overlay = (fn_overlay * 255.).astype(np.uint8)
+                imageio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.png'), fn_overlay)
 
 
             m_targets.append((lab_img > 0))#.reshape(-1))
@@ -204,50 +218,55 @@ for model_path in model_paths:
         elif out.shape[1] > 2:  # Export each channel separately
             raw_img = imageio.imread(img_path)
             raw_img_01 = raw_img.astype(np.float64) / 255.
-            imageio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
+            if 'raw' in DESIRED_OUTPUTS:
+                imageio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
             export_channels = range(out.shape[1])
             for c in export_channels:
                 # Probmaps
                 cout = out[0, c]
                 cout = (cout * 255.).astype(np.uint8)
                 out_path = eu(f'{results_path}/{basename}_c{c}_{modelname}.png')
-                imageio.imwrite(out_path, cout)
+                if 'probmaps' in DESIRED_OUTPUTS:
+                    imageio.imwrite(out_path, cout)
 
                 # Probmaps thresholded
                 out_thresh_path = eu(f'{results_path}/{basename}_c{c}_thresh{multi_thresh}_{modelname}.png')
                 cout_thresh_bin = cout >= multi_thresh
                 cout_thresh = (cout_thresh_bin.astype(np.uint8) * 255)
-                imageio.imwrite(out_thresh_path, cout_thresh)
+                if 'thresh' in DESIRED_OUTPUTS:
+                    imageio.imwrite(out_thresh_path, cout_thresh)
 
-                # Create overlay images
-                # First get GT label image
-                lab_path = f'{img_path[:-4]}_{multi_label_names[c]}{img_path[-4:]}'
-                if os.path.exists(lab_path):  # Not all labels are always available
-                    lab_img = np.array(imageio.imread(lab_path))
-                    if invert_labels:
-                        lab_img = (lab_img == 0).astype(np.int64)
-                else:
-                    lab_img = np.zeros_like(raw_img)
-                lab_img = ((lab_img > 0) * 255).astype(np.uint8)
-                lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
-                lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
-                lab_overlay = (lab_overlay * 255.).astype(np.uint8)
+                if 'overlays' in DESIRED_OUTPUTS:
+                    # Create overlay images
+                    # First get GT label image
+                    lab_path = f'{img_path[:-4]}_{multi_label_names[c]}{img_path[-4:]}'
+                    if os.path.exists(lab_path):  # Not all labels are always available
+                        lab_img = np.array(imageio.imread(lab_path))
+                        if invert_labels:
+                            lab_img = (lab_img == 0).astype(np.int64)
+                    else:
+                        lab_img = np.zeros_like(raw_img)
+                    lab_img = ((lab_img > 0) * 255).astype(np.uint8)
+                    lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                    lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
+                    lab_overlay = (lab_overlay * 255.).astype(np.uint8)
 
-                pred_overlay = label2rgb(cout_thresh_bin, raw_img, bg_label=0, alpha=0.5, colors=['green'])
-                pred_overlay[cout_thresh_bin == 0, :] = raw_img_01[cout_thresh_bin == 0, None]
-                pred_overlay = (pred_overlay * 255.).astype(np.uint8)
+                    pred_overlay = label2rgb(cout_thresh_bin, raw_img, bg_label=0, alpha=0.5, colors=['green'])
+                    pred_overlay[cout_thresh_bin == 0, :] = raw_img_01[cout_thresh_bin == 0, None]
+                    pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_lab.png'), lab_overlay)
-                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_pred.png'), pred_overlay)
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_lab.png'), lab_overlay)
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_pred.png'), pred_overlay)
 
-            # Argmax of channel probs
-            pred = np.argmax(out, 1)[0]
-            # plab = skimage.color.label2rgb(pred, bg_label=0)
-            plab = skimage.color.label2rgb(pred, colors=['red', 'green', 'blue', 'purple', 'brown', 'magenta'], bg_label=0)
-            out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.png')
-            imageio.imwrite(out_path, plab)
+            if 'argmax' in DESIRED_OUTPUTS:
+                # Argmax of channel probs
+                pred = np.argmax(out, 1)[0]
+                # plab = skimage.color.label2rgb(pred, bg_label=0)
+                plab = skimage.color.label2rgb(pred, colors=['red', 'green', 'blue', 'purple', 'brown', 'magenta'], bg_label=0)
+                out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.png')
+                imageio.imwrite(out_path, plab)
 
-    if not is_multi:  # TODO: Make this work with multilabel
+    if 'metrics' in DESIRED_OUTPUTS and not is_multi:  # TODO: Make this work with multilabel
         # Calculate pixelwise precision and recall
         m_targets = np.concatenate(m_targets, axis=None)
         m_probs = np.concatenate(m_probs, axis=None)
