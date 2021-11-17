@@ -12,7 +12,9 @@
 
 
 """
-Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles
+Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles on patch basis.
+
+Uses a patch dataset that can be created by inference/patchifyseg.py
 
 """
 
@@ -45,9 +47,10 @@ from elektronn3.models.unet import UNet
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from tifdirdata import Patches
+from training.tifdirdata import Patches
 
-from effnetv2 import effnetv2_s, effnetv2_m
+from models.effnetv2 import effnetv2_s, effnetv2_m
+from models.cct import CCT
 
 
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -91,8 +94,14 @@ data_root = '~/tumdata2/'
 
 out_channels = 2
 
-model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
+# model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 # model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
+model = CCT(
+    img_size=28,
+    n_input_channels=1,
+    kernel_size=3,
+    embedding_dim=96,
+)
 
 # USER PATHS
 save_root = os.path.expanduser('~/tum/trainings3')
@@ -214,7 +223,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(0, 20_000, 2000)),
+    extra_save_steps=list(range(2000, 30_000 + 1, 2000)),
 )
 
 # Archiving training script, src folder, env info

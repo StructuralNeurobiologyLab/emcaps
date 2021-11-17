@@ -270,7 +270,7 @@ mx_samples = meta[meta.enctype == 'mx'].sample(n_samples // 2)
 qt_samples = meta[meta.enctype == 'qt'].sample(n_samples // 2)
 mixed_samples = pd.concat((mx_samples, qt_samples))
 shuffled_samples = mixed_samples.sample(frac=1)  # Sampling with frac=1 shuffles rows
-shuffled_samples.reset_index(inplace=True, drop=True)
+shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
 # samples = samples[['patch_fname', 'enctype']]
 shuffled_samples.to_excel(f'{patch_out_path}/samples_gt.xlsx', index_label='patch_id')
 shuffled_samples[['enctype']].to_excel(f'{patch_out_path}/samples_blind.xlsx', index_label='patch_id')

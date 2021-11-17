@@ -57,7 +57,7 @@ class Patches(data.Dataset):
             transform=transforms.Identity(),
             inp_dtype=np.float32,
             target_dtype=np.int64,
-            epoch_multiplier=20,  # Pretend to have more data in one epoch
+            epoch_multiplier=1,  # Pretend to have more data in one epoch
     ):
         super().__init__()
         # self.data_root = data_root

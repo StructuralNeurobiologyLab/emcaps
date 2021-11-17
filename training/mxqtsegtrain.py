@@ -33,7 +33,7 @@ from elektronn3.models.unet import UNet
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from tifdirdata import TifDirData2d, XTifDirData2d
+from training.tifdirdata import TifDirData2d, XTifDirData2d
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
