@@ -37,6 +37,7 @@ import pandas as pd
 import elektronn3
 from torch.nn.modules.loss import MSELoss
 from torch.utils import data
+
 elektronn3.select_mpl_backend('Agg')
 
 from elektronn3.training import Trainer, Backup
@@ -90,18 +91,37 @@ else:
 print(f'Running on device: {device}')
 
 
+# ERASE_MASK_BG = True
+ERASE_MASK_BG = False
+
+# NEGATIVE_SAMPLING = True
+NEGATIVE_SAMPLING = False
+
+if NEGATIVE_SAMPLING:
+    assert not ERASE_MASK_BG
+
+
 data_root = '~/tumdata2/'
+if NEGATIVE_SAMPLING:
+    descr_sheet = (os.path.expanduser('~/tum/patches_v2neg/patchmeta_traintest.xlsx'), 'Sheet1')
+else:
+    descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
+
 
 out_channels = 2
 
-# model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
+model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 # model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
-model = CCT(
-    img_size=28,
-    n_input_channels=1,
-    kernel_size=3,
-    embedding_dim=96,
-)
+# model = CCT(
+#     img_size=28,
+#     n_input_channels=1,
+#     kernel_size=3,
+#     embedding_dim=96,
+# )
+
+
+
+
 
 # USER PATHS
 save_root = os.path.expanduser('~/tum/trainings3')
@@ -146,15 +166,19 @@ valid_transform = transforms.Compose(valid_transform)
 
 
 train_dataset = Patches(
+    descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
-    epoch_multiplier=20,
+    epoch_multiplier=5 if NEGATIVE_SAMPLING else 20,
+    erase_mask_bg=ERASE_MASK_BG,
 )
 
 valid_dataset = Patches(
+    descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,
-    epoch_multiplier=10,
+    epoch_multiplier=4 if NEGATIVE_SAMPLING else 10,
+    erase_mask_bg=ERASE_MASK_BG,
 )
 
 # Set up optimization
@@ -203,6 +227,10 @@ if exp_name is None:
     exp_name = ''
 timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
+if ERASE_MASK_BG:
+    exp_name = f'erasemaskbg_{exp_name}'
+if NEGATIVE_SAMPLING:
+    exp_name = f'negsample_{exp_name}'
 
 
 # Create trainer

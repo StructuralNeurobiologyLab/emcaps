@@ -57,6 +57,7 @@ class Patches(data.Dataset):
             transform=transforms.Identity(),
             inp_dtype=np.float32,
             target_dtype=np.int64,
+            erase_mask_bg: bool = False,
             epoch_multiplier=1,  # Pretend to have more data in one epoch
     ):
         super().__init__()
@@ -65,6 +66,7 @@ class Patches(data.Dataset):
         self.transform = transform
         self.inp_dtype = inp_dtype
         self.target_dtype = target_dtype
+        self.erase_mask_bg = erase_mask_bg
         self.epoch_multiplier = epoch_multiplier
 
         sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
@@ -88,6 +90,10 @@ class Patches(data.Dataset):
 
         for patch_meta in self.meta.itertuples():
             inp = imageio.imread(self.root_path / 'raw' / patch_meta.patch_fname)
+            if self.erase_mask_bg:
+                # Erase mask background from inputs
+                mask = imageio.imread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+                inp[mask == 0] = 0
             target = ECODE[patch_meta.enctype]
             self.inps.append(inp)
             self.targets.append(target)

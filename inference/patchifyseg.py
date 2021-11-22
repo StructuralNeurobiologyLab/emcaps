@@ -74,6 +74,10 @@ pre_predict_transform = transforms.Compose([
 
 thresh = 127
 
+NEGATIVE_SAMPLING = True
+# NEGATIVE_SAMPLING = False
+N_NEG_PATCHES_PER_IMAGE = 100
+
 EC_REGION_RADIUS = 14
 EC_MIN_AREA = 200
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
@@ -107,6 +111,9 @@ def get_enctype(path: str) -> str:
 
 
 patch_out_path = os.path.expanduser('~/tum/patches_v2')
+if NEGATIVE_SAMPLING:
+    patch_out_path = os.path.expanduser('~/tum/patches_v2neg')
+
 
 for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples']:
     os.makedirs(p, exist_ok=True)
@@ -203,56 +210,96 @@ for model_path in model_paths:
         raw = inp[0][0]
         out = predictor.predict(inp)
         out = out.numpy()
-        img_num = os.path.splitext(os.path.basename(img_path))[0]
+        img_num = int(os.path.splitext(os.path.basename(img_path))[0])
 
         assert out.shape[1] == 2
         cout = out[0, 1]
         cout = (cout * 255.).astype(np.uint8)
         mask = cout > thresh
 
+        if NEGATIVE_SAMPLING:
+            n_patches_from_this_image = 0
+            while n_patches_from_this_image < N_NEG_PATCHES_PER_IMAGE:
+                shx, shy = mask.shape
+                sh = np.array(mask.shape)
+                lo = np.random.randint(0, sh - 2 * EC_REGION_RADIUS, 2)
+                hi = lo + 2 * EC_REGION_RADIUS
+                centroid = lo + EC_REGION_RADIUS
 
-        cc, n_comps = ndimage.label(mask)
+                xslice = slice(lo[0], hi[0])
+                yslice = slice(lo[1], hi[1])
 
-        rprops = measure.regionprops(cc, raw)
+                mask_patch = mask[xslice, yslice]
+                if np.count_nonzero(mask_patch) > 0:
+                    # Skip if any pixel in this patch overlaps with an encapsulin particle mask
+                    continue
+                raw_patch = raw[xslice, yslice]
+
+                raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
 
 
-        for rp in tqdm.tqdm(rprops, position=1, leave=False, desc='Patches'):
-            centroid = np.round(rp.centroid).astype(np.int64)
-            if rp.area < EC_MIN_AREA or rp.area > EC_MAX_AREA:
-                continue  # Too small or too big (-> background component?) to be a normal particle
-            lo = centroid - EC_REGION_RADIUS
-            hi = centroid + EC_REGION_RADIUS
-            if np.any(lo < 0) or np.any(hi > raw.shape):
-                continue  # Too close to image border
+                mmmt = '1xMmMT3'  # TODO: Determine this from sheet when applicable
 
-            xslice = slice(lo[0], hi[0])
-            yslice = slice(lo[1], hi[1])
+                meta.append(PatchMeta(
+                    # patch_id=patch_id,
+                    patch_fname=os.path.basename(raw_patch_fname),
+                    img_num=img_num,
+                    enctype=enctype,
+                    mmmt=mmmt,
+                    centroid_x=centroid[0],
+                    centroid_y=centroid[1],
+                    corner_x=lo[0],
+                    corner_y=lo[1]
+                ))
 
-            raw_patch = raw[xslice, yslice]
-            mask_patch = mask[xslice, yslice]
+                imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
+                patch_id += 1
 
-            # raw_patch_fname = f'{patch_out_path}/raw/raw_{enctype}_{patch_id:06d}.tif'
-            # mask_patch_fname = f'{patch_out_path}/mask/mask{enctype}_{patch_id:06d}.tif'
-            raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
-            mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:05d}.tif'
+                n_patches_from_this_image += 1
 
-            mmmt = '1xMmMT3'  # TODO: Determine this from sheet when applicable
+        else:  # Normal positive sampling
+            cc, n_comps = ndimage.label(mask)
 
-            meta.append(PatchMeta(
-                # patch_id=patch_id,
-                patch_fname=os.path.basename(raw_patch_fname),
-                img_num=img_num,
-                enctype=enctype,
-                mmmt=mmmt,
-                centroid_x=centroid[0],
-                centroid_y=centroid[1],
-                corner_x=lo[0],
-                corner_y=lo[1]
-            ))
+            rprops = measure.regionprops(cc, raw)
 
-            imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
-            imageio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
-            patch_id += 1
+
+            for rp in tqdm.tqdm(rprops, position=1, leave=False, desc='Patches'):
+                centroid = np.round(rp.centroid).astype(np.int64)
+                if rp.area < EC_MIN_AREA or rp.area > EC_MAX_AREA:
+                    continue  # Too small or too big (-> background component?) to be a normal particle
+                lo = centroid - EC_REGION_RADIUS
+                hi = centroid + EC_REGION_RADIUS
+                if np.any(lo < 0) or np.any(hi > raw.shape):
+                    continue  # Too close to image border
+
+                xslice = slice(lo[0], hi[0])
+                yslice = slice(lo[1], hi[1])
+
+                raw_patch = raw[xslice, yslice]
+                mask_patch = mask[xslice, yslice]
+
+                # raw_patch_fname = f'{patch_out_path}/raw/raw_{enctype}_{patch_id:06d}.tif'
+                # mask_patch_fname = f'{patch_out_path}/mask/mask{enctype}_{patch_id:06d}.tif'
+                raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
+                mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:05d}.tif'
+
+                mmmt = '1xMmMT3'  # TODO: Determine this from sheet when applicable
+
+                meta.append(PatchMeta(
+                    # patch_id=patch_id,
+                    patch_fname=os.path.basename(raw_patch_fname),
+                    img_num=img_num,
+                    enctype=enctype,
+                    mmmt=mmmt,
+                    centroid_x=centroid[0],
+                    centroid_y=centroid[1],
+                    corner_x=lo[0],
+                    corner_y=lo[1]
+                ))
+
+                imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
+                imageio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
+                patch_id += 1
 
 
 meta = pd.DataFrame(
