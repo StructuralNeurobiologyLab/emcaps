@@ -232,6 +232,7 @@ if ERASE_MASK_BG:
 if NEGATIVE_SAMPLING:
     exp_name = f'negsample_{exp_name}'
 
+# exp_name = f'maskonly_{exp_name}'
 
 # Create trainer
 trainer = Trainer(

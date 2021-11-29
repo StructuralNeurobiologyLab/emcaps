@@ -94,6 +94,10 @@ class Patches(data.Dataset):
                 # Erase mask background from inputs
                 mask = imageio.imread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
                 inp[mask == 0] = 0
+
+            # mask = imageio.imread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+            # inp = mask * 255
+
             target = ECODE[patch_meta.enctype]
             self.inps.append(inp)
             self.targets.append(target)

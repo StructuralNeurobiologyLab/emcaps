@@ -56,12 +56,36 @@ multi_label_names = {
     5: 'cytoplasmic_region',
 }
 
-# image_numbers = [22, 32, 42]  # validation images, held out from training data
-image_numbers = range(16, 70 + 1)  # all images from 1xMmMT3 subset (also including training data!), exluding first 15 images
+# DATA_SOURCE = 'tumdata_v1'
+DATA_SOURCE = 'droso_tem'
 
-img_paths = eul([
-    f'~/tumdata/{i}/{i}.tif' for i in image_numbers
-])
+
+if DATA_SOURCE == 'tumdata_v1':
+    # image_numbers = [22, 32, 42]  # validation images, held out from training data
+    image_numbers = range(16, 70 + 1)  # all images from 1xMmMT3 subset (also including training data!), exluding first 15 images
+
+    img_paths = eul([
+        f'~/tumdata/{i}/{i}.tif' for i in image_numbers
+    ])
+    results_path = os.path.expanduser('~/tum/results_tumdata_v1')
+
+elif DATA_SOURCE == 'droso_tem':
+    img_paths = []
+    data_root = Path('~/tum/Drosophila-only-TEM-only_annotation/').expanduser()
+    for dir in data_root.iterdir():
+        if dir.is_dir():  # Exlude actual files
+            img_path = dir / f'{dir.name}.tif'
+            if not img_path.exists():
+                img_path = img_path.with_suffix('.TIF')
+            if not img_path.exists() and dir.name == '94':  # Handle strange name in sample 94
+                img_path = img_path = dir / 'EM2021_33a_R2Box26_02_05_51_88.tif'
+
+            img_path = str(img_path)  # Code below expects strings
+            img_paths.append(img_path)
+    results_path = os.path.expanduser('~/tum/results_droso_tem_oldmodel')
+
+else:
+    raise ValueError(f'{DATA_SOURCE=}')
 
 DESIRED_OUTPUTS = [
     'raw',
@@ -75,8 +99,9 @@ DESIRED_OUTPUTS = [
 
 label_name = 'encapsulins'
 
-results_path = os.path.expanduser('~/tumresults')
 
+for p in [results_path]:
+    os.makedirs(p, exist_ok=True)
 
 # TODO: 15to54 models use final.pt
 model_variant = 'final.pt'
@@ -153,7 +178,9 @@ for model_path in model_paths:
                 plt.savefig(dmap_path)
 
             # Write raw and gt labels
-            lab_path = f'{img_path[:-4]}_{label_name}{img_path[-4:]}'
+            lab_path = f'{img_path[:-4]}_{label_name}.tif'
+            if not Path(lab_path).exists():
+                lab_path = f'{img_path[:-4]}_{label_name}.TIF'
             lab_img = np.array(imageio.imread(lab_path))
             if invert_labels:
                 lab_img = (lab_img == 0).astype(np.int64)
@@ -239,7 +266,9 @@ for model_path in model_paths:
                 if 'overlays' in DESIRED_OUTPUTS:
                     # Create overlay images
                     # First get GT label image
-                    lab_path = f'{img_path[:-4]}_{multi_label_names[c]}{img_path[-4:]}'
+                    lab_path = f'{img_path[:-4]}_{multi_label_names[c]}.tif'
+                    if not Path(lab_path).exists():
+                        lab_path = f'{img_path[:-4]}_{multi_label_names[c]}.TIF'
                     if os.path.exists(lab_path):  # Not all labels are always available
                         lab_img = np.array(imageio.imread(lab_path))
                         if invert_labels:
