@@ -90,6 +90,8 @@ else:
 
 print(f'Running on device: {device}')
 
+# ERASE_DISK_MASK_RADIUS = 0
+ERASE_DISK_MASK_RADIUS = 12 # Mask that should cover any encapsulin foreground pixels, without leaking encapsulin shape info
 
 # ERASE_MASK_BG = True
 ERASE_MASK_BG = False
@@ -99,6 +101,7 @@ NEGATIVE_SAMPLING = False
 
 if NEGATIVE_SAMPLING:
     assert not ERASE_MASK_BG
+
 
 
 data_root = '~/tumdata2/'
@@ -171,6 +174,7 @@ train_dataset = Patches(
     transform=train_transform,
     epoch_multiplier=5 if NEGATIVE_SAMPLING else 20,
     erase_mask_bg=ERASE_MASK_BG,
+    erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
 
 valid_dataset = Patches(
@@ -179,6 +183,7 @@ valid_dataset = Patches(
     transform=valid_transform,
     epoch_multiplier=4 if NEGATIVE_SAMPLING else 10,
     erase_mask_bg=ERASE_MASK_BG,
+    erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
 
 # Set up optimization
@@ -231,6 +236,8 @@ if ERASE_MASK_BG:
     exp_name = f'erasemaskbg_{exp_name}'
 if NEGATIVE_SAMPLING:
     exp_name = f'negsample_{exp_name}'
+if ERASE_DISK_MASK_RADIUS > 0:
+    exp_name = f'erasemaskbg_disk_r{ERASE_DISK_MASK_RADIUS}_{exp_name}'
 
 # exp_name = f'maskonly_{exp_name}'
 

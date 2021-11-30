@@ -38,6 +38,8 @@ dataset_std = (128.0,)
 
 invert_labels = True  # Workaround: Fixes inverted TIF loading
 
+ENABLE_TERRIBLE_INVERSION_HACK = True  # Another hacky inversion fix
+# ENABLE_TERRIBLE_INVERSION_HACK = False
 
 pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
@@ -184,12 +186,15 @@ for model_path in model_paths:
             lab_img = np.array(imageio.imread(lab_path))
             if invert_labels:
                 lab_img = (lab_img == 0).astype(np.int64)
+            if ENABLE_TERRIBLE_INVERSION_HACK and int(basename) >= 60:
+                lab_img = (lab_img == 0).astype(np.int64)
+
             # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
             lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
 
             raw_img = imageio.imread(img_path)
             if 'raw' in DESIRED_OUTPUTS:
-                imageio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
+                imageio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
             if 'lab' in DESIRED_OUTPUTS:
                 imageio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
 
@@ -205,8 +210,8 @@ for model_path in model_paths:
                 lab_overlay = (lab_overlay * 255.).astype(np.uint8)
                 pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.png'), lab_overlay)
-                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.png'), pred_overlay)
+                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
+                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
             if 'error_maps' in DESIRED_OUTPUTS:
                 # Create error image
@@ -222,7 +227,7 @@ for model_path in model_paths:
                 fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
                 fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
                 fp_overlay = (fp_overlay * 255.).astype(np.uint8)
-                imageio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.png'), fp_overlay)
+                imageio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.jpg'), fp_overlay)
 
                 # Create false negative (fn) image
                 fn_error_img = (lab_img == 0) & (cout > 0)
@@ -232,7 +237,7 @@ for model_path in model_paths:
                 fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
                 fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
                 fn_overlay = (fn_overlay * 255.).astype(np.uint8)
-                imageio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.png'), fn_overlay)
+                imageio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)
 
 
             m_targets.append((lab_img > 0))#.reshape(-1))
@@ -246,7 +251,7 @@ for model_path in model_paths:
             raw_img = imageio.imread(img_path)
             raw_img_01 = raw_img.astype(np.float64) / 255.
             if 'raw' in DESIRED_OUTPUTS:
-                imageio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
+                imageio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
             export_channels = range(out.shape[1])
             for c in export_channels:
                 # Probmaps
@@ -273,6 +278,8 @@ for model_path in model_paths:
                         lab_img = np.array(imageio.imread(lab_path))
                         if invert_labels:
                             lab_img = (lab_img == 0).astype(np.int64)
+                        if ENABLE_TERRIBLE_INVERSION_HACK and int(basename) >= 60:
+                            lab_img = (lab_img == 0).astype(np.int64)
                     else:
                         lab_img = np.zeros_like(raw_img)
                     lab_img = ((lab_img > 0) * 255).astype(np.uint8)
@@ -284,15 +291,15 @@ for model_path in model_paths:
                     pred_overlay[cout_thresh_bin == 0, :] = raw_img_01[cout_thresh_bin == 0, None]
                     pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_lab.png'), lab_overlay)
-                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_pred.png'), pred_overlay)
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_lab.jpg'), lab_overlay)
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_pred.jpg'), pred_overlay)
 
             if 'argmax' in DESIRED_OUTPUTS:
                 # Argmax of channel probs
                 pred = np.argmax(out, 1)[0]
                 # plab = skimage.color.label2rgb(pred, bg_label=0)
                 plab = skimage.color.label2rgb(pred, colors=['red', 'green', 'blue', 'purple', 'brown', 'magenta'], bg_label=0)
-                out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.png')
+                out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.jpg')
                 imageio.imwrite(out_path, plab)
 
     if 'metrics' in DESIRED_OUTPUTS and not is_multi:  # TODO: Make this work with multilabel
