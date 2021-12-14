@@ -9,6 +9,7 @@ import os
 from os.path import expanduser
 from typing import Tuple, Dict, Optional, Union, Sequence, Any, List, Callable
 from pathlib import Path
+from functools import lru_cache
 
 import pandas as pd
 import imageio
@@ -44,6 +45,12 @@ if MMMT3_TYPE == '1xMmMT3':
 elif MMMT3_TYPE == '2xMmMT3':
     VALID_NUMS = [70, 75, 80, 85]
     #            [qt, qt, mx, mx]
+
+
+@lru_cache(maxsize=1024)
+def mimread(*args, **kwargs):
+    """Memoize imread to avoid disk I/O"""
+    return imageio.imread(*args, **kwargs)
 
 
 # Credit: https://newbedev.com/how-can-i-create-a-circular-mask-for-a-numpy-array
@@ -102,16 +109,16 @@ class Patches(data.Dataset):
         self.targets = []
 
         for patch_meta in self.meta.itertuples():
-            inp = imageio.imread(self.root_path / 'raw' / patch_meta.patch_fname)
+            inp = mimread(self.root_path / 'raw' / patch_meta.patch_fname)
             if self.erase_mask_bg:
                 # Erase mask background from inputs
-                mask = imageio.imread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+                mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
                 inp[mask == 0] = 0
             if self.erase_disk_mask_radius > 0:
                 mask = create_circular_mask(*inp.shape, radius=self.erase_disk_mask_radius)
                 inp[mask > 0] = 0
 
-            # mask = imageio.imread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+            # mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
             # inp = mask * 255
 
             target = ECODE[patch_meta.enctype]
@@ -146,6 +153,168 @@ class Patches(data.Dataset):
     def __len__(self):
         return len(self.meta) * self.epoch_multiplier
 
+
+class YTifDirData2d(data.Dataset):
+    """Using a special TIF file directory structure for segmentation data loading.
+    
+    Version for mxqtsegtrain2.py"""
+    def __init__(
+            self,
+            # data_root: str,
+            label_names: Sequence[str],
+            valid_nums: Sequence[int],
+            descr_sheet = (os.path.expanduser('~/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'Image_origin_information'),
+            meta_filter = lambda x: x,
+            train: bool = True,
+            transform=transforms.Identity(),
+            offset: Optional[Sequence[int]] = (0, 0),
+            inp_dtype=np.float32,
+            target_dtype=np.int64,
+            invert_labels=False,  # Fixes inverted TIF loading
+            enable_inputmask: bool = False,
+            enable_binary_seg: bool = False,
+            enable_partial_inversion_hack: bool = False,
+            epoch_multiplier=1,  # Pretend to have more data in one epoch
+    ):
+        super().__init__()
+        # self.data_root = data_root
+        self.label_names = label_names
+        self.meta_filter = meta_filter
+        self.train = train
+        self.transform = transform
+        self.offset = offset
+        self.inp_dtype = inp_dtype
+        self.target_dtype = target_dtype
+        self.invert_labels = invert_labels
+        self.enable_inputmask = enable_inputmask
+        self.epoch_multiplier = epoch_multiplier
+        self.valid_nums = valid_nums
+        self.enable_binary_seg = enable_binary_seg
+        self.enable_partial_inversion_hack = enable_partial_inversion_hack
+
+
+        sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
+        self.sheet = sheet
+        try:
+            meta = sheet.rename(columns={'Image abbreviation': 'num'}).astype({'num': int})
+        except KeyError:  # Unnamed column in single-table format
+            meta = sheet.rename(columns={' ': 'num'}).astype({'num': int})
+
+        # Temporary filters, TODO: refactor
+
+        meta = meta.loc[meta['1xMmMT3']]
+        meta = meta.loc[meta['Host organism'] == 'Drosophila']
+        meta = meta.loc[meta['Modality'] == 'TEM']
+
+        # meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
+
+
+        meta = self.meta_filter(meta)
+
+        if self.train:
+            logger.info('\nTraining data:')
+            meta = meta[~meta['num'].isin(self.valid_nums)]
+        else:
+            logger.info('\nValidation data:')
+            meta = meta[meta['num'].isin(self.valid_nums)]
+
+        self.meta = meta
+
+        # self.root_path = Path(data_root).expanduser()
+        self.root_path = Path(descr_sheet[0]).parent
+
+        self.image_numbers = self.meta['num'].to_list()
+
+        _mxnums = meta[meta['MxEnc']]['num'].to_list()
+        _qtnums = meta[meta['QtEnc']]['num'].to_list()
+
+        logger.info(f'MxEnc ({len(_mxnums)} images):\n {_mxnums}')
+        logger.info(f'QtEnc ({len(_qtnums)} images):\n  {_qtnums}')
+
+
+
+    def __getitem__(self, index):
+        # if self.multilabel_targets and len(self.label_names) != 1:
+            # raise ValueError('multilabel_targets=False requires a single label_name')
+
+
+        index %= len(self.meta)  # Wrap around to support epoch_multiplier
+        # subdir_path = self.subdir_paths[index]
+        mrow = self.meta.iloc[index]
+        img_num = mrow['num']
+        subdir_path = self.root_path / f'{img_num}'
+
+        inp_path = subdir_path / f'{img_num}.tif'
+        if not inp_path.exists():
+            inp_path = subdir_path / f'{img_num}.TIF'
+        inp = mimread(inp_path).astype(self.inp_dtype)
+        if inp.ndim == 2:  # (H, W)
+            inp = inp[None]  # (C=1, H, W)
+
+
+        labels = []
+        for label_name in self.label_names:
+            label_path = subdir_path / f'{img_num}_{label_name}.tif'
+            if label_path.exists():
+                label = mimread(label_path).astype(np.int64)
+                if self.invert_labels:
+                    label = (label == 0).astype(np.int64)
+                if self.enable_partial_inversion_hack and int(img_num) < 60:  # TODO: Investigate why labels are inverted although images look fine
+                    label = (label == 0).astype(np.int64)
+            else:  # If label is missing, make it a full zero array
+                label = np.zeros_like(inp[0], dtype=np.int64)
+            labels.append(label)
+        assert len(labels) > 0
+
+        # Flat target filled with label indices
+        target = np.zeros_like(labels[0], dtype=np.int64)
+        # for c in range(len(self.label_names)):
+        #     # Assign label index c to target at all locations where the c-th label is non-zero
+        #     target[labels[c] != 0] = c
+
+        enctype_name = ''
+        if mrow['MxEnc']:
+            target[labels[1] != 0] = 1
+            enctype_name = 'MxEnc'
+        elif mrow['QtEnc']:
+            target[labels[1] != 0] = 2
+            enctype_name = 'QtEnc'
+        else:
+            raise ValueError(mrow)
+
+        if self.enable_binary_seg:  # Don't distinguish between foreground classes, just use one foreground class
+            target[target > 0] = 1
+
+        if self.enable_inputmask:  # Zero out input where target == 0 to make background invisible
+            for c in range(inp.shape[0]):
+                inp[c][target == 0] = 0
+
+
+        # Distinguish between MxEnc and QtEnc (quick and dirty, TODO improve this)
+        # Background: 0, MxEnc: 1, QtEnc: 2
+        # if mrow['QtEnc']:
+        #     target[target == 1] = 2
+        # elif:
+        #     pass # Keep target labels at 1
+
+        while True:  # Only makes sense if RandomCrop is used
+            try:
+                inp, target = self.transform(inp, target)
+                break
+            except transforms._DropSample:
+                pass
+        if np.any(self.offset):
+            off = self.offset
+            target = target[off[0]:-off[0], off[1]:-off[1]]
+        sample = {
+            'inp': torch.as_tensor(inp.astype(self.inp_dtype)),
+            'target': torch.as_tensor(target.astype(self.target_dtype)),
+            'fname': f'{subdir_path.name} ({enctype_name})',
+        }
+        return sample
+
+    def __len__(self):
+        return len(self.meta) * self.epoch_multiplier
 
 
 class XTifDirData2d(data.Dataset):
@@ -228,7 +397,7 @@ class XTifDirData2d(data.Dataset):
         inp_path = subdir_path / f'{img_num}.tif'
         if not inp_path.exists():
             inp_path = subdir_path / f'{img_num}.TIF'
-        inp = imageio.imread(inp_path).astype(self.inp_dtype)
+        inp = mimread(inp_path).astype(self.inp_dtype)
         if inp.ndim == 2:  # (H, W)
             inp = inp[None]  # (C=1, H, W)
 
@@ -237,7 +406,7 @@ class XTifDirData2d(data.Dataset):
         for label_name in self.label_names:
             label_path = subdir_path / f'{img_num}_{label_name}.tif'
             if label_path.exists():
-                label = imageio.imread(label_path).astype(np.int64)
+                label = mimread(label_path).astype(np.int64)
                 if self.invert_labels:
                     label = (label == 0).astype(np.int64)
             else:  # If label is missing, make it a full zero array
@@ -341,7 +510,7 @@ class TifDirData2d(data.Dataset):
         inp_path = subdir_path / f'{img_num}.tif'
         if not inp_path.exists():
             inp_path = subdir_path / f'{img_num}.TIF'
-        inp = imageio.imread(inp_path).astype(self.inp_dtype)
+        inp = mimread(inp_path).astype(self.inp_dtype)
         if inp.ndim == 2:  # (H, W)
             inp = inp[None]  # (C=1, H, W)
 
@@ -350,7 +519,7 @@ class TifDirData2d(data.Dataset):
         for label_name in self.label_names:
             label_path = subdir_path / f'{img_num}_{label_name}.tif'
             if label_path.exists():
-                label = imageio.imread(label_path).astype(np.int64)
+                label = mimread(label_path).astype(np.int64)
                 if self.invert_labels:
                     label = (label == 0).astype(np.int64)
             else:  # If label is missing, make it a full zero array

@@ -2,43 +2,53 @@
 
 
 """
-Demo of a 2D semantic segmentation on TUM ML data.
+Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles
 
+# TODO: Update description when it's clear what this script does.
 """
 
 import argparse
 import datetime
 from math import inf
+from pathlib import Path
+from typing import Tuple
 import os
 import random
-from elektronn3.data.transforms.transforms import RandomCrop
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 from torch import optim
 import numpy as np
+import pandas as pd
 
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
-from torch.nn.modules.loss import MSELoss
+from torch.nn.modules.loss import CrossEntropyLoss, MSELoss
 from torch.utils import data
+
+from monai.losses import GeneralizedDiceLoss
+
+
 elektronn3.select_mpl_backend('Agg')
 
 from elektronn3.training import Trainer, Backup
 from elektronn3.training import metrics
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
+from elektronn3.modules.loss import CombinedLoss, DiceLoss
 
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import TifDirData2d
+from training.tifdirdata import YTifDirData2d
+
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=40_000,
+    '-m', '--max-steps', type=int, default=80_000,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -77,11 +87,34 @@ print(f'Running on device: {device}')
 # 4: nuclear_region
 # 5: cytoplasmic_region
 
+
+# TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
+ENABLE_TERRIBLE_INVERSION_HACK = True
+
+
 VEC_DT = False
-DT = True
+DT = False
 MULTILABEL = False
 
-data_root = '~/tumdata/'
+INPUTMASK = False
+
+INVERT_LABELS = False
+# INVERT_LABELS = True
+
+# BINARY_SEG = False
+BINARY_SEG = True
+
+
+USE_MTCE = False
+# USE_MTCE = True
+
+# USE_GDL_CE = False
+USE_GDL_CE = True
+
+# USE_GRAY_AUG = False
+USE_GRAY_AUG = True
+
+data_root = Path('~/tum/Single-table_database').expanduser()
 
 if MULTILABEL:
     label_names = [
@@ -101,27 +134,33 @@ if DT or MULTILABEL:
 else:
     target_dtype = np.int64
 
-if DT:
-    out_channels = 1 if not VEC_DT else 2
-else:
-    out_channels = len(label_names)
+# if DT:
+#     out_channels = 1 if not VEC_DT else 3
+# else:
+#     out_channels = len(label_names)
+
+out_channels = 3
+if BINARY_SEG:
+    out_channels = 2
+if USE_MTCE:
+    out_channels = 4
 
 model = UNet(
     out_channels=out_channels,
-    n_blocks=4,
-    start_filts=32,
+    n_blocks=2,
+    start_filts=64,
     activation='relu',
     normalization='batch',
     dim=2
 ).to(device)
 
 # USER PATHS
-save_root = os.path.expanduser('~/tumtrainings')
+save_root = Path('~/tum/binary_mxqtsegtrain2_trainings').expanduser()
 
 max_steps = args.max_steps
 lr = 1e-3
 lr_stepsize = 1000
-lr_dec = 0.9
+lr_dec = 0.95
 batch_size = 8
 
 
@@ -135,21 +174,24 @@ dt_scale = 30
 
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
-    transforms.RandomCrop((1024, 1024)),
+    transforms.RandomCrop((768, 768)),
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
     transforms.RandomFlip(ndim_spatial=2),
 ]
 
 train_transform = common_transforms + [
-    transforms.RandomCrop((768, 768)),
+    transforms.RandomCrop((512, 512)),
     transforms.AlbuSeg2d(albumentations.ShiftScaleRotate(
         p=0.99, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
     # transforms.ElasticTransform(prob=0.5, sigma=2, alpha=5),
-    # transforms.AdditiveGaussianNoise(prob=0.9, sigma=0.1),
-    # transforms.RandomGammaCorrection(prob=0.9, gamma_std=0.2),
-    # transforms.RandomBrightnessContrast(prob=0.9, brightness_std=0.125, contrast_std=0.125),
 ]
+if USE_GRAY_AUG:
+    train_transform.extend([
+        transforms.AdditiveGaussianNoise(prob=0.5, sigma=0.1),
+        transforms.RandomGammaCorrection(prob=0.5, gamma_std=0.2),
+        transforms.RandomBrightnessContrast(prob=0.5, brightness_std=0.125, contrast_std=0.125),
+    ])
 
 valid_transform = common_transforms + []
 
@@ -162,40 +204,48 @@ valid_transform = transforms.Compose(valid_transform)
 
 # Specify data set
 
-if MULTILABEL:
-    valid_image_numbers = [5, 10, 32, 42]
-    train_image_numbers = [i for i in range(1, 54 + 1) if i not in valid_image_numbers]
-else:
-    # valid_image_numbers = [5, 10]
-    # train_image_numbers = [i for i in range(1, 15 + 1) if i not in valid_image_numbers]
-    valid_image_numbers = [22, 32, 42]
-    train_image_numbers = [i for i in range(16, 54 + 1) if i not in valid_image_numbers]
-    
-print('Training on images ', train_image_numbers)
-print('Validating on images ', valid_image_numbers)
+
+valid_image_numbers = [
+    40, 60, 114,  # MxEnc
+    43, 106, 109,  # QtEnc
+]
 
 
-train_dataset = TifDirData2d(
-    data_root=data_root,
+# print('Training on images ', train_image_numbers)
+# print('Validating on images ', valid_image_numbers)
+
+
+
+# def meta_filter_train
+
+train_dataset = YTifDirData2d(
+    descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', 'Image_origin_information'),
+    valid_nums=valid_image_numbers,
+    train=True,
     label_names=label_names,
-    image_numbers=train_image_numbers,
-    multilabel_targets=MULTILABEL,
     transform=train_transform,
     target_dtype=target_dtype,
-    invert_labels=True,
-    epoch_multiplier=600 // len(train_image_numbers),
+    invert_labels=INVERT_LABELS,
+    enable_inputmask=INPUTMASK,
+    enable_binary_seg=BINARY_SEG,
+    enable_partial_inversion_hack=ENABLE_TERRIBLE_INVERSION_HACK,
+    epoch_multiplier=100,
 )
 
-valid_dataset = TifDirData2d(
-    data_root=data_root,
+valid_dataset = YTifDirData2d(
+    descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', 'Image_origin_information'),
+    valid_nums=valid_image_numbers,
+    train=False,
     label_names=label_names,
-    image_numbers=valid_image_numbers,
-    multilabel_targets=MULTILABEL,
     transform=valid_transform,
     target_dtype=target_dtype,
-    invert_labels=True,
+    invert_labels=INVERT_LABELS,
+    enable_inputmask=INPUTMASK,
+    enable_binary_seg=BINARY_SEG,
+    enable_partial_inversion_hack=ENABLE_TERRIBLE_INVERSION_HACK,
     epoch_multiplier=20,
 )
+
 
 
 # Set up optimization
@@ -216,6 +266,46 @@ if not DT and not MULTILABEL:
         for c in range(out_channels):
             valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
 
+
+class MTCELoss(nn.Module):
+    def __init__(self, binseg_weight=1., fgtype_weight=1., fgtype_per_pix=False, *args, **kwargs) -> None:
+        super().__init__()
+        self.binseg_ce = nn.CrossEntropyLoss(*args, **kwargs)  # fg vs bg
+        self.fgtype_ce = nn.CrossEntropyLoss()  # fg type vs other fg type
+        self.binseg_weight = binseg_weight
+        self.fgtype_weight = fgtype_weight
+        self.fgtype_per_pix = fgtype_per_pix
+
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        # Prepare targets and weight mask
+        with torch.no_grad():
+            binseg_target = (target > 0).to(torch.int64)
+            fg_mask = binseg_target.to(output.dtype)
+            fgtype_target = target - 1
+        binseg_loss = self.binseg_ce(output[:, :2], binseg_target)
+        if self.fgtype_per_pix:  # Per pixel loss
+            # fgtype_loss = F.cross_entropy(output[:, 2:], fgtype_target, weight=fg_mask)
+            fgtype_loss_pix = F.cross_entropy(output[:, 2:], fgtype_target, reduction='none')
+            fgtype_loss = torch.mean(fgtype_loss_pix * fg_mask)
+        else:  # Average -> one scalar per image
+            out_avg = F.adaptive_avg_pool2d(output[:, 2:], 1)
+            with torch.no_grad():
+                fgtype_target = target
+                uniq = torch.unique(fgtype_target)
+                if len(uniq) == 0:  # No fg -> no fg type targets, only bg
+                    fgtype_loss = 0.
+            if len(uniq) == 1:  # containing fg type targets of one type
+                with torch.no_grad():
+                    fgtype_target_single = torch.max(uniq).to(torch.int64)  # foreground class label is always maximum
+                fgtype_loss = F.cross_entropy(out_avg, fgtype_target_single)
+            elif len(uniq) > 1:
+                print('Oh no')
+                import IPython ; IPython.embed(); raise SystemExit
+                raise ValueError(uniq)
+        return self.binseg_weight * binseg_loss + self.fgtype_weight * fgtype_loss
+
+
 if DT:
     criterion = MSELoss()
 else:
@@ -225,10 +315,28 @@ else:
         class_weights = torch.tensor(_cw).to(device)
         criterion = nn.BCEWithLogitsLoss()#(pos_weight=class_weights)
     else:
-        class_weights = torch.tensor([0.2, 1.0]).to(device)
+        if BINARY_SEG:
+            class_weights = torch.tensor([0.2, 1.0]).to(device)
+        else:
+            class_weights = torch.tensor([0.2, 1.0, 1.0]).to(device)
         criterion = nn.CrossEntropyLoss(weight=class_weights).to(device)
 
-if DT:
+
+if USE_MTCE:
+    criterion = MTCELoss(weight=torch.tensor([0.2, 1.0]).to(device))
+
+if USE_GDL_CE:
+    ce = CrossEntropyLoss(weight=torch.tensor([0.2, 1.0])).to(device)
+    # gdl = GeneralizedDiceLoss(softmax=True, to_onehot_y=True, w_type='simple').to(device)
+    gdl = DiceLoss(apply_softmax=True, weight=torch.tensor([0.2, 1.0]).to(device))
+    criterion = CombinedLoss([ce, gdl], device=device)
+
+if USE_MTCE:
+    inference_kwargs = {
+        'apply_softmax': False,
+        'transform': valid_transform,
+    }
+elif DT:
     inference_kwargs = {
         'apply_softmax': False,
         'transform': valid_transform,
@@ -248,13 +356,19 @@ else:
 _MULTILABEL = 'M_' if MULTILABEL else ''
 _DT = 'D_' if DT else ''
 _VEC_DT = 'V_' if VEC_DT else ''
+_MQ = 'MQ_' if not BINARY_SEG else 'B_'
+_MTCE = 'MTCE_' if USE_MTCE else ''
+_GRAY_AUG = 'GA_' if USE_GRAY_AUG else ''
+_GDL_CE = 'GDL_CE_' if USE_GDL_CE else ''
 
 exp_name = args.exp_name
 if exp_name is None:
     exp_name = ''
 timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
-exp_name = f'{_VEC_DT}{_MULTILABEL}{_DT}{exp_name}'
+exp_name = f'{_GDL_CE}{_MTCE}{_MQ}{_VEC_DT}{_MULTILABEL}{_DT}{_GRAY_AUG}{exp_name}'
+
+
 
 # Create trainer
 trainer = Trainer(
@@ -265,7 +379,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=4,
+    num_workers=1,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
@@ -274,7 +388,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(0, 20_000, 2000)),
+    extra_save_steps=list(range(0, max_steps, 10_000)),
 )
 
 # Archiving training script, src folder, env info
