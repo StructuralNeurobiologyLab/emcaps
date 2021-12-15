@@ -87,7 +87,7 @@ elif DATA_SOURCE == 'droso_tem':
             img_path = str(img_path)  # Code below expects strings
             img_paths.append(img_path)
     # results_path = os.path.expanduser('~/tum/results_droso_tem_oldmodel')
-    results_path = os.path.expanduser('~/tum/results_droso_tem_new_binary_model')
+    results_path = os.path.expanduser('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k')
 
 else:
     raise ValueError(f'{DATA_SOURCE=}')
@@ -115,7 +115,8 @@ model_variant = 'final.pt'
 
 
 model_paths = eul([
-    f'~/tum/binary_mxqtsegtrain2_trainings/B___UNet__21-12-10_03-08-01/model_{model_variant}',
+    f'~/tum/binary_mxqtsegtrain2_trainings/GDL_CE_B_GA___UNet__21-12-14_17-32-22/model_63k.pt',
+    # f'~/tum/binary_mxqtsegtrain2_trainings/B___UNet__21-12-10_03-08-01/model_{model_variant}',
     # f'~/tumtrainings/15to54_encapsulins__UNet__21-09-16_03-10-26/model_{model_variant}',
     # f'~/tumtrainings/D_15to54_encapsulins__UNet__21-09-16_04-02-24/model_{model_variant}',
     # f'~/tumtrainings/M___UNet__21-09-13_04-32-52/model_{model_variant}',
