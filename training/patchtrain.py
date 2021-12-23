@@ -90,11 +90,11 @@ else:
 
 print(f'Running on device: {device}')
 
-# ERASE_DISK_MASK_RADIUS = 0
-ERASE_DISK_MASK_RADIUS = 12 # Mask that should cover any encapsulin foreground pixels, without leaking encapsulin shape info
+ERASE_DISK_MASK_RADIUS = 0
+# ERASE_DISK_MASK_RADIUS = 12 # Mask that should cover any encapsulin foreground pixels, without leaking encapsulin shape info
 
-# ERASE_MASK_BG = True
-ERASE_MASK_BG = False
+ERASE_MASK_BG = True
+# ERASE_MASK_BG = False
 
 # NEGATIVE_SAMPLING = True
 NEGATIVE_SAMPLING = False
@@ -108,7 +108,8 @@ data_root = '~/tumdata2/'
 if NEGATIVE_SAMPLING:
     descr_sheet = (os.path.expanduser('~/tum/patches_v2neg/patchmeta_traintest.xlsx'), 'Sheet1')
 else:
-    descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
+    # descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
+    descr_sheet = (os.path.expanduser('~/tum/patches_v2_hek/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
 out_channels = 2
@@ -128,6 +129,7 @@ model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 
 # USER PATHS
 save_root = os.path.expanduser('~/tum/trainings3')
+save_root = os.path.expanduser('~/tum/trainings3_hek')
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -151,7 +153,7 @@ common_transforms = [
 
 train_transform = common_transforms + [
     transforms.AlbuSeg2d(albumentations.ShiftScaleRotate(
-        p=0.99, rotate_limit=180, shift_limit=0.0, scale_limit=0.1, interpolation=2
+        p=0.99, rotate_limit=180, shift_limit=0.0, scale_limit=0.02, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
     # transforms.ElasticTransform(prob=0.5, sigma=2, alpha=5),
     # transforms.AdditiveGaussianNoise(prob=0.9, sigma=0.1),
@@ -172,7 +174,7 @@ train_dataset = Patches(
     descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
-    epoch_multiplier=5 if NEGATIVE_SAMPLING else 20,
+    epoch_multiplier=5 if NEGATIVE_SAMPLING else 200,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )

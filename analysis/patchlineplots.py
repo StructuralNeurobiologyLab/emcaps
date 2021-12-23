@@ -15,6 +15,9 @@ from pathlib import Path
 import tqdm
 
 
+plt.rcParams.update({'font.family': 'Arial'})
+
+
 # avg = True  # Plot average profile on top
 # avg = False  # Plot demo patch profile instead
 
@@ -36,7 +39,7 @@ profiles = {
     },
 }
 
-fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(8, 8), tight_layout=True)
+fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(9, 5), tight_layout=True)
 
 for i, p in tqdm.tqdm(enumerate(patch_path.iterdir()), total=len(list(patch_path.glob('*')))):
     img = imageio.imread(p)
@@ -56,14 +59,19 @@ for i, p in tqdm.tqdm(enumerate(patch_path.iterdir()), total=len(list(patch_path
     profiles[enctype]['vertical'].append(vertical_profile)
     if p in demo_paths:
         axrow[0].imshow(img, cmap='gray')
-        axrow[0].axhline(y=28//2, c='red', alpha=0.9)
-        axrow[0].axvline(x=28//2, c='green', alpha=0.9)
-        axrow[1].plot(horizontal_profile, c='red', linewidth=2)
-        axrow[2].plot(vertical_profile, c='green', linewidth=2)
+        axrow[0].set_xticks(np.arange(2, 28, 4), labels=np.arange(2, 28, 4) - 14)
+        axrow[0].set_yticks(np.arange(2, 28, 4), labels=np.arange(2, 28, 4) - 14)
+
+        axrow[0].axhline(y=28//2, c='orange', alpha=0.9, linestyle='--')
+        axrow[0].axvline(x=28//2, c='blue', alpha=0.9, linestyle='--')
+        axrow[1].plot(horizontal_profile, c='orange', alpha=1., linewidth=1, linestyle='--')
+        axrow[2].plot(vertical_profile, c='blue', alpha=1., linewidth=1, linestyle='--')
+        axrow[1].set_xticks(np.arange(2, 28, 4), labels=np.arange(2, 28, 4) - 14)
+        axrow[2].set_xticks(np.arange(2, 28, 4), labels=np.arange(2, 28, 4) - 14)
     axrow[0].set_title(enctype)
-    axrow[1].plot(horizontal_profile, c='gray', linewidth=0.1, alpha=0.5)
+    # axrow[1].plot(horizontal_profile, c='gray', linewidth=0.05, alpha=0.5)
     axrow[1].set_title('Horizontal profile')
-    axrow[2].plot(vertical_profile, c='gray', linewidth=0.1, alpha=0.5)
+    # axrow[2].plot(vertical_profile, c='gray', linewidth=0.05, alpha=0.5)
     axrow[2].set_title('Vertical profile')
 
 
@@ -80,27 +88,31 @@ for enctype, orientations in profiles.items():
         profiles[enctype][orientation] = avgprof
         axrow = axes[0] if enctype == 'MxEnc' else axes[1]
         ax = axrow[1] if orientation == 'horizontal' else axrow[2]
-        ax.plot(avgprof, c='blue', linewidth=1, linestyle='--')
+        c = 'orange' if orientation == 'horizontal' else 'blue'
+        ax.plot(avgprof, c=c, linewidth=2)
 
-fig.suptitle('Axis profile plots. Red: horizontal, green: vertical. Gray: all images, blue: average profiles.', fontsize=16)
+# fig.suptitle('Axis profile plots. orange: horizontal, blue: vertical. Gray: all images, blue: average profiles.', fontsize=16)
 
-plt.savefig('/tmp/patchprofile.png')
+plt.savefig('/tmp/patchprofile.pdf')
 plt.show()
 
 # Average plots
-fig, ax = plt.subplots(figsize=(8, 8), tight_layout=True)
-ax.plot(profiles['MxEnc']['horizontal'], c='purple', label='MxEnc horizontal')
-ax.plot(profiles['QtEnc']['horizontal'], c='orange', label='QtEnc horizontal')
+fig, ax = plt.subplots(figsize=(3, 3), tight_layout=True)
+ax.plot(profiles['MxEnc']['horizontal'], c='purple', label='MxEnc', linewidth=2)
+ax.plot(profiles['QtEnc']['horizontal'], c='green', label='QtEnc', linewidth=2)
+ax.set_xticks(np.arange(2, 28, 4), labels=np.arange(2, 28, 4) - 14)
 ax.legend()
-ax.set_title('Horizontal average profiles')
+ax.set_title('Horizontal average profile')
 
+plt.savefig('/tmp/patchprofile_av_hori.pdf')
 plt.show()
 
-fig, ax = plt.subplots(figsize=(8, 8), tight_layout=True)
-ax.plot(profiles['MxEnc']['vertical'], c='purple', label='MxEnc vertical')
-ax.plot(profiles['QtEnc']['vertical'], c='orange', label='QtEnc vertical')
+fig, ax = plt.subplots(figsize=(3, 3), tight_layout=True)
+ax.plot(profiles['MxEnc']['vertical'], c='purple', label='MxEnc', linewidth=2)
+ax.plot(profiles['QtEnc']['vertical'], c='green', label='QtEnc', linewidth=2)
+ax.set_xticks(np.arange(2, 28, 4), labels=np.arange(2, 28, 4) - 14)
 ax.legend()
-ax.set_title('Vertical average profiles')
+ax.set_title('Vertical average profile')
 
-
+plt.savefig('/tmp/patchprofile_av_vert.pdf')
 plt.show()

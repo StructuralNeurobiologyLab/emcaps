@@ -52,8 +52,13 @@ def image_grid(imgs, rows, cols):
     grid = Image.new('L', size=(cols * w, rows * h))
     
     for i, img in enumerate(imgs):
-        drw = ImageDraw.Draw(img)
-        drw.text((0, 0), f'{i:02d}')
+        # drw = ImageDraw.Draw(img)
+        # drw.text((0, 0), f'{i:02d}')
+        # if False:
+        #     drw.text((0, 0), f'{i:02d}')
+        # else:
+        #     enctype = 'Mx' if i < len(imgs) // 2 else 'Qt'
+        #     drw.text((0, 0), f'{i:02d} ({enctype})')
         grid.paste(img, box=(i % cols * w, i // cols * h))
     return grid
 
@@ -74,8 +79,8 @@ pre_predict_transform = transforms.Compose([
 
 thresh = 127
 
-NEGATIVE_SAMPLING = True
-# NEGATIVE_SAMPLING = False
+# NEGATIVE_SAMPLING = True
+NEGATIVE_SAMPLING = False
 N_NEG_PATCHES_PER_IMAGE = 100
 
 EC_REGION_RADIUS = 14
@@ -91,7 +96,11 @@ EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
 # Data v2: Include all 1xMmMT3 data (exclude only 1..15)
 
-image_numbers = range(16, 69 + 1)
+# image_numbers = range(16, 69 + 1)
+
+## SUBSET FOR HEK ONLY EVAL
+image_numbers = list(range(16, 30 + 1)) + list(range(66, 69 + 1))
+
 
 MXENC_NUMS = list(range(31, 40 + 1)) + list(range(51, 53 + 1)) + list(range(60, 69 + 1))
 QTENC_NUMS = list(range(16, 30 + 1)) + list(range(41, 50 + 1)) + list(range(54, 59 + 1))
@@ -110,9 +119,9 @@ def get_enctype(path: str) -> str:
         raise ValueError(f'Image {path} not found in any list')
 
 
-patch_out_path = os.path.expanduser('~/tum/patches_v2')
+patch_out_path = os.path.expanduser('~/tum/patches_v2_hek_')
 if NEGATIVE_SAMPLING:
-    patch_out_path = os.path.expanduser('~/tum/patches_v2neg')
+    patch_out_path = os.path.expanduser('~/tum/patches_v2neg_hek')
 
 
 for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples']:
@@ -312,12 +321,15 @@ meta.to_excel(f'{patch_out_path}/patchmeta.xlsx', index_label='patch_id')
 
 
 # Sample random images from qt and mx subsets
-n_samples = 96
+n_samples = 60
 mx_samples = meta[meta.enctype == 'mx'].sample(n_samples // 2)
 qt_samples = meta[meta.enctype == 'qt'].sample(n_samples // 2)
 mixed_samples = pd.concat((mx_samples, qt_samples))
-shuffled_samples = mixed_samples.sample(frac=1)  # Sampling with frac=1 shuffles rows
-shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
+if False:
+    shuffled_samples = mixed_samples.sample(frac=1)  # Sampling with frac=1 shuffles rows
+    shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
+else:
+    shuffled_samples = mixed_samples
 # samples = samples[['patch_fname', 'enctype']]
 shuffled_samples.to_excel(f'{patch_out_path}/samples_gt.xlsx', index_label='patch_id')
 shuffled_samples[['enctype']].to_excel(f'{patch_out_path}/samples_blind.xlsx', index_label='patch_id')
@@ -326,7 +338,7 @@ for entry in shuffled_samples.itertuples():
     shutil.copyfile(f'{patch_out_path}/raw/{entry.patch_fname}', f'{patch_out_path}/samples/{entry.Index:02d}.tif')
     imgs.append(Image.open(f'{patch_out_path}/raw/{entry.patch_fname}').resize((28*4, 28*4), Image.NEAREST))
 
-grid = image_grid(imgs, 8, 12)
+grid = image_grid(imgs, 6, 10)
 grid.save(f'{patch_out_path}/samples_grid.png')
 
 
