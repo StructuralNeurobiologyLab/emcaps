@@ -3,7 +3,7 @@ Create line plots of horizontal and vertical axis profiles of encapsulin
 image patches.
 
 Requires a directory with patch images in the `patch_path`, which can be
-built with eclassify_anaylsis.py.
+built with eclassify_analysis.py.
 """
 
 import matplotlib.pyplot as plt
@@ -15,16 +15,19 @@ from pathlib import Path
 import tqdm
 
 
-plt.rcParams.update({'font.family': 'Arial'})
+# plt.rcParams.update({'font.family': 'Arial'})
 
 
 # avg = True  # Plot average profile on top
 # avg = False  # Plot demo patch profile instead
 
-mx_demo_path = Path('~/tumpatches/mx_0000.tif').expanduser()
-qt_demo_path = Path('~/tumpatches/qt_3065.tif').expanduser()
 
-patch_path = Path('~/tumpatches').expanduser()
+# patch_path = Path('~/tumpatches').expanduser()
+patch_path = Path('~/tum/patches_v2_hek_bgmask_enctype_prefix/raw/').expanduser()
+
+mx_demo_path = patch_path / 'mx_raw_patch_00084.tif'
+qt_demo_path = patch_path / 'qt_raw_patch_03109.tif'
+
 
 demo_paths = {mx_demo_path, qt_demo_path}
 
@@ -90,6 +93,12 @@ for enctype, orientations in profiles.items():
         ax = axrow[1] if orientation == 'horizontal' else axrow[2]
         c = 'orange' if orientation == 'horizontal' else 'blue'
         ax.plot(avgprof, c=c, linewidth=2)
+        # Also plot uncertainty
+        # minprof = np.min(prof, axis=0)
+        # maxprof = np.max(prof, axis=0)
+        stdprof = np.std(prof, 0)
+        ax.fill_between(range(prof.shape[1]), avgprof - stdprof, avgprof + stdprof, color='lightgray', alpha=0.2)
+        # ax.errorbar(range(prof.shape[1]), avgprof, yerr=np.std(prof, 0), fmt='.', elinewidth=1.5, color='gray', alpha=0.2)
 
 # fig.suptitle('Axis profile plots. orange: horizontal, blue: vertical. Gray: all images, blue: average profiles.', fontsize=16)
 

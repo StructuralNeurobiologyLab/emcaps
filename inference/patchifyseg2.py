@@ -327,10 +327,10 @@ for model_path in model_paths:
                     img_num=img_num,
                     enctype=enctype,
                     mmmt=mmmt,
-                    centroid_x=centroid[0],
-                    centroid_y=centroid[1],
-                    corner_x=lo[0],
-                    corner_y=lo[1]
+                    centroid_y=centroid[0],
+                    centroid_x=centroid[1],
+                    corner_y=lo[0],
+                    corner_x=lo[1]
                 ))
 
                 imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
@@ -372,10 +372,10 @@ for model_path in model_paths:
                     img_num=img_num,
                     enctype=enctype,
                     mmmt=mmmt,
-                    centroid_x=centroid[0],
-                    centroid_y=centroid[1],
-                    corner_x=lo[0],
-                    corner_y=lo[1]
+                    centroid_y=centroid[0],
+                    centroid_x=centroid[1],
+                    corner_y=lo[0],
+                    corner_x=lo[1]
                 ))
 
                 imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))

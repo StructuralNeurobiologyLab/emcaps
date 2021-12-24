@@ -119,7 +119,7 @@ def get_enctype(path: str) -> str:
         raise ValueError(f'Image {path} not found in any list')
 
 
-patch_out_path = os.path.expanduser('~/tum/patches_v2_hek_')
+patch_out_path = os.path.expanduser('~/tum/patches_v2_hek_bgmask_enctype_prefix')
 if NEGATIVE_SAMPLING:
     patch_out_path = os.path.expanduser('~/tum/patches_v2neg_hek')
 
@@ -255,10 +255,10 @@ for model_path in model_paths:
                     img_num=img_num,
                     enctype=enctype,
                     mmmt=mmmt,
-                    centroid_x=centroid[0],
-                    centroid_y=centroid[1],
-                    corner_x=lo[0],
-                    corner_y=lo[1]
+                    centroid_y=centroid[0],
+                    centroid_x=centroid[1],
+                    corner_y=lo[0],
+                    corner_x=lo[1],
                 ))
 
                 imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
@@ -289,7 +289,11 @@ for model_path in model_paths:
 
                 # raw_patch_fname = f'{patch_out_path}/raw/raw_{enctype}_{patch_id:06d}.tif'
                 # mask_patch_fname = f'{patch_out_path}/mask/mask{enctype}_{patch_id:06d}.tif'
-                raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
+                if False:
+                    raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
+                else:
+                    raw_patch_fname = f'{patch_out_path}/raw/{enctype}_raw_patch_{patch_id:05d}.tif'
+                    raw_patch[mask_patch == 0] = 0
                 mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:05d}.tif'
 
                 mmmt = '1xMmMT3'  # TODO: Determine this from sheet when applicable
@@ -300,10 +304,10 @@ for model_path in model_paths:
                     img_num=img_num,
                     enctype=enctype,
                     mmmt=mmmt,
-                    centroid_x=centroid[0],
-                    centroid_y=centroid[1],
-                    corner_x=lo[0],
-                    corner_y=lo[1]
+                    centroid_y=centroid[0],
+                    centroid_x=centroid[1],
+                    corner_y=lo[0],
+                    corner_x=lo[1],
                 ))
 
                 imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
@@ -330,6 +334,7 @@ if False:
     shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
 else:
     shuffled_samples = mixed_samples
+    shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
 # samples = samples[['patch_fname', 'enctype']]
 shuffled_samples.to_excel(f'{patch_out_path}/samples_gt.xlsx', index_label='patch_id')
 shuffled_samples[['enctype']].to_excel(f'{patch_out_path}/samples_blind.xlsx', index_label='patch_id')

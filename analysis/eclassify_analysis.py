@@ -158,11 +158,11 @@ outputs = {
 # ec_out_path = os.path.expanduser('~/tumresults/ec_outputs_lite.pkl.zst')
 # ec_out_path = os.path.expanduser('~/tumresults/ec_outputs.pkl.zst')
 
-ec_out_path = os.path.expanduser('~/tumecls')
+ec_out_path = os.path.expanduser('~/tum/ecls_hek')
 
 vis_path = os.path.expanduser('~/tumvis')
 
-patch_out_path = os.path.expanduser('~/tumpatches')
+patch_out_path = os.path.expanduser('~/tum/ecl_patches_hek')
 
 for p in [vis_path, patch_out_path]:
     os.makedirs(p, exist_ok=True)
