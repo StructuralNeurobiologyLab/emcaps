@@ -131,10 +131,11 @@ if DROSOPHILA_TEM_ONLY:
         if not isinstance(path, Path):
             path = Path(path)
         row = sheet.loc[sheet['num'] == int(path.stem)]
-        if row['QtEnc'].item():
-            return 'qt'
-        elif row['MxEnc'].item():
+
+        if row['MxEnc'].item():
             return 'mx'
+        elif row['QtEnc'].item():
+            return 'qt'
         else:
             raise ValueError(row)
 
@@ -170,9 +171,9 @@ else:
     def get_enctype(path: str) -> str:
         imgnum = int(os.path.basename(path)[:-4])
         if imgnum in MXENC_NUMS:
-            return 'qt'
-        elif imgnum in QTENC_NUMS:
             return 'mx'
+        elif imgnum in QTENC_NUMS:
+            return 'qt'
         else:
             raise ValueError(f'Image {path} not found in any list')
 

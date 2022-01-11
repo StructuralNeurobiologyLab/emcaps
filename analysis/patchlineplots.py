@@ -15,6 +15,23 @@ from pathlib import Path
 import tqdm
 
 
+# Based on https://stackoverflow.com/a/21242776
+def get_radial_profile(img, center=None):
+    if center is None:
+        center = np.array(img.shape) // 2 - 1
+    y, x = np.indices((img.shape))
+    r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+    r = r.astype(np.int64)
+
+    tbin = np.bincount(r.ravel(), img.ravel())
+    nr = np.bincount(r.ravel())
+    radialprofile = tbin / nr
+    # TODO: Is this slice valid?
+    radialprofile = radialprofile[:img.shape[0] // 2 - 1]
+    return radialprofile
+
+
+
 # plt.rcParams.update({'font.family': 'Arial'})
 
 
@@ -23,10 +40,11 @@ import tqdm
 
 
 # patch_path = Path('~/tumpatches').expanduser()
-patch_path = Path('~/tum/patches_v2_hek_bgmask_enctype_prefix/raw/').expanduser()
+# patch_path = Path('~/tum/patches_v2_hek_bgmask_enctype_prefix/raw/').expanduser()
+patch_path = Path('~/tum/patches_v2_hek_enctype_prefix/raw/').expanduser()
 
-mx_demo_path = patch_path / 'mx_raw_patch_00084.tif'
-qt_demo_path = patch_path / 'qt_raw_patch_03109.tif'
+mx_demo_path = patch_path / 'mx_raw_patch_03154.tif'
+qt_demo_path = patch_path / 'qt_raw_patch_01724.tif'
 
 
 demo_paths = {mx_demo_path, qt_demo_path}
@@ -34,11 +52,13 @@ demo_paths = {mx_demo_path, qt_demo_path}
 profiles = {
     'MxEnc': {
         'horizontal': [],
-        'vertical': []
+        'vertical': [],
+        'radial': [],
     },
     'QtEnc': {
         'horizontal': [],
-        'vertical': []
+        'vertical': [],
+        'radial': [],
     },
 }
 
@@ -57,6 +77,9 @@ for i, p in tqdm.tqdm(enumerate(patch_path.iterdir()), total=len(list(patch_path
 
     horizontal_profile = img[img.shape[0] // 2, :]
     vertical_profile = img[:, img.shape[1] // 2]
+
+    radial_profile = get_radial_profile(img)
+    # profiles[enctype]['radial'].append(radial_profile)
 
     profiles[enctype]['horizontal'].append(horizontal_profile)
     profiles[enctype]['vertical'].append(vertical_profile)
@@ -97,7 +120,7 @@ for enctype, orientations in profiles.items():
         # minprof = np.min(prof, axis=0)
         # maxprof = np.max(prof, axis=0)
         stdprof = np.std(prof, 0)
-        ax.fill_between(range(prof.shape[1]), avgprof - stdprof, avgprof + stdprof, color='lightgray', alpha=0.2)
+        # ax.fill_between(range(prof.shape[1]), avgprof - stdprof, avgprof + stdprof, color='gray', alpha=0.3)
         # ax.errorbar(range(prof.shape[1]), avgprof, yerr=np.std(prof, 0), fmt='.', elinewidth=1.5, color='gray', alpha=0.2)
 
 # fig.suptitle('Axis profile plots. orange: horizontal, blue: vertical. Gray: all images, blue: average profiles.', fontsize=16)

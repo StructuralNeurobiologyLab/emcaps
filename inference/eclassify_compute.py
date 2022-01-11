@@ -78,9 +78,9 @@ QTENC_NUMS = list(range(16, 30 + 1)) + list(range(41, 50 + 1)) + [54]
 def get_enctype(path: str) -> str:
     imgnum = int(os.path.basename(path)[:-4])
     if imgnum in MXENC_NUMS:
-        return 'qt'
-    elif imgnum in QTENC_NUMS:
         return 'mx'
+    elif imgnum in QTENC_NUMS:
+        return 'qt'
     else:
         raise ValueError(f'Image {path} not found in any list')
 

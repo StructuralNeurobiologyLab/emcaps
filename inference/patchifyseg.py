@@ -87,7 +87,8 @@ EC_REGION_RADIUS = 14
 EC_MIN_AREA = 200
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
-
+BG_MASK = False # If True, erase background by seg mask
+FILENAME_ENCTYPE_PREFIX = True
 
 # image_numbers = range(16, 54 + 1)
 # MXENC_NUMS = list(range(31, 40 + 1)) + list(range(51, 53 + 1))
@@ -112,14 +113,14 @@ img_paths = eul([
 def get_enctype(path: str) -> str:
     imgnum = int(os.path.basename(path)[:-4])
     if imgnum in MXENC_NUMS:
-        return 'qt'
-    elif imgnum in QTENC_NUMS:
         return 'mx'
+    elif imgnum in QTENC_NUMS:
+        return 'qt'
     else:
         raise ValueError(f'Image {path} not found in any list')
 
 
-patch_out_path = os.path.expanduser('~/tum/patches_v2_hek_bgmask_enctype_prefix')
+patch_out_path = os.path.expanduser('~/tum/patches_v2_hek_enctype_prefix')
 if NEGATIVE_SAMPLING:
     patch_out_path = os.path.expanduser('~/tum/patches_v2neg_hek')
 
@@ -289,10 +290,11 @@ for model_path in model_paths:
 
                 # raw_patch_fname = f'{patch_out_path}/raw/raw_{enctype}_{patch_id:06d}.tif'
                 # mask_patch_fname = f'{patch_out_path}/mask/mask{enctype}_{patch_id:06d}.tif'
-                if False:
-                    raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
-                else:
+                if FILENAME_ENCTYPE_PREFIX:
                     raw_patch_fname = f'{patch_out_path}/raw/{enctype}_raw_patch_{patch_id:05d}.tif'
+                else:
+                    raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:05d}.tif'
+                if BG_MASK:
                     raw_patch[mask_patch == 0] = 0
                 mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:05d}.tif'
 
@@ -354,15 +356,33 @@ meta['test'] = False
 
 meta.iloc[mixed_samples.index, meta.columns.get_loc('test')] = True
 meta.iloc[mixed_samples.index, meta.columns.get_loc('train')] = False
-# There are always more MxEnc examples than QtEnc samples
-assert meta[meta.enctype == 'mx'].shape[0] > meta[meta.enctype == 'qt'].shape[0]
-# -> Do not train on all available mx patches to better balance classes
-_n_qt_train_samples = meta[(meta.enctype == 'qt') & (meta.test == False)].shape[0]
-_mx_train_samples = meta[meta.enctype == 'mx'].sample(_n_qt_train_samples)
-_mx_exclude_idxs = set(meta[meta.enctype == 'mx'].index) - set(_mx_train_samples.index)
-# meta.loc[_mx_exclude_idxs, meta.columns.get_loc('train')] = False
 
-meta.loc[meta.index.isin(_mx_exclude_idxs), 'train'] = False
+
+
+if meta[meta.enctype == 'mx'].shape[0] >= meta[meta.enctype == 'qt'].shape[0]:
+    # There are more MxEnc examples than QtEnc samples
+    # -> Do not train on all available mx patches to better balance classes
+    _n_qt_train_samples = meta[(meta.enctype == 'qt') & (meta.test == False)].shape[0]
+    _mx_train_samples = meta[meta.enctype == 'mx'].sample(_n_qt_train_samples)
+    _mx_exclude_idxs = set(meta[meta.enctype == 'mx'].index) - set(_mx_train_samples.index)
+    meta.loc[meta.index.isin(_mx_exclude_idxs), 'train'] = False
+
+else:
+    # There are more QtEnc examples than MxEnc samples
+    # -> Do not train on all available qt patches to better balance classes
+    _n_mx_train_samples = meta[(meta.enctype == 'mx') & (meta.test == False)].shape[0]
+    _qt_train_samples = meta[meta.enctype == 'qt'].sample(_n_mx_train_samples)
+    _qt_exclude_idxs = set(meta[meta.enctype == 'qt'].index) - set(_qt_train_samples.index)
+    meta.loc[meta.index.isin(_qt_exclude_idxs), 'train'] = False
+
+# # There are always more MxEnc examples than QtEnc samples
+# assert meta[meta.enctype == 'mx'].shape[0] > meta[meta.enctype == 'qt'].shape[0]
+# # -> Do not train on all available mx patches to better balance classes
+# _n_qt_train_samples = meta[(meta.enctype == 'qt') & (meta.test == False)].shape[0]
+# _mx_train_samples = meta[meta.enctype == 'mx'].sample(_n_qt_train_samples)
+# _mx_exclude_idxs = set(meta[meta.enctype == 'mx'].index) - set(_mx_train_samples.index)
+# # meta.loc[_mx_exclude_idxs, meta.columns.get_loc('train')] = False
+# meta.loc[meta.index.isin(_mx_exclude_idxs), 'train'] = False
 
 meta = meta.convert_dtypes()
 

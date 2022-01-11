@@ -61,7 +61,8 @@ multi_label_names = {
 }
 
 # DATA_SOURCE = 'tumdata_v1'
-DATA_SOURCE = 'droso_tem'
+# DATA_SOURCE = 'droso_tem'
+DATA_SOURCE = 'hek-only'
 
 
 if DATA_SOURCE == 'tumdata_v1':
@@ -72,7 +73,13 @@ if DATA_SOURCE == 'tumdata_v1':
         f'~/tumdata/{i}/{i}.tif' for i in image_numbers
     ])
     results_path = os.path.expanduser('~/tum/results_tumdata_v1')
+elif DATA_SOURCE == 'hek-only':
+    image_numbers = [22]  # validation images, held out from training data
 
+    img_paths = eul([
+        f'~/tumdata/{i}/{i}.tif' for i in image_numbers
+    ])
+    results_path = os.path.expanduser('~/tum/results_hek_only')
 elif DATA_SOURCE == 'droso_tem':
     img_paths = []
     data_root = Path('~/tum/Drosophila-only-TEM-only_annotation/').expanduser()
@@ -88,7 +95,6 @@ elif DATA_SOURCE == 'droso_tem':
             img_paths.append(img_path)
     # results_path = os.path.expanduser('~/tum/results_droso_tem_oldmodel')
     results_path = os.path.expanduser('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k')
-
 else:
     raise ValueError(f'{DATA_SOURCE=}')
 
@@ -317,6 +323,10 @@ for model_path in model_paths:
         # Plot pixelwise PR curve
         p, r, t = sme.precision_recall_curve(m_targets, m_probs)
 
+        import pickle
+        # with open('prdata.npy', 'wb') as f:
+            # pickle.dump([p, r, t], f)
+        np.savez_compressed('prdata.npy', p,r,t)
         plt.plot(r, p)
         plt.xlabel('Recall')
         plt.ylabel('Precision')
