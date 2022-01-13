@@ -322,17 +322,21 @@ for model_path in model_paths:
         recall = sme.recall_score(m_targets, m_preds)
         # Plot pixelwise PR curve
         p, r, t = sme.precision_recall_curve(m_targets, m_probs)
-
-        import pickle
-        # with open('prdata.npy', 'wb') as f:
-            # pickle.dump([p, r, t], f)
+        plt.figure(figsize=(3, 3))
         np.savez_compressed('prdata.npy', p,r,t)
         plt.plot(r, p)
         plt.xlabel('Recall')
         plt.ylabel('Precision')
         plt.minorticks_on()
         plt.grid(True, 'both')
-        plt.savefig(eu(f'{results_path}/{modelname}_pr.png'), dpi=600)
+
+        # Get index of pr-curve's threshold that's nearest to the one used in practice for this segmentation
+        _i = np.abs(t - thresh/255).argmin()
+        plt.scatter(r[_i], p[_i])
+        plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
+
+        plt.tight_layout()
+        plt.savefig(eu(f'{results_path}/{modelname}_pr.pdf'), dpi=300)
         
         with open(eu(f'{results_path}/{modelname}_{kind}_pr.txt'), 'w') as f:
             f.write(
