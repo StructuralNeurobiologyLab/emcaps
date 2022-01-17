@@ -6,14 +6,21 @@ Requires a directory with patch images in the `patch_path`, which can be
 built with eclassify_analysis.py.
 """
 
+from curses.ascii import SUB
 import matplotlib.pyplot as plt
 import numpy as np
 import imageio
 import os
 import sys
 from pathlib import Path
+from scipy.signal import find_peaks
 import tqdm
+import seaborn as sns
 
+
+def filter_nan(x):
+    print(f'Filtering {np.sum(np.isnan(x))} NaN values from a total of {x.size} values')
+    return x[~np.isnan(x)].copy()
 
 # Based on https://stackoverflow.com/a/21242776
 def get_radial_profile(img, center=None):
@@ -31,6 +38,90 @@ def get_radial_profile(img, center=None):
     return radialprofile
 
 
+def measure_inner_disk_radius(hprofile, center_nhood=2, discrete=False):
+    # TODO: gaussian filtering?
+    # Look for actual encapsulin center in the patch by finding intensity maximum in a `center_nhood` neighborhood around the central pixel
+    # Encapsulin center at cx with intensity cy
+    center_x = np.argmax(hprofile[:center_nhood + 1])
+    center_y = hprofile[center_x]
+    # Intensity minimum, assumed as center of dark outer ring
+    min_x = np.argmin(hprofile)
+    min_y = hprofile[min_x]
+    # Middle value between maximum center intensity and minimum outer ring intensity
+    inner_y = (center_y + min_y) / 2
+    # Starting from center outwards, find first crossing of inner_y value:
+    # 1. "right" index: where inner_y was already crossed (falling below)
+    inner_right_x = np.argmax(hprofile[center_x:] <= inner_y)
+    # 2. "left" index: Index immediately before inner_y crossing
+    inner_left_x = inner_right_x - 1
+    if discrete:
+        # Return discrete index (-> floor)
+        inner_radius = inner_left_x
+    else:
+        # 3. Approximate crossing's continuous location by doing inverse linear interpolation
+        inner_right_y = hprofile[inner_right_x]
+        inner_left_y = hprofile[inner_left_x]
+        # Interpolate reverse function to get intersection point
+        if inner_right_y > inner_left_y:
+            # Intensity goes back up again -> fail
+            return np.nan
+        # np.interp requires increasing sequence for second argument, so swap the left-right order here
+        inner_x = np.interp(inner_y, [inner_right_y, inner_left_y], [inner_right_x, inner_left_x])
+        inner_radius = inner_x
+    if inner_radius < 0.5:  # Not plausible
+        return np.nan
+    return inner_radius
+
+    # # Starting from inner radius outwards, find first crossing of bg_thresh value:
+    # # 1. "right" index: where bg_thresh was already crossed (exceeding)
+    # outer_right_x = np.argmax(hprofile[inner_right_x:] >= bg_thresh)
+    # # Clip at boundary
+    # if len(hprofile) - 1 > outer_right_x:
+    #     print(f'{outer_right_x=}')
+    # outer_right_x = np.clip(outer_right_x, a_min=None, a_max=len(hprofile) - 1)
+    # # 2. "left" index: Index immediately before bg_thresh crossing
+    # outer_left_x = outer_right_x - 1
+    # if discrete:
+    #     # Return discrete index (-> floor)
+    #     outer_radius = outer_left_x
+    # else:
+    #     # 3. Approximate crossing's continuous location by doing inverse linear interpolation
+    #     outer_right_y = hprofile[outer_right_x]
+    #     outer_left_y = hprofile[outer_left_x]
+    #     # Interpolate reverse function to get intersection point
+    #     # TODO: Ensure ordering of interpolation args
+    #     outer_x = np.interp(bg_thresh, [outer_left_y, outer_right_y], [outer_left_x, outer_left_x])
+    #     outer_radius = outer_x
+
+    # return inner_radius, outer_radius
+
+
+def measure_outer_disk_radius(mask, discrete=False):
+    profile = get_radial_profile(mask)
+    y = 0.5
+    # Starting from center outwards, find first crossing of y value:
+    # 1. "right" index: where y was already crossed (falling below)
+    right_x = np.argmax(profile <= y)
+    # 2. "left" index: Index immediately before y crossing
+    left_x = right_x - 1
+    if discrete:
+        # Return discrete index (-> floor)
+        outer_radius = left_x
+    else:
+        # 3. Approximate crossing's continuous location by doing inverse linear interpolation
+        right_y = profile[right_x]
+        left_y = profile[left_x]
+        # Interpolate reverse function to get intersection point
+        if right_y > left_y:
+            # Intensity goes back up again -> fail
+            return np.nan
+        # np.interp requires increasing sequence for second argument, so swap the left-right order here
+        x = np.interp(y, [right_y, left_y], [right_x, left_x])
+        outer_radius = x
+    if outer_radius < 3:  # Note plausible
+        return np.nan
+    return outer_radius
+
 
 # plt.rcParams.update({'font.family': 'Arial'})
 
@@ -42,6 +133,7 @@ def get_radial_profile(img, center=None):
 # patch_path = Path('~/tumpatches').expanduser()
 # patch_path = Path('~/tum/patches_v2_hek_bgmask_enctype_prefix/raw/').expanduser()
 patch_path = Path('~/tum/patches_v2_hek_enctype_prefix/raw/').expanduser()
+mask_path = patch_path.parent / 'mask'
 
 mx_demo_path = patch_path / 'mx_raw_patch_03154.tif'
 qt_demo_path = patch_path / 'qt_raw_patch_01724.tif'
@@ -59,23 +151,43 @@ ENCTYPE_COLOR = {
     'MT3-QtEnc': 'red',
 }
 
-YLIM = (50, 230)  # ylim for profile plots
+YLIM = (0, 230)  # ylim for profile plots
+SUBTRACT_MIN = True
+NANOMETERS_PER_PIXEL = 2
+
+min_patch_intensity = {}
+min_profile_intensity = {}
+mean_profile_bg_intensity = {}
+inner_disk_radii = {
+    'MT3-MxEnc': [],
+    'MT3-QtEnc': [],
+}
+avg_inner_disk_radius = {}
+outer_disk_radii = {
+    'MT3-MxEnc': [],
+    'MT3-QtEnc': [],
+}
+avg_outer_disk_radius = {}
+
 
 profiles = {
     'MT3-MxEnc': [],
     'MT3-QtEnc': [],
 }
+mprofiles = {}
+hprofiles = {}
 
 patches = {
     'MT3-MxEnc': [],
     'MT3-QtEnc': [],
 }
-avgpatch = {
+masks = {
+    'MT3-MxEnc': [],
+    'MT3-QtEnc': [],
 }
-avgprof = {
-}
-stdprof = {
-}
+avgpatch = {}
+avgprof = {}
+stdprof = {}
 
 # Collect individual patches and profiles
 for i, p in tqdm.tqdm(enumerate(patch_path.iterdir()), total=len(list(patch_path.glob('*')))):
@@ -90,18 +202,86 @@ for i, p in tqdm.tqdm(enumerate(patch_path.iterdir()), total=len(list(patch_path
     profiles[enctype].append(radial_profile)
     patches[enctype].append(img)
 
-# Reduce to average
+    # Load segmentation mask
+    mpath = mask_path / p.name.replace('qt_', '').replace('mx_', '').replace('raw', 'mask')
+    mask_img = imageio.imread(mpath) > 0
+    masks[enctype].append(mask_img)
+
+# Reduce to average patches, average profiles
 for enctype in patches.keys():
-    patches_np = np.stack(patches[enctype])
+    patches[enctype] = np.stack(patches[enctype])
+    if SUBTRACT_MIN:
+        min_patch_intensity[enctype] = np.min(patches[enctype])
+        patches[enctype] -= min_patch_intensity[enctype]
+
     avgpatch[enctype] = np.mean(patches[enctype], axis=0)
-    prof_np = np.stack(profiles[enctype])
-
+    # Keep profile versions beginning at image centers ("half profiles")
+    hprofiles[enctype] = np.stack(profiles[enctype]).copy()
+    if SUBTRACT_MIN:
+        min_profile_intensity[enctype] = np.min(hprofiles[enctype])
+        hprofiles[enctype] -= min_profile_intensity[enctype]
+    
     # Mirror profiles at y=0 so they are symmetric (redundant but better for comparing against images)
-    prof_np = np.concatenate((np.flip(prof_np, axis=1), prof_np), axis=1)
+    profiles[enctype] = np.concatenate((np.flip(hprofiles[enctype], axis=1), hprofiles[enctype]), axis=1).copy()
 
-    avgprof[enctype] = np.mean(prof_np, axis=0)
-    stdprof[enctype] = np.std(prof_np, axis=0)
+    avgprof[enctype] = np.mean(profiles[enctype], axis=0)
+    stdprof[enctype] = np.std(profiles[enctype], axis=0)
 
+
+# Measure radii
+for enctype in patches.keys():
+    for hprofile in hprofiles[enctype]:
+        r1 = measure_inner_disk_radius(hprofile)
+        inner_disk_radii[enctype].append(r1)
+    inner_disk_radii[enctype] = np.stack(inner_disk_radii[enctype])
+    inner_disk_radii[enctype] *= NANOMETERS_PER_PIXEL
+    # Filter out invalid measurements
+    inner_disk_radii[enctype] = filter_nan(inner_disk_radii[enctype])
+    avg_inner_disk_radius[enctype] = np.mean(inner_disk_radii[enctype])
+
+    for mask in masks[enctype]:
+        r2 = measure_outer_disk_radius(mask)
+        outer_disk_radii[enctype].append(r2)
+    outer_disk_radii[enctype] = np.stack(outer_disk_radii[enctype])
+    outer_disk_radii[enctype] *= NANOMETERS_PER_PIXEL
+    # Filter out invalid measurements
+    outer_disk_radii[enctype] = filter_nan(outer_disk_radii[enctype])
+    avg_outer_disk_radius[enctype] = np.mean(outer_disk_radii[enctype])
+
+# Rebalance classes
+assert inner_disk_radii['MT3-MxEnc'].shape[0] <= inner_disk_radii['MT3-QtEnc'].shape[0]
+n_mx = inner_disk_radii['MT3-MxEnc'].shape[0]
+inner_disk_radii['MT3-QtEnc'] = inner_disk_radii['MT3-QtEnc'][:n_mx]
+outer_disk_radii['MT3-QtEnc'] = outer_disk_radii['MT3-QtEnc'][:n_mx]
+
+
+# inner_bins = np.arange(0, 5.5, 0.5)
+# inner_xlim = (0.5, 4.5)
+# outer_bins = np.arange(6, 11.5, 0.5)
+# outer_xlim = (7, 11)
+inner_bins = np.arange(0, 12, 1)
+inner_xlim = (0, 10)
+outer_bins = np.arange(12, 25, 1)
+outer_xlim = (13, 24)
+fig, axes = plt.subplots(nrows=2, ncols=2, tight_layout=True, figsize=(5, 5))
+for i, enctype in enumerate(reversed(patches.keys())):
+    color = 'blue' if enctype == 'MT3-MxEnc' else 'red'
+    print(i)
+    iax = axes[i][0]
+    sns.histplot(inner_disk_radii[enctype], stat='count', kde=True, bins=inner_bins, color=color, ax=iax)
+    iax.set_xlim(*inner_xlim)
+    iax.set_xlabel(f'Inner radius (r1) [nm]')
+
+    oax = axes[i][1]
+    sns.histplot(outer_disk_radii[enctype], stat='count', kde=True, bins=outer_bins, color=color, ax=oax)
+    oax.set_xlim(*outer_xlim)
+    oax.set_xlabel(f'Outer radius (r2) [nm]')
+
+plt.savefig('/tmp/radii.pdf')
+plt.show()
+
+
+# sns.histplot(inner_disk_radii['MT3-QtEnc'], stat='percent', bins=np.arange(0, 5, 0.5) - 0.25, kde=True, color='blue')
 
 
 # Visualize average images and average profiles
@@ -126,10 +306,10 @@ for enctype in patches.keys():
     axrow[1].fill_between(range(avgprof[enctype].shape[0]), avgprof[enctype] - stdprof[enctype], avgprof[enctype] + stdprof[enctype], color=ENCTYPE_COLOR[enctype], alpha=0.1)
 
 plt.savefig('/tmp/patchprofiles.pdf')
-plt.show()
+# plt.show()
 
 # Average plots
-fig, ax = plt.subplots(figsize=(3.5, 3), tight_layout=True)
+fig, ax = plt.subplots(figsize=(3, 2.5), tight_layout=True)
 for enctype in reversed(patches.keys()):  # reverse iteration to maintain order
     ax.plot(avgprof[enctype], c=ENCTYPE_COLOR[enctype], label=enctype, linewidth=1)
     ax.fill_between(range(avgprof[enctype].shape[0]), avgprof[enctype] - stdprof[enctype], avgprof[enctype] + stdprof[enctype], color=ENCTYPE_COLOR[enctype], alpha=0.1)
@@ -142,4 +322,6 @@ ax.legend()
 # ax.set_title('Radial average profile')
 
 plt.savefig('/tmp/patchprofiles_compared.pdf')
-plt.show()
+# plt.show()
+
+import IPython ; IPython.embed(); raise SystemExit
