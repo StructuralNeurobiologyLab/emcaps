@@ -260,22 +260,34 @@ outer_disk_radii['MT3-QtEnc'] = outer_disk_radii['MT3-QtEnc'][:n_mx]
 # outer_bins = np.arange(6, 11.5, 0.5)
 # outer_xlim = (7, 11)
 inner_bins = np.arange(0, 12, 1)
-inner_xlim = (0, 10)
+inner_xlim = (0, 12)
 outer_bins = np.arange(12, 25, 1)
 outer_xlim = (13, 24)
-fig, axes = plt.subplots(nrows=2, ncols=2, tight_layout=True, figsize=(5, 5))
-for i, enctype in enumerate(reversed(patches.keys())):
-    color = 'blue' if enctype == 'MT3-MxEnc' else 'red'
-    print(i)
-    iax = axes[i][0]
-    sns.histplot(inner_disk_radii[enctype], stat='count', kde=True, bins=inner_bins, color=color, ax=iax)
-    iax.set_xlim(*inner_xlim)
-    iax.set_xlabel(f'Inner radius (r1) [nm]')
 
-    oax = axes[i][1]
-    sns.histplot(outer_disk_radii[enctype], stat='count', kde=True, bins=outer_bins, color=color, ax=oax)
-    oax.set_xlim(*outer_xlim)
-    oax.set_xlabel(f'Outer radius (r2) [nm]')
+legend_labels = ['MT3-QtEnc', 'MT3-MxEnc']
+
+fig, axes = plt.subplots(nrows=1, ncols=2, tight_layout=True, figsize=(4, 2.5))
+
+bw_adjust = 2
+
+# color = 'blue' if enctype == 'MT3-MxEnc' else 'red'
+iax = axes[0]
+sns.kdeplot(inner_disk_radii['MT3-QtEnc'], color='red', bw_adjust=bw_adjust, ax=iax)
+sns.kdeplot(inner_disk_radii['MT3-MxEnc'], color='blue', bw_adjust=bw_adjust, ax=iax)
+
+iax.set_xlim(*inner_xlim)
+iax.set_xlabel(f'r1 [nm]')
+iax.legend(labels=legend_labels, loc='lower right', fontsize=6)
+iax.grid(True)
+oax = axes[1]
+sns.kdeplot(outer_disk_radii['MT3-QtEnc'], color='red', bw_adjust=bw_adjust, ax=oax)
+sns.kdeplot(outer_disk_radii['MT3-MxEnc'], color='blue', bw_adjust=bw_adjust, ax=oax)
+# oax.set_xlim(*outer_xlim)
+oax.set_xlabel(f'r2 [nm]')
+oax.set(ylabel=None)
+# oax.legend(labels=legend_labels, loc='lower right', fontsize=8)
+oax.grid(True)
+
 
 plt.savefig('/tmp/radii.pdf')
 plt.show()
@@ -324,4 +336,4 @@ ax.legend()
 plt.savefig('/tmp/patchprofiles_compared.pdf')
 # plt.show()
 
-import IPython ; IPython.embed(); raise SystemExit
+# import IPython ; IPython.embed(); raise SystemExit
