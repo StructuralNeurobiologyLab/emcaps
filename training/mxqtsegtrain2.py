@@ -27,7 +27,10 @@ import elektronn3
 from torch.nn.modules.loss import CrossEntropyLoss, MSELoss
 from torch.utils import data
 
-from monai.losses import GeneralizedDiceLoss
+from omegaconf import OmegaConf, DictConfig
+import hydra
+
+# from monai.losses import GeneralizedDiceLoss
 
 
 elektronn3.select_mpl_backend('Agg')
@@ -41,8 +44,23 @@ from elektronn3.modules.loss import CombinedLoss, DiceLoss
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import YTifDirData2d
+from training.tifdirdata import ZTifDirData2d
 
+
+# @hydra.main(config_path='conf', config_name='config')
+# def my_app(cfg: DictConfig) -> None:
+#     global conf
+#     conf = cfg
+#     print(OmegaConf.to_yaml(conf))
+
+
+# if __name__ == "__main__":
+#     my_app()
+
+
+# print(conf.db)
+
+# conf = OmegaConf.create()
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
@@ -86,6 +104,15 @@ print(f'Running on device: {device}')
 # 3: nuclear_membrane
 # 4: nuclear_region
 # 5: cytoplasmic_region
+
+
+# SHEET_NAME = 'Copy of Image_origin_information_GGW'
+SHEET_NAME = 'outdated_Image_origin_informati'
+
+DATA_SELECTION = 'all'
+# DATA_SELECTION = '1x'
+# DATA_SELECTION = '2x'
+
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
@@ -155,7 +182,7 @@ model = UNet(
 ).to(device)
 
 # USER PATHS
-save_root = Path('~/tum/binary_mxqtsegtrain2_trainings').expanduser()
+save_root = Path('~/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -175,6 +202,7 @@ dt_scale = 30
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
     transforms.RandomCrop((768, 768)),
+    transforms.DropIfTooMuchBG(threshold=1 - (1 / 500**2)),
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
     transforms.RandomFlip(ndim_spatial=2),
 ]
@@ -205,21 +233,56 @@ valid_transform = transforms.Compose(valid_transform)
 # Specify data set
 
 
-valid_image_numbers = [
-    40, 60, 114,  # MxEnc
-    43, 106, 109,  # QtEnc
+# valid_image_numbers = [
+#     40, 60, 114,  # MxEnc
+#     43, 106, 109,  # QtEnc
+# ]
+
+# valid_image_numbers = [
+#     66, 83,  # MxEnc: 1x, 2x
+#     22, 70,  # QtEnc: 1x, 2x
+# ]
+
+valid_image_numbers_1x = [
+    66,  # MxEnc
+    22,  # QtEnc
 ]
 
+valid_image_numbers_2x = [
+    83,  # MxEnc
+    70,  # QtEnc
+]
+
+if DATA_SELECTION == 'all':
+    valid_image_numbers = valid_image_numbers_1x + valid_image_numbers_2x
+elif DATA_SELECTION == '1x':
+    valid_image_numbers = valid_image_numbers_1x
+elif DATA_SELECTION == '2x':
+    valid_image_numbers = valid_image_numbers_2x
 
 # print('Training on images ', train_image_numbers)
 # print('Validating on images ', valid_image_numbers)
 
 
 
-# def meta_filter_train
+def meta_filter(meta):
+    meta_orig = meta
+    meta = meta.copy()
+    if DATA_SELECTION == 'all':
+        meta = meta.loc[(meta['1xMmMT3'] | meta['2xMmMT3'])]
+    elif DATA_SELECTION != 'all':
+        meta = meta.loc[meta[f'{DATA_SELECTION}MmMT3']]
+    meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
+    meta = meta.loc[meta['Modality'] == 'TEM']
 
-train_dataset = YTifDirData2d(
-    descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', 'Image_origin_information'),
+    meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
+
+
+    return meta
+
+train_dataset = ZTifDirData2d(
+    descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
+    meta_filter=meta_filter,
     valid_nums=valid_image_numbers,
     train=True,
     label_names=label_names,
@@ -229,11 +292,12 @@ train_dataset = YTifDirData2d(
     enable_inputmask=INPUTMASK,
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_TERRIBLE_INVERSION_HACK,
-    epoch_multiplier=100,
+    epoch_multiplier=10,
 )
 
-valid_dataset = YTifDirData2d(
-    descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', 'Image_origin_information'),
+valid_dataset = ZTifDirData2d(
+    descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
+    meta_filter=meta_filter,
     valid_nums=valid_image_numbers,
     train=False,
     label_names=label_names,
@@ -390,6 +454,9 @@ trainer = Trainer(
     mixed_precision=True,
     extra_save_steps=list(range(0, max_steps, 10_000)),
 )
+
+
+
 
 # Archiving training script, src folder, env info
 bk = Backup(script_path=__file__,
