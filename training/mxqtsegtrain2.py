@@ -9,9 +9,10 @@ Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from 
 
 import argparse
 import datetime
+from dataclasses import dataclass
 from math import inf
 from pathlib import Path
-from typing import Tuple
+from typing import Literal, Optional, Tuple, Union
 import os
 import random
 
@@ -27,8 +28,9 @@ import elektronn3
 from torch.nn.modules.loss import CrossEntropyLoss, MSELoss
 from torch.utils import data
 
-from omegaconf import OmegaConf, DictConfig
 import hydra
+from omegaconf import OmegaConf, DictConfig
+from hydra.core.config_store import ConfigStore
 
 # from monai.losses import GeneralizedDiceLoss
 
@@ -47,15 +49,34 @@ import albumentations
 from training.tifdirdata import ZTifDirData2d
 
 
-# @hydra.main(config_path='conf', config_name='config')
-# def my_app(cfg: DictConfig) -> None:
+# @dataclass
+# class TrainingConf:
+#     data_root: str = '~/tum/Single-table_database'
+#     dsel: str = '1x'
+#     horg: Literal['HEK cell culture', 'Drosophila'] = 'HEK cell culture'
+
+#     disable_cuda: bool = False
+#     n: Optional[str] = None
+#     max_steps: int = 80_000
+#     seed: int = 0
+#     deterministic: bool = False
+#     save_root: str = '~/tum/mxqtsegtrain2_trainings_hek4_bin'
+
+
+
+# cs = ConfigStore.instance()
+# cs.store(name='training_conf', node=TrainingConf)
+
+
+# @hydra.main(config_path='conf', config_name='training_conf')
+# def main(cfg: DictConfig) -> None:
 #     global conf
 #     conf = cfg
 #     print(OmegaConf.to_yaml(conf))
 
 
 # if __name__ == "__main__":
-#     my_app()
+#     main()
 
 
 # print(conf.db)
@@ -80,16 +101,15 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+conf = args # TODO
+
 # Set up all RNG seeds, set level of determinism
 random_seed = args.seed
 torch.manual_seed(random_seed)
 np.random.seed(random_seed)
 random.seed(random_seed)
-deterministic = args.deterministic
-if deterministic:
-    torch.backends.cudnn.deterministic = True
-else:
-    torch.backends.cudnn.benchmark = True  # Improves overall performance in *most* cases
+
+torch.backends.cudnn.benchmark = True  # Improves overall performance in *most* cases
 
 if not args.disable_cuda and torch.cuda.is_available():
     device = torch.device('cuda')
@@ -109,10 +129,12 @@ print(f'Running on device: {device}')
 # SHEET_NAME = 'Copy of Image_origin_information_GGW'
 SHEET_NAME = 'outdated_Image_origin_informati'
 
-DATA_SELECTION = 'all'
-# DATA_SELECTION = '1x'
+# DATA_SELECTION = 'all'
+DATA_SELECTION = '1x'
 # DATA_SELECTION = '2x'
+# DATA_SELECTION = conf.dsel
 
+HOST_ORG = 'Drosophila'
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
@@ -142,6 +164,7 @@ USE_GDL_CE = True
 USE_GRAY_AUG = True
 
 data_root = Path('~/tum/Single-table_database').expanduser()
+# data_root = Path(conf.data_root).expanduser()
 
 if MULTILABEL:
     label_names = [
@@ -182,17 +205,19 @@ model = UNet(
 ).to(device)
 
 # USER PATHS
-save_root = Path('~/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
+# save_root = Path('~/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
+save_root = Path(f'~/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
+# save_root = Path(conf.save_root).expanduser()
 
-max_steps = args.max_steps
+max_steps = conf.max_steps
 lr = 1e-3
 lr_stepsize = 1000
 lr_dec = 0.95
 batch_size = 8
 
 
-if args.resume is not None:  # Load pretrained network params
-    model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
+if conf.resume is not None:  # Load pretrained network params
+    model.load_state_dict(torch.load(os.path.expanduser(conf.resume)))
 
 dataset_mean = (128.0,)
 dataset_std = (128.0,)
@@ -253,6 +278,16 @@ valid_image_numbers_2x = [
     70,  # QtEnc
 ]
 
+if HOST_ORG == 'Drosophila':
+    valid_image_numbers_1x = [
+        40, 60, 114,  # MxEnc
+        43, 106, 109,  # QtEnc
+    ]
+    valid_image_numbers_2x = [
+          # MxEnc
+          # QtEnc
+    ]
+
 if DATA_SELECTION == 'all':
     valid_image_numbers = valid_image_numbers_1x + valid_image_numbers_2x
 elif DATA_SELECTION == '1x':
@@ -270,9 +305,10 @@ def meta_filter(meta):
     meta = meta.copy()
     if DATA_SELECTION == 'all':
         meta = meta.loc[(meta['1xMmMT3'] | meta['2xMmMT3'])]
-    elif DATA_SELECTION != 'all':
+    else:
         meta = meta.loc[meta[f'{DATA_SELECTION}MmMT3']]
-    meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
+    # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
+    meta = meta.loc[meta['Host organism'] == HOST_ORG]
     meta = meta.loc[meta['Modality'] == 'TEM']
 
     meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
@@ -425,7 +461,7 @@ _MTCE = 'MTCE_' if USE_MTCE else ''
 _GRAY_AUG = 'GA_' if USE_GRAY_AUG else ''
 _GDL_CE = 'GDL_CE_' if USE_GDL_CE else ''
 
-exp_name = args.exp_name
+exp_name = conf.exp_name
 if exp_name is None:
     exp_name = ''
 timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
