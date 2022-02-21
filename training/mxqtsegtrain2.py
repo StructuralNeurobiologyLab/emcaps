@@ -9,10 +9,11 @@ Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from 
 
 import argparse
 import datetime
+import logging
 from dataclasses import dataclass
 from math import inf
 from pathlib import Path
-from typing import Literal, Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union, Dict
 import os
 import random
 
@@ -36,6 +37,7 @@ from hydra.core.config_store import ConfigStore
 
 
 elektronn3.select_mpl_backend('Agg')
+logger = logging.getLogger('elektronn3log')
 
 from elektronn3.training import Trainer, Backup
 from elektronn3.training import metrics
@@ -46,7 +48,10 @@ from elektronn3.modules.loss import CombinedLoss, DiceLoss
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import ZTifDirData2d
+from tqdm import tqdm
+from torch.cuda import amp
+
+from training.tifdirdata import UTifDirData2d
 
 
 # @dataclass
@@ -127,14 +132,26 @@ print(f'Running on device: {device}')
 
 
 # SHEET_NAME = 'Copy of Image_origin_information_GGW'
-SHEET_NAME = 'outdated_Image_origin_informati'
+SHEET_NAME = 'all_metadata'
 
 # DATA_SELECTION = 'all'
-DATA_SELECTION = '1x'
+# DATA_SELECTION = '1x'
 # DATA_SELECTION = '2x'
 # DATA_SELECTION = conf.dsel
 
-HOST_ORG = 'Drosophila'
+DATA_SELECTION = [
+    'HEK_1xMT3-QtEnc-Flag',
+    'DRO_1xMT3-MxEnc-Flag-NLS',
+    'DRO_1xMT3-QtEnc-Flag-NLS',
+    'HEK_1xMT3-MxEnc-Flag',
+    'HEK-2xMT3-QtEnc-Flag',
+    'HEK-2xMT3-MxEnc-Flag',
+    'HEK-3xMT3-QtEnc-Flag',
+    'HEK-1xTmEnc-BC2-Tag',
+]
+
+# HOST_ORG = 'Drosophila'
+# HOST_ORG = 'all'
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
@@ -195,9 +212,17 @@ if BINARY_SEG:
 if USE_MTCE:
     out_channels = 4
 
+# model = UNet(
+#     out_channels=out_channels,
+#     n_blocks=2,
+#     start_filts=64,
+#     activation='relu',
+#     normalization='batch',
+#     dim=2
+# ).to(device)
 model = UNet(
     out_channels=out_channels,
-    n_blocks=2,
+    n_blocks=3,
     start_filts=64,
     activation='relu',
     normalization='batch',
@@ -206,8 +231,10 @@ model = UNet(
 
 # USER PATHS
 # save_root = Path('~/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
-save_root = Path(f'~/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
+# save_root = Path(f'~/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
 # save_root = Path(conf.save_root).expanduser()
+save_root = Path('~/tum/mxqtsegtrain2_trainings_uni').expanduser()
+
 
 max_steps = conf.max_steps
 lr = 1e-3
@@ -224,10 +251,13 @@ dataset_std = (128.0,)
 
 dt_scale = 30
 
+
+# TODO: https://github.com/Project-MONAI/MONAI/blob/384c7181e3730988fe5318e9592f4d65c12af843/monai/transforms/croppad/array.py#L831
+
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
     transforms.RandomCrop((768, 768)),
-    transforms.DropIfTooMuchBG(threshold=1 - (1 / 500**2)),
+    # transforms.DropIfTooMuchBG(threshold=1 - (1 / 500**2)),
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
     transforms.RandomFlip(ndim_spatial=2),
 ]
@@ -268,55 +298,87 @@ valid_transform = transforms.Compose(valid_transform)
 #     22, 70,  # QtEnc: 1x, 2x
 # ]
 
-valid_image_numbers_1x = [
-    66,  # MxEnc
-    22,  # QtEnc
-]
+# valid_image_numbers_1x = [
+#     66,  # MxEnc
+#     22,  # QtEnc
+# ]
 
-valid_image_numbers_2x = [
-    83,  # MxEnc
-    70,  # QtEnc
-]
+# valid_image_numbers_2x = [
+#     83,  # MxEnc
+#     70,  # QtEnc
+# ]
 
-if HOST_ORG == 'Drosophila':
-    valid_image_numbers_1x = [
-        40, 60, 114,  # MxEnc
-        43, 106, 109,  # QtEnc
-    ]
-    valid_image_numbers_2x = [
-          # MxEnc
-          # QtEnc
-    ]
+# if HOST_ORG == 'Drosophila':
+#     valid_image_numbers_1x = [
+#         40, 60, 114,  # MxEnc
+#         43, 106, 109,  # QtEnc
+#     ]
+#     valid_image_numbers_2x = [
+#           # MxEnc
+#           # QtEnc
+#     ]
 
-if DATA_SELECTION == 'all':
-    valid_image_numbers = valid_image_numbers_1x + valid_image_numbers_2x
-elif DATA_SELECTION == '1x':
-    valid_image_numbers = valid_image_numbers_1x
-elif DATA_SELECTION == '2x':
-    valid_image_numbers = valid_image_numbers_2x
+# if DATA_SELECTION == 'all':
+#     valid_image_numbers = valid_image_numbers_1x + valid_image_numbers_2x
+# elif DATA_SELECTION == '1x':
+#     valid_image_numbers = valid_image_numbers_1x
+# elif DATA_SELECTION == '2x':
+#     valid_image_numbers = valid_image_numbers_2x
+
+
+valid_image_dict = {
+    'DRO_1xMT3-MxEnc-Flag-NLS': [40, 60, 114],
+    'DRO_1xMT3-QtEnc-Flag-NLS': [43, 106, 109],
+    'HEK_1xMT3-QtEnc-Flag':     [26],
+    'HEK_1xMT3-MxEnc-Flag':     [66],
+    'HEK-2xMT3-QtEnc-Flag':     [125],
+    'HEK-2xMT3-MxEnc-Flag':     [142],
+    'HEK-3xMT3-QtEnc-Flag':     [131],
+    'HEK-1xTmEnc-BC2-Tag':      [139],
+}
+
+valid_image_numbers = []
+for condition in DATA_SELECTION:
+    valid_image_numbers.extend(valid_image_dict[condition])
+
 
 # print('Training on images ', train_image_numbers)
 # print('Validating on images ', valid_image_numbers)
 
 
 
+# def meta_filter(meta):
+#     meta_orig = meta
+#     meta = meta.copy()
+#     if DATA_SELECTION == 'all':
+#         meta = meta.loc[(meta['1xMmMT3'] | meta['2xMmMT3'])]
+#     else:
+#         meta = meta.loc[meta[f'{DATA_SELECTION}MmMT3']]
+#     # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
+#     meta = meta.loc[meta['Host organism'] == HOST_ORG]
+#     meta = meta.loc[meta['Modality'] == 'TEM']
+
+#     meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
+
+
+#     return meta
+
+
+# Use all classes
 def meta_filter(meta):
     meta_orig = meta
     meta = meta.copy()
-    if DATA_SELECTION == 'all':
-        meta = meta.loc[(meta['1xMmMT3'] | meta['2xMmMT3'])]
-    else:
-        meta = meta.loc[meta[f'{DATA_SELECTION}MmMT3']]
+    meta = meta.loc[meta['num'] >= 16]
     # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
-    meta = meta.loc[meta['Host organism'] == HOST_ORG]
-    meta = meta.loc[meta['Modality'] == 'TEM']
+    # meta = meta.loc[meta['Host organism'] == HOST_ORG]
+    # meta = meta.loc[meta['Modality'] == 'TEM']
 
-    meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
-
+    # meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
 
     return meta
 
-train_dataset = ZTifDirData2d(
+
+train_dataset = UTifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
     meta_filter=meta_filter,
     valid_nums=valid_image_numbers,
@@ -331,7 +393,7 @@ train_dataset = ZTifDirData2d(
     epoch_multiplier=10,
 )
 
-valid_dataset = ZTifDirData2d(
+valid_dataset = UTifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
     meta_filter=meta_filter,
     valid_nums=valid_image_numbers,
@@ -468,6 +530,81 @@ timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
 exp_name = f'{_GDL_CE}{_MTCE}{_MQ}{_VEC_DT}{_MULTILABEL}{_DT}{_GRAY_AUG}{exp_name}'
 
+
+
+class UTrainer(Trainer):
+    @torch.no_grad()
+    def _validate(self) -> Tuple[Dict[str, float], Dict[str, np.ndarray]]:
+        self.model.eval()  # Set dropout and batchnorm to eval mode
+
+        val_loss = []
+        outs = []
+        targets = []
+        stats = {name: [] for name in self.valid_metrics.keys()}
+        batch_iter = tqdm(
+            enumerate(self.valid_loader),
+            'Validating',
+            total=len(self.valid_loader),
+            dynamic_ncols=True,
+            **self.tqdm_kwargs
+        )
+        for i, batch in batch_iter:
+            # Everything with a "d" prefix refers to tensors on self.device (i.e. probably on GPU)
+            inp = batch['inp']
+            target = batch.get('target')
+            target_class = batch.get('class')
+
+            dinp = inp.to(self.device, non_blocking=True)
+            dtarget = target.to(self.device, non_blocking=True) if target is not None else None
+            dtarget_class = target_class.to(self.device, non_blocking=True) if target_class is not None else None
+            with amp.autocast(enabled=self.mixed_precision):
+                dout = self.model(dinp)
+                if dtarget is None:  # Use self-supervised unary loss function
+                    val_loss.append(self.ss_criterion(dout).item())
+                elif dtarget_class is not None:
+                    val_loss.append(self.criterion(dout, dtarget, dtarget_class).item())
+                else:
+                    val_loss.append(self.criterion(dout, dtarget).item())
+            out = dout.detach().cpu()
+            outs.append(out)
+            targets.append(target)
+
+        images = {
+            'inp': inp.numpy(),
+            'out': out.numpy(),
+            'target': None if target is None else target.numpy(),
+            'fname': batch.get('fname'),
+        }
+        self._put_current_attention_maps_into(images)
+
+        stats['val_loss'] = np.mean(val_loss)
+        stats['val_loss_std'] = np.std(val_loss)
+
+        for name, evaluator in self.valid_metrics.items():
+            mvals = [evaluator(target, out) for target, out in zip(targets, outs)]
+            if np.all(np.isnan(mvals)):
+                stats[name] = np.nan
+            else:
+                stats[name] = np.nanmean(mvals)
+        
+        fname = batch['fname']
+
+        _lb = fname.find('(')
+        _rb = fname.find(')')
+        scond = fname[_lb + 1 : _rb]
+
+        # TODO: Handle heterogeneous batches with multiple sconds
+
+        raise NotImplementedError
+
+        for name, evaluator in self.valid_metrics.items():
+            mvals = [evaluator(target, out) for target, out in zip(targets, outs)]
+            if np.all(np.isnan(mvals)):
+                stats[name] = np.nan
+            else:
+                stats[name] = np.nanmean(mvals)
+
+        return stats, images
 
 
 # Create trainer
