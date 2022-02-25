@@ -1,0 +1,10 @@
+_version: 4
+
+DRO_1xMT3-MxEnc-Flag-NLS: [60, 114]
+DRO_1xMT3-QtEnc-Flag-NLS: [43, 109]
+HEK_1xMT3-MxEnc-Flag:     [154, 155]  # preliminary
+HEK_1xMT3-QtEnc-Flag:     [26, 56]
+HEK-2xMT3-MxEnc-Flag:     [82, 142]
+HEK-2xMT3-QtEnc-Flag:     [74, 125]
+HEK-3xMT3-QtEnc-Flag:     [130, 131]
+HEK-1xTmEnc-BC2-Tag:      [147, 148]

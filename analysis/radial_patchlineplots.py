@@ -23,7 +23,7 @@ def filter_nan(x):
     return x[~np.isnan(x)].copy()
 
 # Based on https://stackoverflow.com/a/21242776
-def get_radial_profile(img, center=None):
+def get_radial_profile(img: np.ndarray, center=None) -> np.ndarray:
     if center is None:
         center = np.array(img.shape) // 2 - 1
     y, x = np.indices((img.shape))
@@ -33,7 +33,6 @@ def get_radial_profile(img, center=None):
     tbin = np.bincount(r.ravel(), img.ravel())
     nr = np.bincount(r.ravel())
     radialprofile = tbin / nr
-    # TODO: Is this slice valid?
     radialprofile = radialprofile[:img.shape[0] // 2]
     return radialprofile
 
@@ -96,9 +95,10 @@ def measure_inner_disk_radius(hprofile, center_nhood=2, discrete=False):
     # return inner_radius, outer_radius
 
 
-def measure_outer_disk_radius(mask, discrete=False):
+def measure_outer_disk_radius(mask: np.ndarray, discrete: bool = False) -> float:
+    """Measure the average distance between the center and the boundary of the seg mask -> r2"""
     profile = get_radial_profile(mask)
-    y = 0.5
+    y = 0.5  # Use 0.5 because mask is binary (0.5 is the linear interpolation threshold).
     # Starting from center outwards, find first crossing of y value:
     # 1. "right" index: where y was already crossed (falling below)
     right_x = np.argmax(profile <= y)

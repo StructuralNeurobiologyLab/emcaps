@@ -1,0 +1,11 @@
+_version: 3
+
+class_ids:
+  DRO_1xMT3-MxEnc-Flag-NLS: 0
+  DRO_1xMT3-QtEnc-Flag-NLS: 1
+  HEK_1xMT3-MxEnc-Flag:     2
+  HEK_1xMT3-QtEnc-Flag:     3
+  HEK-2xMT3-MxEnc-Flag:     4
+  HEK-2xMT3-QtEnc-Flag:     5
+  HEK-3xMT3-QtEnc-Flag:     6
+  HEK-1xTmEnc-BC2-Tag:      7

@@ -10,6 +10,7 @@ import numpy as np
 import imageio
 import skimage
 import torch
+import yaml
 
 from skimage import morphology as sm
 from skimage.color import label2rgb
@@ -62,7 +63,8 @@ multi_label_names = {
 
 # DATA_SOURCE = 'tumdata_v1'
 # DATA_SOURCE = 'droso_tem'
-DATA_SOURCE = 'hek-only'
+# DATA_SOURCE = 'hek-only'
+DATA_SOURCE = 'uni'  # universal model for all conditions
 
 
 if DATA_SOURCE == 'tumdata_v1':
@@ -72,14 +74,14 @@ if DATA_SOURCE == 'tumdata_v1':
     img_paths = eul([
         f'~/tumdata/{i}/{i}.tif' for i in image_numbers
     ])
-    results_path = os.path.expanduser('~/tum/results_tumdata_v1')
+    results_path = Path('~/tum/results_tumdata_v1').expanduser()
 elif DATA_SOURCE == 'hek-only':
     image_numbers = [22]  # validation images, held out from training data
 
     img_paths = eul([
         f'~/tumdata/{i}/{i}.tif' for i in image_numbers
     ])
-    results_path = os.path.expanduser('~/tum/results_hek_only')
+    results_path = Path('~/tum/results_hek_only').expanduser()
 elif DATA_SOURCE == 'droso_tem':
     img_paths = []
     data_root = Path('~/tum/Drosophila-only-TEM-only_annotation/').expanduser()
@@ -93,8 +95,52 @@ elif DATA_SOURCE == 'droso_tem':
 
             img_path = str(img_path)  # Code below expects strings
             img_paths.append(img_path)
-    # results_path = os.path.expanduser('~/tum/results_droso_tem_oldmodel')
-    results_path = os.path.expanduser('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k')
+    # results_path = Path('~/tum/results_droso_tem_oldmodel').expanduser()
+    results_path = Path('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k').expanduser()
+elif DATA_SOURCE == 'uni':
+    # Select validation images from all experimental conditions
+    results_path = Path('~/tum/results_uni_model_nb5_step80k_extra-tmenc').expanduser()
+    data_root = Path('~/tum/Single-table_database/').expanduser()
+
+    #v3
+    # valid_image_dict = {
+    #     'DRO_1xMT3-MxEnc-Flag-NLS': [40, 60, 114],
+    #     'DRO_1xMT3-QtEnc-Flag-NLS': [43, 106, 109],
+    #     'HEK_1xMT3-QtEnc-Flag':     [26],
+    #     'HEK_1xMT3-MxEnc-Flag':     [66],
+    #     'HEK-2xMT3-QtEnc-Flag':     [125],
+    #     'HEK-2xMT3-MxEnc-Flag':     [142],
+    #     'HEK-3xMT3-QtEnc-Flag':     [131],
+    #     'HEK-1xTmEnc-BC2-Tag':      [139],
+    # }
+    valid_split_path = './valid_split.yaml'
+    with open(valid_split_path) as f:
+        valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
+    DATA_SELECTION = [
+        'HEK_1xMT3-QtEnc-Flag',
+        'DRO_1xMT3-MxEnc-Flag-NLS',
+        'DRO_1xMT3-QtEnc-Flag-NLS',
+        'HEK_1xMT3-MxEnc-Flag',
+        'HEK-2xMT3-QtEnc-Flag',
+        'HEK-2xMT3-MxEnc-Flag',
+        'HEK-3xMT3-QtEnc-Flag',
+        'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
+    ]
+
+    valid_image_numbers = []
+    for condition in DATA_SELECTION:
+        valid_image_numbers.extend(valid_image_dict[condition])
+
+    image_numbers = valid_image_numbers  # validation images, held out from training data
+
+    # image_numbers = [139, 147, 148, 149, 150, 151, 152]  # extra tmenc set
+
+    img_paths = [
+        str(data_root / f'{i}/{i}.tif') for i in image_numbers
+    ]
+
+    # for p in [results_path / scond for scond in DATA_SELECTION]:
+    #     os.makedirs(p, exist_ok=True)
 else:
     raise ValueError(f'{DATA_SOURCE=}')
 
@@ -114,14 +160,11 @@ label_name = 'encapsulins'
 for p in [results_path]:
     os.makedirs(p, exist_ok=True)
 
-# TODO: 15to54 models use final.pt
-model_variant = 'final.pt'
-# model_variant = 'best.pt'
-# model_variant = ''
-
 
 model_paths = eul([
-    f'~/tum/binary_mxqtsegtrain2_trainings/GDL_CE_B_GA___UNet__21-12-14_17-32-22/model_63k.pt',
+    f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
+    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step70000.pt',
+    # f'~/tum/binary_mxqtsegtrain2_trainings/GDL_CE_B_GA___UNet__21-12-14_17-32-22/model_63k.pt',
     # f'~/tum/binary_mxqtsegtrain2_trainings/B___UNet__21-12-10_03-08-01/model_{model_variant}',
     # f'~/tumtrainings/15to54_encapsulins__UNet__21-09-16_03-10-26/model_{model_variant}',
     # f'~/tumtrainings/D_15to54_encapsulins__UNet__21-09-16_04-02-24/model_{model_variant}',
@@ -175,7 +218,8 @@ for model_path in model_paths:
             # Make imageio.imwrite-able
             cout = cout.astype(np.uint8) * 255
 
-            out_path = eu(f'{results_path}/{basename}_{modelname}_{kind}.png')
+            # out_path = eu(f'{results_path}/{basename}_{modelname}_{kind}.png')
+            out_path = eu(f'{results_path}/{basename}_{kind}.png')
             print(f'Writing inference result to {out_path}')
             if 'thresh' in DESIRED_OUTPUTS:
                 imageio.imwrite(out_path, cout)
@@ -336,9 +380,10 @@ for model_path in model_paths:
         plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
 
         plt.tight_layout()
-        plt.savefig(eu(f'{results_path}/{modelname}_pr.pdf'), dpi=300)
+        plt.savefig(eu(f'{results_path}/prcurve.pdf'), dpi=300)
         
-        with open(eu(f'{results_path}/{modelname}_{kind}_pr.txt'), 'w') as f:
+        # with open(eu(f'{results_path}/{modelname}_{kind}_pr.txt'), 'w') as f:
+        with open(eu(f'{results_path}/info.txt'), 'w') as f:
             f.write(
     f"""
     model: {model_path}

@@ -163,7 +163,7 @@ class UTifDirData2d(data.Dataset):
             self,
             # data_root: str,
             label_names: Sequence[str],
-            valid_nums: Sequence[int],
+            valid_nums: Optional[Sequence[int]] = None,
             descr_sheet = (os.path.expanduser('~/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
             meta_filter = lambda x: x,
             train: bool = True,
@@ -204,10 +204,16 @@ class UTifDirData2d(data.Dataset):
 
         if self.train:
             logger.info('\nTraining data:')
-            meta = meta[~meta['num'].isin(self.valid_nums)]
+            if valid_nums is None:  # Read from table
+                meta = meta[meta['Training']]
+            else:  # Use list
+                meta = meta[~meta['num'].isin(self.valid_nums)]
         else:
             logger.info('\nValidation data:')
-            meta = meta[meta['num'].isin(self.valid_nums)]
+            if valid_nums is None:  # Read from table
+                meta = meta[meta['Validation']]
+            else:  # Use list
+                meta = meta[meta['num'].isin(self.valid_nums)]
 
         self.meta = meta
         self.root_path = Path(descr_sheet[0]).parent

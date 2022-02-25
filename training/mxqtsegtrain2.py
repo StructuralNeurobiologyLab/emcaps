@@ -23,6 +23,7 @@ from torch.nn import functional as F
 from torch import optim
 import numpy as np
 import pandas as pd
+import yaml
 
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
@@ -92,7 +93,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=80_000,
+    '-m', '--max-steps', type=int, default=120_000,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -222,7 +223,7 @@ if USE_MTCE:
 # ).to(device)
 model = UNet(
     out_channels=out_channels,
-    n_blocks=3,
+    n_blocks=5,
     start_filts=64,
     activation='relu',
     normalization='batch',
@@ -233,7 +234,7 @@ model = UNet(
 # save_root = Path('~/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
 # save_root = Path(f'~/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
 # save_root = Path(conf.save_root).expanduser()
-save_root = Path('~/tum/mxqtsegtrain2_trainings_uni').expanduser()
+save_root = Path('~/tum/mxqtsegtrain2_trainings_uni_v4').expanduser()
 
 
 max_steps = conf.max_steps
@@ -265,7 +266,7 @@ common_transforms = [
 train_transform = common_transforms + [
     transforms.RandomCrop((512, 512)),
     transforms.AlbuSeg2d(albumentations.ShiftScaleRotate(
-        p=0.99, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
+        p=0.98, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
     # transforms.ElasticTransform(prob=0.5, sigma=2, alpha=5),
 ]
@@ -326,16 +327,21 @@ valid_transform = transforms.Compose(valid_transform)
 #     valid_image_numbers = valid_image_numbers_2x
 
 
-valid_image_dict = {
-    'DRO_1xMT3-MxEnc-Flag-NLS': [40, 60, 114],
-    'DRO_1xMT3-QtEnc-Flag-NLS': [43, 106, 109],
-    'HEK_1xMT3-QtEnc-Flag':     [26],
-    'HEK_1xMT3-MxEnc-Flag':     [66],
-    'HEK-2xMT3-QtEnc-Flag':     [125],
-    'HEK-2xMT3-MxEnc-Flag':     [142],
-    'HEK-3xMT3-QtEnc-Flag':     [131],
-    'HEK-1xTmEnc-BC2-Tag':      [139],
-}
+#v3
+# valid_image_dict = {
+#     'DRO_1xMT3-MxEnc-Flag-NLS': [40, 60, 114],
+#     'DRO_1xMT3-QtEnc-Flag-NLS': [43, 106, 109],
+#     'HEK_1xMT3-QtEnc-Flag':     [26],
+#     'HEK_1xMT3-MxEnc-Flag':     [66],
+#     'HEK-2xMT3-QtEnc-Flag':     [125],
+#     'HEK-2xMT3-MxEnc-Flag':     [142],
+#     'HEK-3xMT3-QtEnc-Flag':     [131],
+#     'HEK-1xTmEnc-BC2-Tag':      [139],
+# }
+
+valid_split_path = './valid_split.yaml'
+with open(valid_split_path) as f:
+    valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
 
 valid_image_numbers = []
 for condition in DATA_SELECTION:
@@ -380,8 +386,8 @@ def meta_filter(meta):
 
 train_dataset = UTifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
-    meta_filter=meta_filter,
-    valid_nums=valid_image_numbers,
+    # meta_filter=meta_filter,
+    # valid_nums=valid_image_numbers,  # read from table
     train=True,
     label_names=label_names,
     transform=train_transform,
@@ -395,8 +401,8 @@ train_dataset = UTifDirData2d(
 
 valid_dataset = UTifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
-    meta_filter=meta_filter,
-    valid_nums=valid_image_numbers,
+    # meta_filter=meta_filter,
+    # valid_nums=valid_image_numbers,  # read from table
     train=False,
     label_names=label_names,
     transform=valid_transform,
@@ -532,81 +538,6 @@ exp_name = f'{_GDL_CE}{_MTCE}{_MQ}{_VEC_DT}{_MULTILABEL}{_DT}{_GRAY_AUG}{exp_nam
 
 
 
-class UTrainer(Trainer):
-    @torch.no_grad()
-    def _validate(self) -> Tuple[Dict[str, float], Dict[str, np.ndarray]]:
-        self.model.eval()  # Set dropout and batchnorm to eval mode
-
-        val_loss = []
-        outs = []
-        targets = []
-        stats = {name: [] for name in self.valid_metrics.keys()}
-        batch_iter = tqdm(
-            enumerate(self.valid_loader),
-            'Validating',
-            total=len(self.valid_loader),
-            dynamic_ncols=True,
-            **self.tqdm_kwargs
-        )
-        for i, batch in batch_iter:
-            # Everything with a "d" prefix refers to tensors on self.device (i.e. probably on GPU)
-            inp = batch['inp']
-            target = batch.get('target')
-            target_class = batch.get('class')
-
-            dinp = inp.to(self.device, non_blocking=True)
-            dtarget = target.to(self.device, non_blocking=True) if target is not None else None
-            dtarget_class = target_class.to(self.device, non_blocking=True) if target_class is not None else None
-            with amp.autocast(enabled=self.mixed_precision):
-                dout = self.model(dinp)
-                if dtarget is None:  # Use self-supervised unary loss function
-                    val_loss.append(self.ss_criterion(dout).item())
-                elif dtarget_class is not None:
-                    val_loss.append(self.criterion(dout, dtarget, dtarget_class).item())
-                else:
-                    val_loss.append(self.criterion(dout, dtarget).item())
-            out = dout.detach().cpu()
-            outs.append(out)
-            targets.append(target)
-
-        images = {
-            'inp': inp.numpy(),
-            'out': out.numpy(),
-            'target': None if target is None else target.numpy(),
-            'fname': batch.get('fname'),
-        }
-        self._put_current_attention_maps_into(images)
-
-        stats['val_loss'] = np.mean(val_loss)
-        stats['val_loss_std'] = np.std(val_loss)
-
-        for name, evaluator in self.valid_metrics.items():
-            mvals = [evaluator(target, out) for target, out in zip(targets, outs)]
-            if np.all(np.isnan(mvals)):
-                stats[name] = np.nan
-            else:
-                stats[name] = np.nanmean(mvals)
-        
-        fname = batch['fname']
-
-        _lb = fname.find('(')
-        _rb = fname.find(')')
-        scond = fname[_lb + 1 : _rb]
-
-        # TODO: Handle heterogeneous batches with multiple sconds
-
-        raise NotImplementedError
-
-        for name, evaluator in self.valid_metrics.items():
-            mvals = [evaluator(target, out) for target, out in zip(targets, outs)]
-            if np.all(np.isnan(mvals)):
-                stats[name] = np.nan
-            else:
-                stats[name] = np.nanmean(mvals)
-
-        return stats, images
-
-
 # Create trainer
 trainer = Trainer(
     model=model,
@@ -616,7 +547,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=1,  # TODO
+    num_workers=2,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
