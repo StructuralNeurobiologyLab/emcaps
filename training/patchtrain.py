@@ -31,6 +31,7 @@ from torch import nn
 from torch import optim
 import numpy as np
 import pandas as pd
+import yaml
 
 
 # Don't move this stuff, it needs to be run this early to work
@@ -48,7 +49,7 @@ from elektronn3.models.unet import UNet
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import Patches
+from training.tifdirdata import UPatches
 
 from models.effnetv2 import effnetv2_s, effnetv2_m
 from models.cct import CCT
@@ -103,16 +104,30 @@ if NEGATIVE_SAMPLING:
     assert not ERASE_MASK_BG
 
 
+valid_split_path = './class_info.yaml'
+with open(valid_split_path) as f:
+    CLASS_INFO = yaml.load(f, Loader=yaml.FullLoader)
 
-data_root = '~/tumdata2/'
-if NEGATIVE_SAMPLING:
-    descr_sheet = (os.path.expanduser('~/tum/patches_v2neg/patchmeta_traintest.xlsx'), 'Sheet1')
-else:
-    # descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
-    descr_sheet = (os.path.expanduser('~/tum/patches_v2_hek/patchmeta_traintest.xlsx'), 'Sheet1')
+CLASS_IDS = CLASS_INFO['class_ids']
+# CLASS_NAMES = list(CLASS_IDS.keys())
+CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
-out_channels = 2
+
+
+# if NEGATIVE_SAMPLING:
+#     descr_sheet = (os.path.expanduser('~/tum/patches_v2neg/patchmeta_traintest.xlsx'), 'Sheet1')
+# else:
+#     # descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
+#     descr_sheet = (os.path.expanduser('~/tum/patches_v2_hek/patchmeta_traintest.xlsx'), 'Sheet1')
+
+
+# descr_sheet = (os.path.expanduser('~/tum/patches_v2_hek/patchmeta_traintest.xlsx'), 'Sheet1')
+
+descr_sheet = (os.path.expanduser('~/tum/patches_v4_uni__from_gt/patchmeta_traintest.xlsx'), 'Sheet1')
+
+
+out_channels = 8
 
 model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 # model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
@@ -128,8 +143,9 @@ model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 
 
 # USER PATHS
-save_root = os.path.expanduser('~/tum/trainings3')
-save_root = os.path.expanduser('~/tum/trainings3_hek')
+# save_root = os.path.expanduser('~/tum/trainings3')
+# save_root = os.path.expanduser('~/tum/trainings3_hek')
+save_root = os.path.expanduser('~/tum/patch_trainings4_uni')
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -170,20 +186,20 @@ valid_transform = transforms.Compose(valid_transform)
 # Specify data set
 
 
-train_dataset = Patches(
+train_dataset = UPatches(
     descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
-    epoch_multiplier=5 if NEGATIVE_SAMPLING else 200,
+    epoch_multiplier=5 if NEGATIVE_SAMPLING else 2,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
 
-valid_dataset = Patches(
+valid_dataset = UPatches(
     descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,
-    epoch_multiplier=4 if NEGATIVE_SAMPLING else 10,
+    epoch_multiplier=4 if NEGATIVE_SAMPLING else 2,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
@@ -215,10 +231,13 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
 valid_metrics = {}
 
-class_names = {0: 'MxEnc', 1: 'QtEnc'}
+# class_names = {0: 'MxEnc', 1: 'QtEnc'}
+
+
+
 for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall]:
     for c in range(out_channels):
-        valid_metrics[f'val_{evaluator.name}_{class_names[c]}'] = evaluator(c)
+        valid_metrics[f'val_{evaluator.name}_{CLASS_NAMES[c]}'] = evaluator(c)
 
 valid_metrics[f'val_accuracy_mean'] = metrics.Accuracy()  # Mean metric
 
@@ -252,7 +271,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=1,  # TODO
+    num_workers=2,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,

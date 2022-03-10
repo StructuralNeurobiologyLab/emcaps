@@ -40,7 +40,7 @@ from hydra.core.config_store import ConfigStore
 elektronn3.select_mpl_backend('Agg')
 logger = logging.getLogger('elektronn3log')
 
-from elektronn3.training import Trainer, Backup
+from elektronn3.training import Trainer, Backup, SWA
 from elektronn3.training import metrics
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
@@ -93,7 +93,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=120_000,
+    '-m', '--max-steps', type=int, default=160_000,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -141,13 +141,13 @@ SHEET_NAME = 'all_metadata'
 # DATA_SELECTION = conf.dsel
 
 DATA_SELECTION = [
-    'HEK_1xMT3-QtEnc-Flag',
-    'DRO_1xMT3-MxEnc-Flag-NLS',
-    'DRO_1xMT3-QtEnc-Flag-NLS',
-    'HEK_1xMT3-MxEnc-Flag',
-    'HEK-2xMT3-QtEnc-Flag',
-    'HEK-2xMT3-MxEnc-Flag',
-    'HEK-3xMT3-QtEnc-Flag',
+    # 'HEK_1xMT3-QtEnc-Flag',
+    # 'DRO_1xMT3-MxEnc-Flag-NLS',
+    # 'DRO_1xMT3-QtEnc-Flag-NLS',
+    # 'HEK_1xMT3-MxEnc-Flag',
+    # 'HEK-2xMT3-QtEnc-Flag',
+    # 'HEK-2xMT3-MxEnc-Flag',
+    # 'HEK-3xMT3-QtEnc-Flag',
     'HEK-1xTmEnc-BC2-Tag',
 ]
 
@@ -371,22 +371,28 @@ for condition in DATA_SELECTION:
 
 
 # Use all classes
+# def meta_filter(meta):
+#     meta_orig = meta
+#     meta = meta.copy()
+#     meta = meta.loc[meta['num'] >= 16]
+#     # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
+#     # meta = meta.loc[meta['Host organism'] == HOST_ORG]
+#     # meta = meta.loc[meta['Modality'] == 'TEM']
+
+#     # meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
+
+#     return meta
+
+
 def meta_filter(meta):
     meta_orig = meta
     meta = meta.copy()
-    meta = meta.loc[meta['num'] >= 16]
-    # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
-    # meta = meta.loc[meta['Host organism'] == HOST_ORG]
-    # meta = meta.loc[meta['Modality'] == 'TEM']
-
-    # meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
-
+    meta = meta.loc[meta['scond'].isin(DATA_SELECTION)]
     return meta
-
 
 train_dataset = UTifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
-    # meta_filter=meta_filter,
+    meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=True,
     label_names=label_names,
@@ -396,12 +402,12 @@ train_dataset = UTifDirData2d(
     enable_inputmask=INPUTMASK,
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_TERRIBLE_INVERSION_HACK,
-    epoch_multiplier=10,
+    epoch_multiplier=30,
 )
 
 valid_dataset = UTifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
-    # meta_filter=meta_filter,
+    meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=False,
     label_names=label_names,
@@ -423,7 +429,28 @@ optimizer = optim.Adam(
     lr=lr,
     amsgrad=True
 )
+# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
+
+# # Set to True to perform Cyclical LR range test instead of normal training
+# #  (see https://arxiv.org/abs/1506.01186, sec. 3.3).
+# do_lr_range_test = False
+# if do_lr_range_test:
+#     # Begin with a very small lr and double it every 450 steps.
+#     for grp in optimizer.param_groups:
+#         grp['lr'] = 1e-7  
+#     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, 450, 2)
+# else:
+#     lr_sched = torch.optim.lr_scheduler.CyclicLR(
+#         optimizer,
+#         base_lr=1e-6,
+#         max_lr=1e-3,
+#         step_size_up=10_000,
+#         step_size_down=30_000,
+#         cycle_momentum=True if 'momentum' in optimizer.defaults else False
+#     )
+
 lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+
 
 # Validation metrics
 
@@ -547,7 +574,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=2,  # TODO
+    num_workers=0,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,

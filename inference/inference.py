@@ -99,7 +99,7 @@ elif DATA_SOURCE == 'droso_tem':
     results_path = Path('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k').expanduser()
 elif DATA_SOURCE == 'uni':
     # Select validation images from all experimental conditions
-    results_path = Path('~/tum/results_uni_model_nb5_step80k_extra-tmenc').expanduser()
+    results_path = Path('~/tum/results_uni_model_v4_training').expanduser()
     data_root = Path('~/tum/Single-table_database/').expanduser()
 
     #v3
@@ -135,6 +135,11 @@ elif DATA_SOURCE == 'uni':
 
     # image_numbers = [139, 147, 148, 149, 150, 151, 152]  # extra tmenc set
 
+    # Training set
+    image_numbers = set(list(range(16, 138 + 1)) + list(range(141, 152 + 1)))
+    image_numbers = image_numbers - set(valid_image_numbers)
+    print('Selected image numbers:', image_numbers)
+
     img_paths = [
         str(data_root / f'{i}/{i}.tif') for i in image_numbers
     ]
@@ -150,7 +155,7 @@ DESIRED_OUTPUTS = [
     'lab',
     'overlays',
     'error_maps',
-    'probmaps',
+    'probmaps',  # TODO
     'metrics',
 ]
 
@@ -162,7 +167,10 @@ for p in [results_path]:
 
 
 model_paths = eul([
-    f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
+    # f'~/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_final.pt'  # TmEnc only
+    f'~/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+
+    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
     # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step70000.pt',
     # f'~/tum/binary_mxqtsegtrain2_trainings/GDL_CE_B_GA___UNet__21-12-14_17-32-22/model_63k.pt',
     # f'~/tum/binary_mxqtsegtrain2_trainings/B___UNet__21-12-10_03-08-01/model_{model_variant}',
@@ -241,7 +249,7 @@ for model_path in model_paths:
             lab_img = np.array(imageio.imread(lab_path))
             if invert_labels:
                 lab_img = (lab_img == 0).astype(np.int64)
-            if ENABLE_TERRIBLE_INVERSION_HACK and int(basename) >= 60:
+            if ENABLE_TERRIBLE_INVERSION_HACK and int(basename) >= 55:
                 lab_img = (lab_img == 0).astype(np.int64)
 
             # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
@@ -275,21 +283,21 @@ for model_path in model_paths:
                 imageio.imwrite(eu(f'{results_path}/{basename}_error.png'), error_img)
 
                 # Create false positive (fp) image
-                fp_error_img = (lab_img > 0) & (cout == 0)
+                fp_error_img = (lab_img == 0) & (cout > 0)
                 fp_error_img = (fp_error_img.astype(np.uint8)) * 255
                 imageio.imwrite(eu(f'{results_path}/{basename}_fp_error.png'), fp_error_img)
                 # Create false positive (fp) image overlay
-                fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
                 fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
                 fp_overlay = (fp_overlay * 255.).astype(np.uint8)
                 imageio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.jpg'), fp_overlay)
 
                 # Create false negative (fn) image
-                fn_error_img = (lab_img == 0) & (cout > 0)
+                fn_error_img = (lab_img > 0) & (cout == 0)
                 fn_error_img = (fn_error_img.astype(np.uint8)) * 255
                 imageio.imwrite(eu(f'{results_path}/{basename}_fn_error.png'), fn_error_img)
                 # Create false negative (fn) image overlay
-                fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
                 fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
                 fn_overlay = (fn_overlay * 255.).astype(np.uint8)
                 imageio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)

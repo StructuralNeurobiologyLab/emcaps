@@ -90,8 +90,8 @@ EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 # DROSOPHILA_TEM_ONLY = False
 DROSOPHILA_TEM_ONLY = True
 
-USE_GT = False
-# USE_GT = True
+# USE_GT = False
+USE_GT = True
 
 sheet = pd.read_excel(
     os.path.expanduser('~/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'),
@@ -103,8 +103,8 @@ sheet = pd.read_excel(
 # ]
 
 meta = sheet.copy()
-meta = meta.loc[meta['num'] >= 16]
 meta = meta.rename(columns={' Image': 'num'})
+meta = meta.loc[meta['num'] >= 16]
 meta = meta.rename(columns={'Short experimental condition': 'scond'})
 meta = meta.convert_dtypes()
 
@@ -139,7 +139,7 @@ for condition in DATA_SELECTION:
 # image_numbers = valid_image_numbers  # validation images, held out from training data
 
 
-image_numbers = sheet['num'].to_list()
+image_numbers = meta['num'].to_list()
 
 conditions = meta['scond'].unique()
 for condition in conditions:
@@ -160,11 +160,20 @@ for img_num in image_numbers:
     inp = imageio.imread(inp_path).astype(np.float32)
     img_paths.append(inp_path)
 
-def get_enctype(path):
+
+def get_meta_row(path):
     if not isinstance(path, Path):
         path = Path(path)
-    row = sheet.loc[sheet['num'] == int(path.stem)]
-    return row.scond
+    row = meta[meta['num'] == int(path.stem)]
+    return row
+
+def get_enctype(path):
+    row = get_meta_row(path)
+    return row.scond.item()
+
+def is_for_validation(path):
+    row = get_meta_row(path)
+    return row.Validation.item()
 
 patch_out_path = os.path.expanduser('~/tum/patches_v4_uni')
 if USE_GT:
@@ -172,7 +181,8 @@ if USE_GT:
 
 
 model_paths = eul([
-    f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
+    f'~/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'
+    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
     # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step40000.pt',
 ])
 
@@ -221,7 +231,7 @@ for model_path in model_paths:
         img_path = str(img_path)
         inp = np.array(imageio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
-        if USE_GT:
+        if USE_GT and is_for_validation(img_path):
 
             label_path = _img_path.with_name(f'{_img_path.stem}_encapsulins.tif')
             label = imageio.imread(label_path).astype(np.int64)
@@ -338,23 +348,51 @@ patchmeta = patchmeta.convert_dtypes()
 patchmeta = patchmeta.astype({'img_num': int})  # Int64
 patchmeta.to_excel(f'{patch_out_path}/patchmeta.xlsx', index_label='patch_id')
 
+samples = []
+
 for role in ['train', 'validation']:
-    samples = {}
     n_samples = {}
     # Find condition with smallest number of patches
-    min_n_samples = 1000
+    min_n_samples = 1_000_000  # Unexpected high value for initialization
     min_scond = None
     for scond in DATA_SELECTION:
-        n_samples[scond] = len(patchmeta[(patchmeta.scond == scond) & patchmeta[role]])
+        n_samples[scond] = len(patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]])
+        print(f'({role}, {scond}) n_samples: {n_samples[scond]}')
         if n_samples[scond] <= min_n_samples:
             min_n_samples = n_samples[scond]
             min_scond = scond
-    print(f'min_n_samples: {min_n_samples}, condition {min_scond}')
+    print(f'({role}) min_n_samples: {min_n_samples}, condition {min_scond}')
 
     # Sample min_scond patches each to create a balanced dataset
+    scond_samples = {}
     for scond in DATA_SELECTION:
-        samples[scond] = patchmeta[patchmeta.scond == scond].sample(min_n_samples)
-    samples = pd.concat(tuple(*samples.items()))
+        # scond_samples[scond] = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
+        scond_samples = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
+        samples.append(scond_samples)
+    # import IPython ; IPython.embed()
+    # samples[role] = pd.concat(scond_samples.values())
+
+samples = pd.concat(samples)
+
+all_samples = samples
+
+
+# In [41]: patchmeta.iloc[2]
+# Out[41]: 
+# patch_fname                                 raw_patch_000002.tif
+# img_num                                                       16
+# enctype        15    HEK_1xMT3-QtEnc-Flag
+# Name: scond, dtype:...
+# centroid_x                                                  1112
+# centroid_y                                                   535
+# corner_x                                                    1094
+# corner_y                                                     517
+# train                                                       True
+# validation                                                 False
+# Name: 2, dtype: object
+
+# 🤔  Something is off about the enctype column
+
 
 # TODO: ^ Concat samples from train and test -> balanced data for both
 
@@ -415,6 +453,7 @@ for role in ['train', 'validation']:
 #     _qt_train_samples = patchmeta[patchmeta.enctype == 'qt'].sample(_n_mx_train_samples)
 #     _qt_exclude_idxs = set(patchmeta[patchmeta.enctype == 'qt'].index) - set(_qt_train_samples.index)
 #     patchmeta.loc[patchmeta.index.isin(_qt_exclude_idxs), 'train'] = False
+
 
 all_samples = all_samples.convert_dtypes()
 
