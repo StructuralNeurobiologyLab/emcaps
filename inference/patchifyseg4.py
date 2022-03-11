@@ -9,6 +9,7 @@ import os
 from enum import Enum, auto
 from pathlib import Path
 from os.path import expanduser as eu
+from random import shuffle
 from re import S
 from typing import NamedTuple
 import shutil
@@ -77,6 +78,8 @@ pre_predict_transform = transforms.Compose([
 
 thresh = 127
 
+N_EVAL_SAMPLES = 20
+
 # NEGATIVE_SAMPLING = True
 NEGATIVE_SAMPLING = False
 N_NEG_PATCHES_PER_IMAGE = 100
@@ -110,14 +113,14 @@ meta = meta.convert_dtypes()
 
 
 DATA_SELECTION = [
-    'DRO_1xMT3-MxEnc-Flag-NLS',
-    'DRO_1xMT3-QtEnc-Flag-NLS',
+    # 'DRO_1xMT3-MxEnc-Flag-NLS',
+    # 'DRO_1xMT3-QtEnc-Flag-NLS',
     'HEK_1xMT3-MxEnc-Flag',
     'HEK_1xMT3-QtEnc-Flag',
     'HEK-2xMT3-MxEnc-Flag',
     'HEK-2xMT3-QtEnc-Flag',
     'HEK-3xMT3-QtEnc-Flag',
-    # 'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
+    'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
 ]
 
 # Load mapping from class names to class IDs
@@ -175,9 +178,19 @@ def is_for_validation(path):
     row = get_meta_row(path)
     return row.Validation.item()
 
-patch_out_path = os.path.expanduser('~/tum/patches_v4_uni')
+
+# TODO: Migrate to scratch storage?
+
+# patch_out_path = os.path.expanduser('~/tum/patches_v4_uni')
+# if USE_GT:
+#     # patch_out_path = os.path.expanduser('~/tum/patches_v4_uni__from_gt_notmenc')
+#     patch_out_path = os.path.expanduser('~/tum/patches_v4_uni__from_gt_a')
+
+patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni')
 if USE_GT:
-    patch_out_path = os.path.expanduser('~/tum/patches_v4_uni__from_gt')
+    patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_notmenc')
+    # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
+
 
 
 model_paths = eul([
@@ -312,8 +325,8 @@ for model_path in model_paths:
                 raw_patch = raw[xslice, yslice]
                 mask_patch = mask[xslice, yslice]
                 # Raw patch with background erased via mask
-                nobg_patch = raw.copy()
-                nobg_patch[mask == 0] = 0
+                nobg_patch = raw_patch.copy()
+                nobg_patch[mask_patch == 0] = 0
 
                 # raw_patch_fname = f'{patch_out_path}/raw/raw_{enctype}_{patch_id:06d}.tif'
                 # mask_patch_fname = f'{patch_out_path}/mask/mask{enctype}_{patch_id:06d}.tif'
@@ -350,13 +363,16 @@ patchmeta.to_excel(f'{patch_out_path}/patchmeta.xlsx', index_label='patch_id')
 
 samples = []
 
+eval_samples = {}
+
 for role in ['train', 'validation']:
     n_samples = {}
     # Find condition with smallest number of patches
     min_n_samples = 1_000_000  # Unexpected high value for initialization
     min_scond = None
     for scond in DATA_SELECTION:
-        n_samples[scond] = len(patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]])
+        matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
+        n_samples[scond] = len(matching_patches)
         print(f'({role}, {scond}) n_samples: {n_samples[scond]}')
         if n_samples[scond] <= min_n_samples:
             min_n_samples = n_samples[scond]
@@ -367,96 +383,37 @@ for role in ['train', 'validation']:
     scond_samples = {}
     for scond in DATA_SELECTION:
         # scond_samples[scond] = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
-        scond_samples = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
+        matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
+        scond_samples = matching_patches.sample(min_n_samples)
         samples.append(scond_samples)
+
+        if role == 'validation':
+            eval_samples[scond] = matching_patches.sample(N_EVAL_SAMPLES)
     # import IPython ; IPython.embed()
     # samples[role] = pd.concat(scond_samples.values())
 
 samples = pd.concat(samples)
 
 all_samples = samples
-
-
-# In [41]: patchmeta.iloc[2]
-# Out[41]: 
-# patch_fname                                 raw_patch_000002.tif
-# img_num                                                       16
-# enctype        15    HEK_1xMT3-QtEnc-Flag
-# Name: scond, dtype:...
-# centroid_x                                                  1112
-# centroid_y                                                   535
-# corner_x                                                    1094
-# corner_y                                                     517
-# train                                                       True
-# validation                                                 False
-# Name: 2, dtype: object
-
-# 🤔  Something is off about the enctype column
-
-
-# TODO: ^ Concat samples from train and test -> balanced data for both
-
-
-# shuffled_samples = mixed_samples.sample(frac=1)  # Sampling with frac=1 shuffles rows
-# shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
-
-# patchmeta['train'] = False
-# patchmeta['validaton'] = False
-
-# patchmeta[patchmeta.num in valid_image_numbers]
-
-# patchmeta.iloc[mixed_samples.index, patchmeta.columns.get_loc('validaton')] = True
-# patchmeta.iloc[mixed_samples.index, patchmeta.columns.get_loc('train')] = False
-
-
-
-
-# # Sample random images from qt and mx subsets
-# n_samples = 96
-# mx_samples = patchmeta[patchmeta.enctype == 'mx'].sample(n_samples // 2)
-# qt_samples = patchmeta[patchmeta.enctype == 'qt'].sample(n_samples // 2)
-# mixed_samples = pd.concat((mx_samples, qt_samples))
-# shuffled_samples = mixed_samples.sample(frac=1)  # Sampling with frac=1 shuffles rows
-# shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
-# # samples = samples[['patch_fname', 'enctype']]
-# shuffled_samples.to_excel(f'{patch_out_path}/samples_gt.xlsx', index_label='patch_id')
-# shuffled_samples[['enctype']].to_excel(f'{patch_out_path}/samples_blind.xlsx', index_label='patch_id')
-# imgs = []
-# for entry in shuffled_samples.itertuples():
-#     shutil.copyfile(f'{patch_out_path}/raw/{entry.patch_fname}', f'{patch_out_path}/samples/{entry.Index:02d}.tif')
-#     imgs.append(Image.open(f'{patch_out_path}/raw/{entry.patch_fname}').resize((28*4, 28*4), Image.NEAREST))
-
-# grid = image_grid(imgs, 8, 12)
-# grid.save(f'{patch_out_path}/samples_grid.png')
-
-
-# # Try to build a balanced patch dataset with train/test split
-
-# patchmeta['train'] = True
-# patchmeta['test'] = False
-
-# patchmeta.iloc[mixed_samples.index, patchmeta.columns.get_loc('test')] = True
-# patchmeta.iloc[mixed_samples.index, patchmeta.columns.get_loc('train')] = False
-
-# if patchmeta[patchmeta.enctype == 'mx'].shape[0] >= patchmeta[patchmeta.enctype == 'qt'].shape[0]:
-#     # There are more MxEnc examples than QtEnc samples
-#     # -> Do not train on all available mx patches to better balance classes
-#     _n_qt_train_samples = patchmeta[(patchmeta.enctype == 'qt') & (patchmeta.test == False)].shape[0]
-#     _mx_train_samples = patchmeta[patchmeta.enctype == 'mx'].sample(_n_qt_train_samples)
-#     _mx_exclude_idxs = set(patchmeta[patchmeta.enctype == 'mx'].index) - set(_mx_train_samples.index)
-#     patchmeta.loc[patchmeta.index.isin(_mx_exclude_idxs), 'train'] = False
-
-# else:
-#     # There are more QtEnc examples than MxEnc samples
-#     # -> Do not train on all available qt patches to better balance classes
-#     _n_mx_train_samples = patchmeta[(patchmeta.enctype == 'mx') & (patchmeta.test == False)].shape[0]
-#     _qt_train_samples = patchmeta[patchmeta.enctype == 'qt'].sample(_n_mx_train_samples)
-#     _qt_exclude_idxs = set(patchmeta[patchmeta.enctype == 'qt'].index) - set(_qt_train_samples.index)
-#     patchmeta.loc[patchmeta.index.isin(_qt_exclude_idxs), 'train'] = False
-
-
 all_samples = all_samples.convert_dtypes()
-
 all_samples.to_excel(f'{patch_out_path}/patchmeta_traintest.xlsx', index_label='patch_id')
+
+
+shuffled_samples = pd.concat(eval_samples.values())
+shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
+# # samples = samples[['patch_fname', 'enctype']]
+shuffled_samples.to_excel(f'{patch_out_path}/samples_gt.xlsx', index_label='patch_id')
+shuffled_samples[['enctype']].to_excel(f'{patch_out_path}/samples_blind.xlsx', index_label='patch_id')
+imgs = []
+for entry in shuffled_samples.itertuples():
+    _kind = 'nobg'  #  or 'raw'
+    srcpath = f'{patch_out_path}/{_kind}/{entry.patch_fname.replace("raw", _kind)}'
+    shutil.copyfile(srcpath, f'{patch_out_path}/samples/{entry.Index:03d}.tif')
+    imgs.append(Image.open(srcpath).resize((28*4, 28*4), Image.NEAREST))
+
+grid = image_grid(imgs, len(DATA_SELECTION), N_EVAL_SAMPLES)
+grid.save(f'{patch_out_path}/samples_grid.png')
+
+
 
 import IPython; IPython.embed(); exit()
