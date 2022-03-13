@@ -49,16 +49,26 @@ def eul(paths):
     return [os.path.expanduser(p) for p in paths]
 
 
-def image_grid(imgs, rows, cols):
+def image_grid(imgs, rows, cols, enable_grid_lines=True, text_color=255):
+    """Draw images sequentially on a (rows * cols) grid."""
     assert len(imgs) == rows*cols
 
     w, h = imgs[0].size
     grid = Image.new('L', size=(cols * w, rows * h))
-    
+
     for i, img in enumerate(imgs):
         drw = ImageDraw.Draw(img)
-        drw.text((0, 0), f'{i:02d}')
+        drw.text((0, 0), f'{i:02d}', fill=text_color)
         grid.paste(img, box=(i % cols * w, i // cols * h))
+
+    if enable_grid_lines:
+        gdrw = ImageDraw.Draw(grid)
+        for i in range(1, rows):
+            line = ((0, w * i), (h * cols - 1, w * i))
+            gdrw.line(line, fill=128)
+        for i in range(1, cols):
+            line = ((h * i, 0), (h * i, w * rows - 1))
+            gdrw.line(line, fill=128)
     return grid
 
 
@@ -78,7 +88,7 @@ pre_predict_transform = transforms.Compose([
 
 thresh = 127
 
-N_EVAL_SAMPLES = 20
+N_EVAL_SAMPLES = 30
 
 # NEGATIVE_SAMPLING = True
 NEGATIVE_SAMPLING = False
@@ -95,6 +105,9 @@ DROSOPHILA_TEM_ONLY = True
 
 # USE_GT = False
 USE_GT = True
+
+FILL_HOLES = True
+DILATE_MASKS_BY = 3
 
 sheet = pd.read_excel(
     os.path.expanduser('~/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'),
@@ -260,6 +273,12 @@ for model_path in model_paths:
             cout = (cout * 255.).astype(np.uint8)
             mask = cout > thresh
 
+        if DILATE_MASKS_BY > 0:
+            mask = ndimage.binary_dilation(mask, iterations=DILATE_MASKS_BY)
+
+        if FILL_HOLES:
+            mask = ndimage.binary_fill_holes(mask).astype(mask.dtype)
+
         img_num = int(os.path.splitext(os.path.basename(img_path))[0])
 
         is_validation = img_num in valid_image_numbers
@@ -400,18 +419,21 @@ all_samples.to_excel(f'{patch_out_path}/patchmeta_traintest.xlsx', index_label='
 
 
 shuffled_samples = pd.concat(eval_samples.values())
+shuffled_samples = shuffled_samples.sample(frac=1)  # Shuffle
 shuffled_samples.reset_index(inplace=True, drop=True)  # TODO: Avoid dropping index completely
 # # samples = samples[['patch_fname', 'enctype']]
 shuffled_samples.to_excel(f'{patch_out_path}/samples_gt.xlsx', index_label='patch_id')
 shuffled_samples[['enctype']].to_excel(f'{patch_out_path}/samples_blind.xlsx', index_label='patch_id')
 imgs = []
+_kind = 'nobg'  #  or 'raw'
 for entry in shuffled_samples.itertuples():
-    _kind = 'nobg'  #  or 'raw'
     srcpath = f'{patch_out_path}/{_kind}/{entry.patch_fname.replace("raw", _kind)}'
     shutil.copyfile(srcpath, f'{patch_out_path}/samples/{entry.Index:03d}.tif')
     imgs.append(Image.open(srcpath).resize((28*4, 28*4), Image.NEAREST))
 
-grid = image_grid(imgs, len(DATA_SELECTION), N_EVAL_SAMPLES)
+text_color = 255 if _kind == 'nobg' else 0
+
+grid = image_grid(imgs, len(DATA_SELECTION), N_EVAL_SAMPLES, text_color=text_color)
 grid.save(f'{patch_out_path}/samples_grid.png')
 
 
