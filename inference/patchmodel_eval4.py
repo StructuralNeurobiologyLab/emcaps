@@ -6,6 +6,8 @@ Evaluates a patch classifier model trained by training/patchtrain.py
 
 """
 
+# TODO: Update for v4 data format
+
 import argparse
 import datetime
 from math import inf
