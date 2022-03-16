@@ -11,6 +11,7 @@ from pathlib import Path
 from os.path import expanduser as eu
 from random import shuffle
 from re import S
+from tkinter import E
 from typing import NamedTuple
 import shutil
 
@@ -72,6 +73,27 @@ def image_grid(imgs, rows, cols, enable_grid_lines=True, text_color=255):
     return grid
 
 
+# Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
+def calculate_circularity(perimeter, area):
+    """Calculate the circularity of the region
+
+    Parameters
+    ----------
+    perimeter : float
+        the perimeter of the region
+    area : float
+        the area of the region
+
+    Returns
+    -------
+    circularity : float
+        The circularity of the region as defined by 4*pi*area / perimeter^2
+    """
+    circularity = 4 * np.pi * area / (perimeter ** 2)
+
+    return circularity
+
+
 np.random.seed(0)
 
 # Keep this in sync with training normalization
@@ -95,19 +117,24 @@ NEGATIVE_SAMPLING = False
 N_NEG_PATCHES_PER_IMAGE = 100
 
 # EC_REGION_RADIUS = 14
-EC_REGION_RADIUS = 18
+# EC_REGION_RADIUS = 18
+EC_REGION_RADIUS = 24
+
+# Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
+EC_REGION_ODD_PLUS1 = 1
 
 EC_MIN_AREA = 200
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
-# DROSOPHILA_TEM_ONLY = False
-DROSOPHILA_TEM_ONLY = True
 
-# USE_GT = False
-USE_GT = True
+USE_GT = False
+# USE_GT = True
 
 FILL_HOLES = True
-DILATE_MASKS_BY = 3
+DILATE_MASKS_BY = 5
+
+MIN_CIRCULARITY = 0.8
+
 
 sheet = pd.read_excel(
     os.path.expanduser('~/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'),
@@ -157,7 +184,8 @@ for condition in DATA_SELECTION:
 
 image_numbers = meta['num'].to_list()
 
-conditions = meta['scond'].unique()
+# conditions = meta['scond'].unique().dropna()
+conditions = DATA_SELECTION
 for condition in conditions:
     _nums = meta.loc[meta['scond'] == condition]['num'].to_list()
     print(f'{condition}:\t({len(_nums)} images):\n {_nums}')
@@ -201,7 +229,7 @@ def is_for_validation(path):
 
 patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni')
 if USE_GT:
-    patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_notmenc')
+    patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt')
     # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
 
 
@@ -228,6 +256,19 @@ class PatchMeta(NamedTuple):
     train: bool
     validation: bool
 
+
+apply_softmax = True
+tm_predictor = Predictor(
+    model='/wholebrain/u/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt',
+    device='cuda',
+    float16=True,
+    transform=pre_predict_transform,
+    # verbose=True,
+    augmentations=3 if apply_softmax else None,
+    apply_softmax=apply_softmax,
+)
+
+
 patchmeta = []
 
 patch_id = 0  # Incremented below for each patch written to disk
@@ -246,8 +287,11 @@ for model_path in model_paths:
         apply_softmax=apply_softmax,
     )
 
-    for img_path in tqdm.tqdm(img_paths, position=0, desc='Image'):
+    for img_path in tqdm.tqdm(img_paths, position=0, desc='Images'):
         enctype = get_enctype(img_path)
+        if pd.isna(enctype) or enctype not in DATA_SELECTION:
+            print('enctype', enctype, 'not found')
+            continue
         img_path = Path(img_path)
         _img_path = Path(img_path)
 
@@ -265,7 +309,11 @@ for model_path in model_paths:
                 label = (label == 0).astype(np.int64)
             mask = label
         else:
-            out = predictor.predict(inp)
+            # Use extra model for TmEnc (?)
+            if enctype == 'HEK-1xTmEnc-BC2-Tag':
+                out = tm_predictor.predict(inp)
+            else:
+                out = predictor.predict(inp)
             out = out.numpy()
 
             assert out.shape[1] == 2
@@ -273,11 +321,9 @@ for model_path in model_paths:
             cout = (cout * 255.).astype(np.uint8)
             mask = cout > thresh
 
-        if DILATE_MASKS_BY > 0:
-            mask = ndimage.binary_dilation(mask, iterations=DILATE_MASKS_BY)
-
         if FILL_HOLES:
             mask = ndimage.binary_fill_holes(mask).astype(mask.dtype)
+
 
         img_num = int(os.path.splitext(os.path.basename(img_path))[0])
 
@@ -290,7 +336,7 @@ for model_path in model_paths:
                 shx, shy = mask.shape
                 sh = np.array(mask.shape)
                 lo = np.random.randint(0, sh - 2 * EC_REGION_RADIUS, 2)
-                hi = lo + 2 * EC_REGION_RADIUS
+                hi = lo + 2 * EC_REGION_RADIUS + EC_REGION_ODD_PLUS1
                 centroid = lo + EC_REGION_RADIUS
 
                 xslice = slice(lo[0], hi[0])
@@ -330,11 +376,15 @@ for model_path in model_paths:
 
 
             for rp in tqdm.tqdm(rprops, position=1, leave=False, desc='Patches'):
-                centroid = np.round(rp.centroid).astype(np.int64)
+                centroid = np.round(rp.centroid).astype(np.int64)  # Note: This centroid is in the global coordinate frame
                 if rp.area < EC_MIN_AREA or rp.area > EC_MAX_AREA:
                     continue  # Too small or too big (-> background component?) to be a normal particle
+                if MIN_CIRCULARITY > 0:
+                    circularity = calculate_circularity(rp.perimeter, rp.area)
+                    if circularity < MIN_CIRCULARITY:
+                        continue  # Not circular enough (probably a false merger)
                 lo = centroid - EC_REGION_RADIUS
-                hi = centroid + EC_REGION_RADIUS
+                hi = centroid + EC_REGION_RADIUS + EC_REGION_ODD_PLUS1
                 if np.any(lo < 0) or np.any(hi > raw.shape):
                     continue  # Too close to image border
 
@@ -343,6 +393,22 @@ for model_path in model_paths:
 
                 raw_patch = raw[xslice, yslice]
                 mask_patch = mask[xslice, yslice]
+
+
+                # Eliminate coinciding masks from other particles that can overlap with this region (this can happen because we slice the mask_patch from the global mask)
+                _mask_patch_cc, _ = ndimage.label(mask_patch)
+                # Assuming convex particles, the center pixel is always on the actual mask region of interest.
+                _local_center = np.round(np.array(mask_patch.shape) / 2).astype(np.int64)
+                _mask_patch_centroid_label = _mask_patch_cc[tuple(_local_center)]
+                # All mask_patch pixels that don't share the same cc label as the centroid pixel are set to 0
+                mask_patch[_mask_patch_cc != _mask_patch_centroid_label] = 0
+
+                # Enlarge masks because we don't want to risk losing perimeter regions
+                if DILATE_MASKS_BY > 0:
+                    disk = sm.disk(DILATE_MASKS_BY)
+                    # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
+                    mask_patch = sm.binary_dilation(mask_patch, selem=disk)
+
                 # Raw patch with background erased via mask
                 nobg_patch = raw_patch.copy()
                 nobg_patch[mask_patch == 0] = 0
@@ -408,8 +474,6 @@ for role in ['train', 'validation']:
 
         if role == 'validation':
             eval_samples[scond] = matching_patches.sample(N_EVAL_SAMPLES)
-    # import IPython ; IPython.embed()
-    # samples[role] = pd.concat(scond_samples.values())
 
 samples = pd.concat(samples)
 

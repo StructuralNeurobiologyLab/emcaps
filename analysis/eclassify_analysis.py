@@ -203,8 +203,9 @@ def emb_to_rgb_umap(emb):  # todo: run on sep. process on cpu, takes ~20 s
     # plt.show()
     return emb_umap_normalized
 
-def var(x):
-    return np.var(x)
+# For regionprops extra_properties
+def rp_var(region_mask, image):
+    return np.var(image)
 
 # Raw region props
 rps = {
@@ -245,7 +246,7 @@ for num in tqdm.tqdm(image_numbers):
 
     cc, n_comps = ndimage.label(mask)
 
-    rprops = measure.regionprops(cc, raw, extra_properties=[var])
+    rprops = measure.regionprops(cc, raw, extra_properties=[rp_var])
     rprops = [rp for rp in rprops if rp.area >= EC_MIN_AREA]
 
     # TODO: SHAPES
