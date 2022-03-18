@@ -14,6 +14,7 @@ from re import S
 from tkinter import E
 from typing import NamedTuple
 import shutil
+import logging
 
 import gzip
 from unittest.mock import patch
@@ -137,7 +138,7 @@ MIN_CIRCULARITY = 0.8
 
 
 sheet = pd.read_excel(
-    os.path.expanduser('~/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'),
+    os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'),
     sheet_name='all_metadata'
 )
 # valid_image_numbers = [
@@ -191,7 +192,7 @@ for condition in conditions:
     print(f'{condition}:\t({len(_nums)} images):\n {_nums}')
 
 
-root_path = Path('~/tum/Single-table_database/').expanduser()
+root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
 
 img_paths = []
 for img_num in image_numbers:
@@ -220,12 +221,10 @@ def is_for_validation(path):
     return row.Validation.item()
 
 
-# TODO: Migrate to scratch storage?
-
-# patch_out_path = os.path.expanduser('~/tum/patches_v4_uni')
+# patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni')
 # if USE_GT:
-#     # patch_out_path = os.path.expanduser('~/tum/patches_v4_uni__from_gt_notmenc')
-#     patch_out_path = os.path.expanduser('~/tum/patches_v4_uni__from_gt_a')
+#     # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_notmenc')
+#     patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
 
 patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni')
 if USE_GT:
@@ -233,11 +232,17 @@ if USE_GT:
     # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
 
 
+logger = logging.getLogger('patchifyseg')
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler(f'{patch_out_path}/patchify.log')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
+
 
 model_paths = eul([
-    f'~/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'
-    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
-    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step40000.pt',
+    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step40000.pt',
 ])
 
 for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg']:
@@ -378,14 +383,17 @@ for model_path in model_paths:
             for rp in tqdm.tqdm(rprops, position=1, leave=False, desc='Patches'):
                 centroid = np.round(rp.centroid).astype(np.int64)  # Note: This centroid is in the global coordinate frame
                 if rp.area < EC_MIN_AREA or rp.area > EC_MAX_AREA:
+                    logger.info(f'Skipping: area size {rp.area} not within [{EC_MIN_AREA}, {EC_MAX_AREA}]')
                     continue  # Too small or too big (-> background component?) to be a normal particle
                 if MIN_CIRCULARITY > 0:
                     circularity = calculate_circularity(rp.perimeter, rp.area)
                     if circularity < MIN_CIRCULARITY:
+                        logger.info(f'Skipping: circularity {circularity} below {MIN_CIRCULARITY}')
                         continue  # Not circular enough (probably a false merger)
                 lo = centroid - EC_REGION_RADIUS
                 hi = centroid + EC_REGION_RADIUS + EC_REGION_ODD_PLUS1
                 if np.any(lo < 0) or np.any(hi > raw.shape):
+                    logger.info(f'Skipping: Region touches border')
                     continue  # Too close to image border
 
                 xslice = slice(lo[0], hi[0])
@@ -393,6 +401,11 @@ for model_path in model_paths:
 
                 raw_patch = raw[xslice, yslice]
                 mask_patch = mask[xslice, yslice]
+
+                if mask_patch.sum() == 0:
+                    # No positive pixel in mask -> skip this one
+                    logger.info(f'Skipping: no particle mask in region')
+                    continue  # TODO: Why does this happen although we're iterating over regionprops from mask?
 
 
                 # Eliminate coinciding masks from other particles that can overlap with this region (this can happen because we slice the mask_patch from the global mask)
@@ -434,7 +447,7 @@ for model_path in model_paths:
 
                 imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
                 imageio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
-                imageio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8) * 255)
+                imageio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
                 patch_id += 1
 
 

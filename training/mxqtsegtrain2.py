@@ -57,7 +57,7 @@ from training.tifdirdata import UTifDirData2d
 
 # @dataclass
 # class TrainingConf:
-#     data_root: str = '~/tum/Single-table_database'
+#     data_root: str = '/wholebrain/scratch/mdraw/tum/Single-table_database'
 #     dsel: str = '1x'
 #     horg: Literal['HEK cell culture', 'Drosophila'] = 'HEK cell culture'
 
@@ -66,7 +66,7 @@ from training.tifdirdata import UTifDirData2d
 #     max_steps: int = 80_000
 #     seed: int = 0
 #     deterministic: bool = False
-#     save_root: str = '~/tum/mxqtsegtrain2_trainings_hek4_bin'
+#     save_root: str = '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_hek4_bin'
 
 
 
@@ -181,7 +181,7 @@ USE_GDL_CE = True
 # USE_GRAY_AUG = False
 USE_GRAY_AUG = True
 
-data_root = Path('~/tum/Single-table_database').expanduser()
+data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database').expanduser()
 # data_root = Path(conf.data_root).expanduser()
 
 if MULTILABEL:
@@ -231,10 +231,10 @@ model = UNet(
 ).to(device)
 
 # USER PATHS
-# save_root = Path('~/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
-# save_root = Path(f'~/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
+# save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
+# save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
 # save_root = Path(conf.save_root).expanduser()
-save_root = Path('~/tum/mxqtsegtrain2_trainings_uni_v4').expanduser()
+save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4').expanduser()
 
 
 max_steps = conf.max_steps

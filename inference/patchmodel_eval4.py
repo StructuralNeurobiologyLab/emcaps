@@ -43,7 +43,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument(
     '-m', '--model-path', metavar='PATH',
     help='Path to pretrained model which to use.',
-    default='~/tum/patch_trainings4_uni/erasemaskbg___EffNetV2__22-03-07_17-22-09/model.pt',
+    default='/wholebrain/scratch/mdraw/tum/patch_trainings4_uni/erasemaskbg___EffNetV2__22-03-07_17-22-09/model.pt',
 )
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 args = parser.parse_args()
@@ -68,7 +68,7 @@ out_channels = 8
 
 # USER PATHS
 
-patches_v4_root = os.path.expanduser('~/tum/patches_v4_uni__from_gt/')
+patches_v4_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni/')
 
 dataset_mean = (128.0,)
 dataset_std = (128.0,)

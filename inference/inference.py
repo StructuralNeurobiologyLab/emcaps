@@ -99,8 +99,8 @@ elif DATA_SOURCE == 'droso_tem':
     results_path = Path('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k').expanduser()
 elif DATA_SOURCE == 'uni':
     # Select validation images from all experimental conditions
-    results_path = Path('~/tum/results_uni_model_v4_training').expanduser()
-    data_root = Path('~/tum/Single-table_database/').expanduser()
+    results_path = Path('/wholebrain/scratch/mdraw/tum/results_uni_model_v4_training').expanduser()
+    data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
 
     #v3
     # valid_image_dict = {
@@ -167,11 +167,11 @@ for p in [results_path]:
 
 
 model_paths = eul([
-    # f'~/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_final.pt'  # TmEnc only
-    f'~/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_final.pt'  # TmEnc only
+    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
 
-    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
-    # f'~/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step70000.pt',
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step70000.pt',
     # f'~/tum/binary_mxqtsegtrain2_trainings/GDL_CE_B_GA___UNet__21-12-14_17-32-22/model_63k.pt',
     # f'~/tum/binary_mxqtsegtrain2_trainings/B___UNet__21-12-10_03-08-01/model_{model_variant}',
     # f'~/tumtrainings/15to54_encapsulins__UNet__21-09-16_03-10-26/model_{model_variant}',
