@@ -397,6 +397,14 @@ class UTifDirData2d(data.Dataset):
 
 
 
+
+
+### From here on this is legacy code for older dataset versions
+
+
+
+
+
 class ZTifDirData2d(data.Dataset):
     """Using a special TIF file directory structure for segmentation data loading.
 

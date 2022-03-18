@@ -232,21 +232,22 @@ if USE_GT:
     # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
 
 
-logger = logging.getLogger('patchifyseg')
-logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler(f'{patch_out_path}/patchify.log')
-fh.setLevel(logging.DEBUG)
-logger.addHandler(fh)
-
-
 model_paths = eul([
     f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'
     # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
     # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step40000.pt',
 ])
 
+# Create output directories
 for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg']:
     os.makedirs(p, exist_ok=True)
+
+# Set up logging
+logger = logging.getLogger('patchifyseg')
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler(f'{patch_out_path}/patchify.log')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
 
 
 class PatchMeta(NamedTuple):
@@ -393,7 +394,7 @@ for model_path in model_paths:
                 lo = centroid - EC_REGION_RADIUS
                 hi = centroid + EC_REGION_RADIUS + EC_REGION_ODD_PLUS1
                 if np.any(lo < 0) or np.any(hi > raw.shape):
-                    logger.info(f'Skipping: Region touches border')
+                    logger.info(f'Skipping: region touches border')
                     continue  # Too close to image border
 
                 xslice = slice(lo[0], hi[0])
@@ -401,11 +402,6 @@ for model_path in model_paths:
 
                 raw_patch = raw[xslice, yslice]
                 mask_patch = mask[xslice, yslice]
-
-                if mask_patch.sum() == 0:
-                    # No positive pixel in mask -> skip this one
-                    logger.info(f'Skipping: no particle mask in region')
-                    continue  # TODO: Why does this happen although we're iterating over regionprops from mask?
 
 
                 # Eliminate coinciding masks from other particles that can overlap with this region (this can happen because we slice the mask_patch from the global mask)
@@ -415,6 +411,11 @@ for model_path in model_paths:
                 _mask_patch_centroid_label = _mask_patch_cc[tuple(_local_center)]
                 # All mask_patch pixels that don't share the same cc label as the centroid pixel are set to 0
                 mask_patch[_mask_patch_cc != _mask_patch_centroid_label] = 0
+
+                if mask_patch.sum() == 0:
+                    # No positive pixel in mask -> skip this one
+                    logger.info(f'Skipping: no particle mask in region')
+                    continue  # TODO: Why does this happen although we're iterating over regionprops from mask?
 
                 # Enlarge masks because we don't want to risk losing perimeter regions
                 if DILATE_MASKS_BY > 0:
@@ -510,7 +511,8 @@ for entry in shuffled_samples.itertuples():
 
 text_color = 255 if _kind == 'nobg' else 0
 
-grid = image_grid(imgs, len(DATA_SELECTION), N_EVAL_SAMPLES, text_color=text_color)
+# grid = image_grid(imgs, len(DATA_SELECTION), N_EVAL_SAMPLES, text_color=text_color)
+grid = image_grid(imgs, len(DATA_SELECTION) * 2, N_EVAL_SAMPLES // 2, text_color=text_color)
 grid.save(f'{patch_out_path}/samples_grid.png')
 
 
