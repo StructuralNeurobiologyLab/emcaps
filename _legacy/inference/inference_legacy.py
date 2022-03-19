@@ -61,47 +61,93 @@ multi_label_names = {
     5: 'cytoplasmic_region',
 }
 
-# Select validation images from all experimental conditions
-results_path = Path('/wholebrain/scratch/mdraw/tum/results_uni_model_v4').expanduser()
-data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
+# DATA_SOURCE = 'tumdata_v1'
+# DATA_SOURCE = 'droso_tem'
+# DATA_SOURCE = 'hek-only'
+DATA_SOURCE = 'uni'  # universal model for all conditions
 
 
-# TODO: Migrate from valid_split.yaml to xlsx parsing like in patchifyseg4
+if DATA_SOURCE == 'tumdata_v1':
+    # image_numbers = [22, 32, 42]  # validation images, held out from training data
+    image_numbers = range(16, 70 + 1)  # all images from 1xMmMT3 subset (also including training data!), exluding first 15 images
 
-valid_split_path = './valid_split.yaml'
-with open(valid_split_path) as f:
-    valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
+    img_paths = eul([
+        f'~/tumdata/{i}/{i}.tif' for i in image_numbers
+    ])
+    results_path = Path('~/tum/results_tumdata_v1').expanduser()
+elif DATA_SOURCE == 'hek-only':
+    image_numbers = [22]  # validation images, held out from training data
 
-DATA_SELECTION = [
-    'HEK_1xMT3-QtEnc-Flag',
-    'DRO_1xMT3-MxEnc-Flag-NLS',
-    'DRO_1xMT3-QtEnc-Flag-NLS',
-    'HEK_1xMT3-MxEnc-Flag',
-    'HEK-2xMT3-QtEnc-Flag',
-    'HEK-2xMT3-MxEnc-Flag',
-    'HEK-3xMT3-QtEnc-Flag',
-    'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
-]
+    img_paths = eul([
+        f'~/tumdata/{i}/{i}.tif' for i in image_numbers
+    ])
+    results_path = Path('~/tum/results_hek_only').expanduser()
+elif DATA_SOURCE == 'droso_tem':
+    img_paths = []
+    data_root = Path('~/tum/Drosophila-only-TEM-only_annotation/').expanduser()
+    for dir in data_root.iterdir():
+        if dir.is_dir():  # Exlude actual files
+            img_path = dir / f'{dir.name}.tif'
+            if not img_path.exists():
+                img_path = img_path.with_suffix('.TIF')
+            if not img_path.exists() and dir.name == '94':  # Handle strange name in sample 94
+                img_path = img_path = dir / 'EM2021_33a_R2Box26_02_05_51_88.tif'
 
-valid_image_numbers = []
-for condition in DATA_SELECTION:
-    valid_image_numbers.extend(valid_image_dict[condition])
+            img_path = str(img_path)  # Code below expects strings
+            img_paths.append(img_path)
+    # results_path = Path('~/tum/results_droso_tem_oldmodel').expanduser()
+    results_path = Path('~/tum/results_droso_tem_new_binary_model_gdl_ce_ga_63k').expanduser()
+elif DATA_SOURCE == 'uni':
+    # Select validation images from all experimental conditions
+    results_path = Path('/wholebrain/scratch/mdraw/tum/results_uni_model_v4_training').expanduser()
+    data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
 
-image_numbers = valid_image_numbers  # validation images, held out from training data
+    #v3
+    # valid_image_dict = {
+    #     'DRO_1xMT3-MxEnc-Flag-NLS': [40, 60, 114],
+    #     'DRO_1xMT3-QtEnc-Flag-NLS': [43, 106, 109],
+    #     'HEK_1xMT3-QtEnc-Flag':     [26],
+    #     'HEK_1xMT3-MxEnc-Flag':     [66],
+    #     'HEK-2xMT3-QtEnc-Flag':     [125],
+    #     'HEK-2xMT3-MxEnc-Flag':     [142],
+    #     'HEK-3xMT3-QtEnc-Flag':     [131],
+    #     'HEK-1xTmEnc-BC2-Tag':      [139],
+    # }
+    valid_split_path = './valid_split.yaml'
+    with open(valid_split_path) as f:
+        valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
+    DATA_SELECTION = [
+        # 'HEK_1xMT3-QtEnc-Flag',
+        # 'DRO_1xMT3-MxEnc-Flag-NLS',
+        # 'DRO_1xMT3-QtEnc-Flag-NLS',
+        # 'HEK_1xMT3-MxEnc-Flag',
+        # 'HEK-2xMT3-QtEnc-Flag',
+        # 'HEK-2xMT3-MxEnc-Flag',
+        # 'HEK-3xMT3-QtEnc-Flag',
+        'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
+    ]
 
-image_numbers = [147, 148, 149, 150, 151, 152]  # extra tmenc set
+    valid_image_numbers = []
+    for condition in DATA_SELECTION:
+        valid_image_numbers.extend(valid_image_dict[condition])
 
-## Training set:
-# image_numbers = set(list(range(16, 138 + 1)) + list(range(141, 152 + 1)))
-# image_numbers = image_numbers - set(valid_image_numbers)
-# print('Selected image numbers:', image_numbers)
+    image_numbers = valid_image_numbers  # validation images, held out from training data
 
-img_paths = [
-    str(data_root / f'{i}/{i}.tif') for i in image_numbers
-]
+    # image_numbers = [139, 147, 148, 149, 150, 151, 152]  # extra tmenc set
 
-# for p in [results_path / scond for scond in DATA_SELECTION]:
-#     os.makedirs(p, exist_ok=True)
+    # Training set
+    image_numbers = set(list(range(16, 138 + 1)) + list(range(141, 152 + 1)))
+    image_numbers = image_numbers - set(valid_image_numbers)
+    print('Selected image numbers:', image_numbers)
+
+    img_paths = [
+        str(data_root / f'{i}/{i}.tif') for i in image_numbers
+    ]
+
+    # for p in [results_path / scond for scond in DATA_SELECTION]:
+    #     os.makedirs(p, exist_ok=True)
+else:
+    raise ValueError(f'{DATA_SOURCE=}')
 
 DESIRED_OUTPUTS = [
     'raw',
@@ -121,15 +167,27 @@ for p in [results_path]:
 
 
 model_paths = eul([
-    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
+    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_30000.pt'  # TmEnc only
     # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA_nb5__UNet__22-02-23_02-32-41/model_step80000.pt'
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni/GDL_CE_B_GA___UNet__22-02-21_05-30-56/model_step70000.pt',
+    # f'~/tum/binary_mxqtsegtrain2_trainings/GDL_CE_B_GA___UNet__21-12-14_17-32-22/model_63k.pt',
+    # f'~/tum/binary_mxqtsegtrain2_trainings/B___UNet__21-12-10_03-08-01/model_{model_variant}',
+    # f'~/tumtrainings/15to54_encapsulins__UNet__21-09-16_03-10-26/model_{model_variant}',
+    # f'~/tumtrainings/D_15to54_encapsulins__UNet__21-09-16_04-02-24/model_{model_variant}',
+    # f'~/tumtrainings/M___UNet__21-09-13_04-32-52/model_{model_variant}',
 ])
 
 
 for model_path in model_paths:
     modelname = os.path.basename(os.path.dirname(model_path))
+    is_distmap = modelname.startswith('D_')  # Distance transform regression, no output activation
+    is_multi = modelname.startswith('M_')  # Multilabel model, trained with sigmoid output activation
 
-    apply_softmax = True
+    apply_softmax = not (is_distmap or is_multi)
+
+
     predictor = Predictor(
         model=model_path,
         device='cuda',
@@ -145,6 +203,8 @@ for model_path in model_paths:
     for img_path in img_paths:
         inp = np.array(imageio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         out = predictor.predict(inp)
+        if is_multi:
+            out.sigmoid_()
         out = out.numpy()
         basename = os.path.splitext(os.path.basename(img_path))[0]
 
@@ -172,10 +232,15 @@ for model_path in model_paths:
             if 'thresh' in DESIRED_OUTPUTS:
                 imageio.imwrite(out_path, cout)
 
-            if 'probmaps' in DESIRED_OUTPUTS:
-                probmap = (out[0, 1] * 255.).astype(np.uint8)
-                probmap_path = eu(f'{results_path}/{basename}_probmap.jpg')
-                imageio.imwrite(probmap_path, probmap)
+            if is_distmap:
+                dmap_path = eu(f'{results_path}/{basename}_{modelname}_distmap.png')
+                # dmap = ((out[0, 0] + 1.) * 128.).astype(np.uint8)
+                # imageio.imwrite(dmap_path, dmap)
+                dmap = out[0, 0]
+                plt.figure(figsize=(8, 8), tight_layout=True)
+                plt.imshow(dmap)
+                plt.colorbar()
+                plt.savefig(dmap_path)
 
             # Write raw and gt labels
             lab_path = f'{img_path[:-4]}_{label_name}.tif'
@@ -240,7 +305,57 @@ for model_path in model_paths:
 
             m_targets.append((lab_img > 0))#.reshape(-1))
             m_preds.append((cout > 0))#.reshape(-1))
-            m_probs.append(out[0, 1])#.reshape(-1))
+            if is_distmap:
+                m_probs.append(out[0, 0])#.reshape(-1))
+            else:
+                m_probs.append(out[0, 1])#.reshape(-1))
+
+        elif out.shape[1] > 2:  # Export each channel separately
+            raw_img = imageio.imread(img_path)
+            raw_img_01 = raw_img.astype(np.float64) / 255.
+            if 'raw' in DESIRED_OUTPUTS:
+                imageio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
+            export_channels = range(out.shape[1])
+            for c in export_channels:
+                # Probmaps
+                cout = out[0, c]
+                cout = (cout * 255.).astype(np.uint8)
+                out_path = eu(f'{results_path}/{basename}_c{c}_{modelname}.png')
+                if 'probmaps' in DESIRED_OUTPUTS:
+                    imageio.imwrite(out_path, cout)
+
+                # Probmaps thresholded
+                out_thresh_path = eu(f'{results_path}/{basename}_c{c}_thresh{multi_thresh}_{modelname}.png')
+                cout_thresh_bin = cout >= multi_thresh
+                cout_thresh = (cout_thresh_bin.astype(np.uint8) * 255)
+                if 'thresh' in DESIRED_OUTPUTS:
+                    imageio.imwrite(out_thresh_path, cout_thresh)
+
+                if 'overlays' in DESIRED_OUTPUTS:
+                    # Create overlay images
+                    # First get GT label image
+                    lab_path = f'{img_path[:-4]}_{multi_label_names[c]}.tif'
+                    if not Path(lab_path).exists():
+                        lab_path = f'{img_path[:-4]}_{multi_label_names[c]}.TIF'
+                    if os.path.exists(lab_path):  # Not all labels are always available
+                        lab_img = np.array(imageio.imread(lab_path))
+                        if invert_labels:
+                            lab_img = (lab_img == 0).astype(np.int64)
+                        if ENABLE_PARTIAL_INVERSION_HACK and int(basename) >= 60:
+                            lab_img = (lab_img == 0).astype(np.int64)
+                    else:
+                        lab_img = np.zeros_like(raw_img)
+                    lab_img = ((lab_img > 0) * 255).astype(np.uint8)
+                    lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+                    lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
+                    lab_overlay = (lab_overlay * 255.).astype(np.uint8)
+
+                    pred_overlay = label2rgb(cout_thresh_bin, raw_img, bg_label=0, alpha=0.5, colors=['green'])
+                    pred_overlay[cout_thresh_bin == 0, :] = raw_img_01[cout_thresh_bin == 0, None]
+                    pred_overlay = (pred_overlay * 255.).astype(np.uint8)
+
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_lab.jpg'), lab_overlay)
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_{multi_label_names[c]}_pred.jpg'), pred_overlay)
 
             if 'argmax' in DESIRED_OUTPUTS:
                 # Argmax of channel probs
@@ -250,7 +365,7 @@ for model_path in model_paths:
                 out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.jpg')
                 imageio.imwrite(out_path, plab)
 
-    if 'metrics' in DESIRED_OUTPUTS:
+    if 'metrics' in DESIRED_OUTPUTS and not is_multi:  # TODO: Make this work with multilabel
         # Calculate pixelwise precision and recall
         m_targets = np.concatenate(m_targets, axis=None)
         m_probs = np.concatenate(m_probs, axis=None)
@@ -278,25 +393,13 @@ for model_path in model_paths:
         # with open(eu(f'{results_path}/{modelname}_{kind}_pr.txt'), 'w') as f:
         with open(eu(f'{results_path}/info.txt'), 'w') as f:
             f.write(
-    f"""Output description:
-- X_raw.jpg: raw image (image number X from the shared dataset)
-- X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
-- X_thresh127.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
-- X_overlay_lab.jpg: given GT label annotations, overlayed on raw image
-- X_overlay_pred.jpg: prediction by the neural network, overlayed on raw image
-- X_fn_error.png: map of false negative predictions w.r.t. GT labels
-- X_fp_error.png: map of false positive predictions w.r.t. GT labels
-- X_fn_error_overlay.jpg: map of false negative predictions w.r.t. GT labels, overlayed on raw image
-- X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
+    f"""
+    model: {model_path}
+    thresh: {thresh if not is_distmap else dt_thresh}
 
-
-Model info:
-- model: {model_path}
-- thresh: {thresh}
-
-- precision: {precision}
-- recall: {recall}
-"""
-)
+    precision: {precision}
+    recall: {recall}
+    """
+            )
 
 import IPython; IPython.embed(); exit()

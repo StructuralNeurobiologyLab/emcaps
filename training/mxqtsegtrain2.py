@@ -156,7 +156,7 @@ DATA_SELECTION = [
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
-ENABLE_TERRIBLE_INVERSION_HACK = True
+ENABLE_PARTIAL_INVERSION_HACK = True
 
 
 VEC_DT = False
@@ -286,58 +286,6 @@ if DT:
 train_transform = transforms.Compose(train_transform)
 valid_transform = transforms.Compose(valid_transform)
 
-# Specify data set
-
-
-# valid_image_numbers = [
-#     40, 60, 114,  # MxEnc
-#     43, 106, 109,  # QtEnc
-# ]
-
-# valid_image_numbers = [
-#     66, 83,  # MxEnc: 1x, 2x
-#     22, 70,  # QtEnc: 1x, 2x
-# ]
-
-# valid_image_numbers_1x = [
-#     66,  # MxEnc
-#     22,  # QtEnc
-# ]
-
-# valid_image_numbers_2x = [
-#     83,  # MxEnc
-#     70,  # QtEnc
-# ]
-
-# if HOST_ORG == 'Drosophila':
-#     valid_image_numbers_1x = [
-#         40, 60, 114,  # MxEnc
-#         43, 106, 109,  # QtEnc
-#     ]
-#     valid_image_numbers_2x = [
-#           # MxEnc
-#           # QtEnc
-#     ]
-
-# if DATA_SELECTION == 'all':
-#     valid_image_numbers = valid_image_numbers_1x + valid_image_numbers_2x
-# elif DATA_SELECTION == '1x':
-#     valid_image_numbers = valid_image_numbers_1x
-# elif DATA_SELECTION == '2x':
-#     valid_image_numbers = valid_image_numbers_2x
-
-
-#v3
-# valid_image_dict = {
-#     'DRO_1xMT3-MxEnc-Flag-NLS': [40, 60, 114],
-#     'DRO_1xMT3-QtEnc-Flag-NLS': [43, 106, 109],
-#     'HEK_1xMT3-QtEnc-Flag':     [26],
-#     'HEK_1xMT3-MxEnc-Flag':     [66],
-#     'HEK-2xMT3-QtEnc-Flag':     [125],
-#     'HEK-2xMT3-MxEnc-Flag':     [142],
-#     'HEK-3xMT3-QtEnc-Flag':     [131],
-#     'HEK-1xTmEnc-BC2-Tag':      [139],
-# }
 
 valid_split_path = './valid_split.yaml'
 with open(valid_split_path) as f:
@@ -363,24 +311,7 @@ for condition in DATA_SELECTION:
 #     # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
 #     meta = meta.loc[meta['Host organism'] == HOST_ORG]
 #     meta = meta.loc[meta['Modality'] == 'TEM']
-
 #     meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
-
-
-#     return meta
-
-
-# Use all classes
-# def meta_filter(meta):
-#     meta_orig = meta
-#     meta = meta.copy()
-#     meta = meta.loc[meta['num'] >= 16]
-#     # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
-#     # meta = meta.loc[meta['Host organism'] == HOST_ORG]
-#     # meta = meta.loc[meta['Modality'] == 'TEM']
-
-#     # meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
-
 #     return meta
 
 
@@ -401,7 +332,7 @@ train_dataset = UTifDirData2d(
     invert_labels=INVERT_LABELS,
     enable_inputmask=INPUTMASK,
     enable_binary_seg=BINARY_SEG,
-    enable_partial_inversion_hack=ENABLE_TERRIBLE_INVERSION_HACK,
+    enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     epoch_multiplier=30,
 )
 
@@ -416,7 +347,7 @@ valid_dataset = UTifDirData2d(
     invert_labels=INVERT_LABELS,
     enable_inputmask=INPUTMASK,
     enable_binary_seg=BINARY_SEG,
-    enable_partial_inversion_hack=ENABLE_TERRIBLE_INVERSION_HACK,
+    enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     epoch_multiplier=20,
 )
 
