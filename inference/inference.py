@@ -37,7 +37,7 @@ dataset_mean = (128.0,)
 dataset_std = (128.0,)
 
 
-# TODO: Rewrite as invert_labels = False and flip meaning of ENABLE_PARTIAL_INVERSION_HACK so it triggers on num < 60 (see YTifDirData2d implementation)
+# TODO: Rewrite as invert_labels = False and flip meaning of ENABLE_PARTIAL_INVERSION_HACK so it triggers on num < 55 (see YTifDirData2d implementation)
 
 invert_labels = True  # Workaround: Fixes inverted TIF loading
 

@@ -16,8 +16,15 @@ import imageio
 import yaml
 import napari
 
+from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
+
+
+# WARNING: This can quickly lead to OOM on systems with < 16 GB RAM
+
 import torch
 
+
+INTERACTIVE = True
 
 
 def cc_label(lab):
@@ -117,18 +124,11 @@ def segment(img):
     return pred
 
 
-print('Segmenting...')
-if USE_GT:
-    sem_label_image = imageio.imread(data_root / '129/129_encapsulins.tif')
-else:
-    sem_label_image = segment(image_normalized)
-
-label_image = cc_label(sem_label_image)
-
-# image_normalized = (torch.from_numpy(image_raw) - 128.) / 128.
-# image_normalized = image_normalized.to(torch.float32)
-
-
+def action_segment():
+    img_raw = viewer.layers[0].data
+    img_normalized = (img_raw.astype(np.float32) - 128.) / 128.
+    pred = segment(img_normalized)
+    viewer.add_labels(pred)
 
 
 # For regionprops extra_properties
@@ -146,45 +146,68 @@ def assign_class_names(pred_ids):
     pred_class_names = [class_names[pred] for pred in pred_ids]
     return pred_class_names
 
+if not INTERACTIVE:
+    print('Segmenting...')
+    if USE_GT:
+        sem_label_image = imageio.imread(data_root / '129/129_encapsulins.tif')
+    else:
+        sem_label_image = segment(image_normalized)
+
+    label_image = cc_label(sem_label_image)
+
+    print('Calculating rprops and classification...')
+    # create the properties dictionary
+    properties = regionprops_table(
+        label_image=label_image,
+        intensity_image=image_normalized,
+        properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
+        extra_properties=[rp_classify]
+    )
+    properties['pred_classname'] = assign_class_names(properties['rp_classify'])
+    properties['circularity'] = circularity(
+        properties['perimeter'], properties['area']
+    )
 
 
-print('Calculating rprops and classification...')
-# create the properties dictionary
-properties = regionprops_table(
-    label_image=label_image,
-    intensity_image=image_normalized,
-    properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
-    extra_properties=[rp_classify]
-)
-properties['pred_classname'] = assign_class_names(properties['rp_classify'])
-properties['circularity'] = circularity(
-    properties['perimeter'], properties['area']
-)
+    # create the bounding box rectangles
+    bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
+
+    # specify the display parameters for the text
+    text_parameters = {
+        'text': 'id: {label:03d}, circularity: {circularity:.2f}, solidity: {solidity:.2f}\nclass: {pred_classname}',
+        'size': 14,
+        'color': 'black',
+        'anchor': 'upper_left',
+        'translation': [-3, 0],
+    }
+
+    # add the labels
+    label_layer = viewer.add_labels(label_image, name='segmentation')
+
+    shapes_layer = viewer.add_shapes(
+        bbox_rects,
+        face_color='transparent',
+        edge_color='green',
+        properties=properties,
+        text=text_parameters,
+        name='bounding box',
+    )
 
 
-# create the bounding box rectangles
-bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
+viewer = napari.view_image(image_raw, name='image', rgb=False)
 
-# specify the display parameters for the text
-text_parameters = {
-    'text': 'id: {label:03d}, circularity: {circularity:.2f}, solidity: {solidity:.2f}\nclass: {pred_classname}',
-    'size': 14,
-    'color': 'black',
-    'anchor': 'upper_left',
-    'translation': [-3, 0],
-}
 
-viewer = napari.view_image(image_raw, name='coins', rgb=False)
+if INTERACTIVE:
+    button_layout = QVBoxLayout()
+    process_btn = QPushButton("Full Process")
+    process_btn.clicked.connect(action_segment)
+    button_layout.addWidget(process_btn)
 
-# add the labels
-label_layer = viewer.add_labels(label_image, name='segmentation')
+    action_widget = QWidget()
+    action_widget.setLayout(button_layout)
+    action_widget.setObjectName("Segmentation")
+    viewer.window.add_dock_widget(action_widget)
 
-shapes_layer = viewer.add_shapes(
-    bbox_rects,
-    face_color='transparent',
-    edge_color='green',
-    properties=properties,
-    text=text_parameters,
-    name='bounding box',
-)
+    viewer.window._status_bar._toggle_activity_dock(True)
+
 napari.run()

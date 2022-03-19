@@ -14,6 +14,7 @@ from functools import lru_cache
 import pandas as pd
 import imageio
 import numpy as np
+from skimage import morphology as sm
 import torch
 from torch.utils import data
 import yaml
@@ -273,6 +274,7 @@ class UTifDirData2d(data.Dataset):
             invert_labels=False,  # Fixes inverted TIF loading
             enable_inputmask: bool = False,
             enable_binary_seg: bool = False,
+            ignore_far_background_distance: int = 0,
             enable_partial_inversion_hack: bool = False,
             epoch_multiplier=1,  # Pretend to have more data in one epoch
     ):
@@ -287,10 +289,14 @@ class UTifDirData2d(data.Dataset):
         self.target_dtype = target_dtype
         self.invert_labels = invert_labels
         self.enable_inputmask = enable_inputmask
+        self.ignore_far_background_distance = ignore_far_background_distance
         self.epoch_multiplier = epoch_multiplier
         self.valid_nums = valid_nums
         self.enable_binary_seg = enable_binary_seg
         self.enable_partial_inversion_hack = enable_partial_inversion_hack
+
+        if self.ignore_far_background_distance:
+            self.ifbd_disk = sm.disk(self.ignore_far_background_distance)
 
         sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
         self.sheet = sheet
@@ -375,6 +381,12 @@ class UTifDirData2d(data.Dataset):
 
         if target.mean().item() > 0.2:
             print('Unusually high target mean in image number', img_num)
+
+        # Mark regions to be ignored
+        if self.ignore_far_background_distance > 0:
+            dilated_foreground = sm.binary_dilation(target, selem=self.ifbd_disk)
+            far_background = ~dilated_foreground
+            target[far_background] = -1
 
         while True:  # Only makes sense if RandomCrop is used
             try:

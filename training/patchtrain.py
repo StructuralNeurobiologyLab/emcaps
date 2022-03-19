@@ -116,15 +116,12 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
 # if NEGATIVE_SAMPLING:
-#     descr_sheet = (os.path.expanduser('~/tum/patches_v2neg/patchmeta_traintest.xlsx'), 'Sheet1')
+#     descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2neg/patchmeta_traintest.xlsx'), 'Sheet1')
 # else:
-#     # descr_sheet = (os.path.expanduser('~/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
-#     descr_sheet = (os.path.expanduser('~/tum/patches_v2_hek/patchmeta_traintest.xlsx'), 'Sheet1')
+    # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-# descr_sheet = (os.path.expanduser('~/tum/patches_v2_hek/patchmeta_traintest.xlsx'), 'Sheet1')
-
-descr_sheet = (os.path.expanduser('~/tum/patches_v4_uni__from_gt/patchmeta_traintest.xlsx'), 'Sheet1')
+descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4a_uni/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
 out_channels = 8
@@ -143,9 +140,9 @@ model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 
 
 # USER PATHS
-# save_root = os.path.expanduser('~/tum/trainings3')
-# save_root = os.path.expanduser('~/tum/trainings3_hek')
-save_root = os.path.expanduser('~/tum/patch_trainings4_uni')
+# save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/trainings3')
+# save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/trainings3_hek')
+save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patch_trainings_v4a_uni')
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -190,7 +187,7 @@ train_dataset = UPatches(
     descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
-    epoch_multiplier=5 if NEGATIVE_SAMPLING else 2,
+    epoch_multiplier=5 if NEGATIVE_SAMPLING else 10,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
@@ -199,7 +196,7 @@ valid_dataset = UPatches(
     descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,
-    epoch_multiplier=4 if NEGATIVE_SAMPLING else 2,
+    epoch_multiplier=4 if NEGATIVE_SAMPLING else 10,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )

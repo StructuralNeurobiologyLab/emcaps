@@ -135,24 +135,27 @@ print(f'Running on device: {device}')
 # SHEET_NAME = 'Copy of Image_origin_information_GGW'
 SHEET_NAME = 'all_metadata'
 
-# DATA_SELECTION = 'all'
-# DATA_SELECTION = '1x'
-# DATA_SELECTION = '2x'
-# DATA_SELECTION = conf.dsel
 
 DATA_SELECTION = [
-    # 'HEK_1xMT3-QtEnc-Flag',
-    # 'DRO_1xMT3-MxEnc-Flag-NLS',
-    # 'DRO_1xMT3-QtEnc-Flag-NLS',
-    # 'HEK_1xMT3-MxEnc-Flag',
-    # 'HEK-2xMT3-QtEnc-Flag',
-    # 'HEK-2xMT3-MxEnc-Flag',
-    # 'HEK-3xMT3-QtEnc-Flag',
+    'HEK_1xMT3-QtEnc-Flag',
+    'DRO_1xMT3-MxEnc-Flag-NLS',
+    'DRO_1xMT3-QtEnc-Flag-NLS',
+    'HEK_1xMT3-MxEnc-Flag',
+    'HEK-2xMT3-QtEnc-Flag',
+    'HEK-2xMT3-MxEnc-Flag',
+    'HEK-3xMT3-QtEnc-Flag',
     'HEK-1xTmEnc-BC2-Tag',
 ]
 
 # HOST_ORG = 'Drosophila'
 # HOST_ORG = 'all'
+
+
+IGNORE_INDEX = -1
+IGNORE_FAR_BACKGROUND_DISTANCE = 8
+
+# BG_WEIGHT = 0.2
+BG_WEIGHT = 0.3
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
@@ -175,8 +178,8 @@ BINARY_SEG = True
 USE_MTCE = False
 # USE_MTCE = True
 
-# USE_GDL_CE = False
-USE_GDL_CE = True
+USE_GDL_CE = False
+# USE_GDL_CE = True
 
 # USE_GRAY_AUG = False
 USE_GRAY_AUG = True
@@ -234,7 +237,7 @@ model = UNet(
 # save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
 # save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
 # save_root = Path(conf.save_root).expanduser()
-save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4').expanduser()
+save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4_ifbg').expanduser()
 
 
 max_steps = conf.max_steps
@@ -333,6 +336,7 @@ train_dataset = UTifDirData2d(
     enable_inputmask=INPUTMASK,
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
+    ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     epoch_multiplier=30,
 )
 
@@ -348,6 +352,7 @@ valid_dataset = UTifDirData2d(
     enable_inputmask=INPUTMASK,
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
+    ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     epoch_multiplier=20,
 )
 
@@ -388,9 +393,9 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 valid_metrics = {}
 if not DT and not MULTILABEL:
     for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall, metrics.DSC, metrics.IoU]:
-        valid_metrics[f'val_{evaluator.name}_mean'] = evaluator()  # Mean metrics
+        valid_metrics[f'val_{evaluator.name}_mean'] = evaluator(ignore=IGNORE_INDEX)  # Mean metrics
         for c in range(out_channels):
-            valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
+            valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c, ignore=IGNORE_INDEX)
 
 
 class MTCELoss(nn.Module):
@@ -437,24 +442,24 @@ if DT:
 else:
     if MULTILABEL:
         _cw = [1.0 for _ in label_names]
-        _cw[0] = 0.2  # reduced loss weight for background labels
+        _cw[0] = BG_WEIGHT  # reduced loss weight for background labels
         class_weights = torch.tensor(_cw).to(device)
         criterion = nn.BCEWithLogitsLoss()#(pos_weight=class_weights)
     else:
         if BINARY_SEG:
-            class_weights = torch.tensor([0.2, 1.0]).to(device)
+            class_weights = torch.tensor([BG_WEIGHT, 1.0]).to(device)
         else:
-            class_weights = torch.tensor([0.2, 1.0, 1.0]).to(device)
-        criterion = nn.CrossEntropyLoss(weight=class_weights).to(device)
+            class_weights = torch.tensor([BG_WEIGHT, 1.0, 1.0]).to(device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_INDEX).to(device)
 
 
 if USE_MTCE:
-    criterion = MTCELoss(weight=torch.tensor([0.2, 1.0]).to(device))
+    criterion = MTCELoss(weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))
 
 if USE_GDL_CE:
-    ce = CrossEntropyLoss(weight=torch.tensor([0.2, 1.0])).to(device)
+    ce = CrossEntropyLoss(weight=torch.tensor([BG_WEIGHT, 1.0]), ignore_index=IGNORE_INDEX).to(device)
     # gdl = GeneralizedDiceLoss(softmax=True, to_onehot_y=True, w_type='simple').to(device)
-    gdl = DiceLoss(apply_softmax=True, weight=torch.tensor([0.2, 1.0]).to(device))
+    gdl = DiceLoss(apply_softmax=True, weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))  # TODO: Support ignore_index
     criterion = CombinedLoss([ce, gdl], device=device)
 
 if USE_MTCE:
@@ -505,7 +510,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=0,  # TODO
+    num_workers=2,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
