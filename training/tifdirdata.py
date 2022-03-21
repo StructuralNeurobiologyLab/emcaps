@@ -74,7 +74,7 @@ def create_circular_mask(h, w, center=None, radius=None):
     return mask
 
 
-
+# TODO: Add support for automatic mask-dilation (-> patchifyseg4)
 class UPatches(data.Dataset):
     """Image-level classification dataset loader for small patches, similar to MNIST"""
     def __init__(
@@ -85,9 +85,10 @@ class UPatches(data.Dataset):
             transform=transforms.Identity(),
             inp_dtype=np.float32,
             target_dtype=np.int64,
+            dilate_masks_by: int = 0,
             erase_mask_bg: bool = False,
             erase_disk_mask_radius: int = 0,
-            epoch_multiplier=1,  # Pretend to have more data in one epoch
+            epoch_multiplier: int = 1,  # Pretend to have more data in one epoch
     ):
         super().__init__()
         # self.data_root = data_root
@@ -95,6 +96,7 @@ class UPatches(data.Dataset):
         self.transform = transform
         self.inp_dtype = inp_dtype
         self.target_dtype = target_dtype
+        self.dilate_masks_by = dilate_masks_by
         self.erase_mask_bg = erase_mask_bg
         self.erase_disk_mask_radius = erase_disk_mask_radius
         self.epoch_multiplier = epoch_multiplier
@@ -123,6 +125,10 @@ class UPatches(data.Dataset):
             if self.erase_mask_bg:
                 # Erase mask background from inputs
                 mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+                if self.dilate_masks_by > 0:
+                    disk = sm.disk(self.dilate_masks_by)
+                    # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
+                    mask = sm.binary_dilation(mask, selem=disk)
                 inp[mask == 0] = 0
             if self.erase_disk_mask_radius > 0:
                 mask = create_circular_mask(*inp.shape, radius=self.erase_disk_mask_radius)

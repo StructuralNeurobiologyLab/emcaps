@@ -16,6 +16,8 @@ import random
 from typing import Literal
 from elektronn3.data.transforms.transforms import RandomCrop
 
+import matplotlib.pyplot as plt
+import yaml
 import torch
 from torch import nn
 from torch import optim
@@ -37,13 +39,13 @@ from elektronn3.inference import Predictor
 from training.tifdirdata import UPatches
 
 from models.effnetv2 import effnetv2_s, effnetv2_m
-from models import effnetv2
+
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument(
     '-m', '--model-path', metavar='PATH',
     help='Path to pretrained model which to use.',
-    default='/wholebrain/scratch/mdraw/tum/patch_trainings4_uni/erasemaskbg___EffNetV2__22-03-07_17-22-09/model.pt',
+    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v4a_uni/erasemaskbg___EffNetV2__22-03-19_02-42-10/model_final.pt',
 )
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 args = parser.parse_args()
@@ -65,10 +67,20 @@ print(f'Running on device: {device}')
 
 out_channels = 8
 
+DILATE_MASKS_BY = 5
+
+valid_split_path = './class_info.yaml'
+with open(valid_split_path) as f:
+    CLASS_INFO = yaml.load(f, Loader=yaml.FullLoader)
+
+CLASS_IDS = CLASS_INFO['class_ids']
+CLASS_NAMES = list(CLASS_IDS.keys())
+
+SHORT_CLASS_NAMES = [name[4:15] for name in CLASS_NAMES]
 
 # USER PATHS
 
-patches_v4_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni/')
+patches_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4a_uni/')
 
 dataset_mean = (128.0,)
 dataset_std = (128.0,)
@@ -76,35 +88,34 @@ dataset_std = (128.0,)
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
-    # transforms.RandomFlip(ndim_spatial=2),
 ]
 valid_transform = common_transforms + []
 valid_transform = transforms.Compose(valid_transform)
 
 
 valid_dataset = UPatches(
-    descr_sheet=(f'{patches_v4_root}/patchmeta_traintest.xlsx', 'Sheet1'),
+    descr_sheet=(f'{patches_root}/patchmeta_traintest.xlsx', 'Sheet1'),
     train=False,
     # transform=valid_transform,  # Don't transform twice (already transformed by predictor below)
-    epoch_multiplier=1,
-    # erase_mask_bg=True
+    dilate_masks_by=DILATE_MASKS_BY,
+    erase_mask_bg=True,
 )
 
 
 predictor = Predictor(
-        model=os.path.expanduser(args.model_path),
-        device=device,
-        # float16=True,
-        transform=valid_transform,  
-        apply_softmax=True,  # Not necessary because of subsequent argmax
-        # apply_argmax=True,
+    model=os.path.expanduser(args.model_path),
+    device=device,
+    # float16=True,
+    transform=valid_transform,  
+    apply_softmax=True,
+    # apply_argmax=True,
 )
 
 n_correct = 0
 n_total = 0
 
 # Load gt sheet for restoring original patch_id indexing
-gt_sheet = pd.read_excel(f'{patches_v4_root}/samples_gt.xlsx')
+gt_sheet = pd.read_excel(f'{patches_root}/samples_gt.xlsx')
 
 
 pred_labels = []
@@ -120,11 +131,13 @@ for i in range(len(valid_dataset)):
     # patch_fname (which hasn't changed).
     patch_fname = valid_dataset.meta.patch_fname.iloc[i]
 
-    gt_match = gts_id = gt_sheet[gt_sheet.patch_fname == patch_fname]
-    if gt_match.empty:
-        import IPython ; IPython.embed(); raise SystemExit
-        continue  # Not found in gt_sheet, so skip this patch
-    gts_id = gt_match.patch_id.item()
+    # TODO: FIX
+    ####
+    # gt_match = gts_id = gt_sheet[gt_sheet.patch_fname == patch_fname]
+    # if gt_match.empty:
+    #     import IPython ; IPython.embed(); raise SystemExit
+    #     continue  # Not found in gt_sheet, so skip this patch
+    # gts_id = gt_match.patch_id.item()
 
     sample = valid_dataset[i]
     inp = sample['inp'][None]
@@ -134,8 +147,9 @@ for i in range(len(valid_dataset)):
     confidence = out[0].numpy().ptp()  # peak-to-peak as confidence proxy
 
     target = sample['target'].item()
-    pred_label = EFULLNAMES[pred]
-    target_label = EFULLNAMES[target]
+
+    pred_label = SHORT_CLASS_NAMES[pred]
+    target_label = SHORT_CLASS_NAMES[target]
 
     pred_labels.append(pred_label)
     target_labels.append(target_label)
@@ -145,19 +159,23 @@ for i in range(len(valid_dataset)):
         n_correct += 1
 
 
-
-    predictions[gts_id] = (pred_label, confidence)
+    # TODO: Fix ##
+    ###
+    # predictions[gts_id] = (pred_label, confidence)
 
 print(f'{n_correct} correct out of {n_total}')
 print(f' -> accuracy: {100 * n_correct / n_total:.2f}%')
 
-cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=['MxEnc', 'QtEnc'], normalize='pred')
-cma.figure_.savefig(f'{patches_v4_root}/patch_confusion_matrix.pdf')
+fig, ax = plt.subplots(tight_layout=True, figsize=(10, 10))
 
-predictions = pd.DataFrame.from_dict(predictions, orient='index', columns=['enctype', 'confidence'])
+
+cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=SHORT_CLASS_NAMES[2:], normalize='pred', xticks_rotation='vertical', ax=ax)
+cma.figure_.savefig(f'{patches_root}/patch_confusion_matrix.pdf')
+
+predictions = pd.DataFrame.from_dict(predictions, orient='index', columns=['class', 'confidence'])
 
 predictions = predictions.sort_index().convert_dtypes()
-predictions.to_excel(f'{patches_v4_root}/samples_nnpredictions.xlsx', index_label='patch_id', float_format='%.2f')
+predictions.to_excel(f'{patches_root}/samples_nnpredictions.xlsx', index_label='patch_id', float_format='%.2f')
 
 # TODO: Save predictions
 

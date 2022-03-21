@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# TODO: Only use ignoring on TmEnc
+
 
 """
 Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles
@@ -152,7 +154,7 @@ DATA_SELECTION = [
 
 
 IGNORE_INDEX = -1
-IGNORE_FAR_BACKGROUND_DISTANCE = 8
+IGNORE_FAR_BACKGROUND_DISTANCE = 32
 
 # BG_WEIGHT = 0.2
 BG_WEIGHT = 0.3
