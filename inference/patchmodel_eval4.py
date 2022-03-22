@@ -10,10 +10,12 @@ Evaluates a patch classifier model trained by training/patchtrain.py
 
 import argparse
 import datetime
+from locale import normalize
 from math import inf
 import os
 import random
 from typing import Literal
+from unicodedata import category
 from elektronn3.data.transforms.transforms import RandomCrop
 
 import matplotlib.pyplot as plt
@@ -39,7 +41,7 @@ from elektronn3.inference import Predictor
 from training.tifdirdata import UPatches
 
 from models.effnetv2 import effnetv2_s, effnetv2_m
-
+from analysis.cf_matrix import plot_confusion_matrix
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument(
@@ -117,7 +119,8 @@ n_total = 0
 # Load gt sheet for restoring original patch_id indexing
 gt_sheet = pd.read_excel(f'{patches_root}/samples_gt.xlsx')
 
-
+preds = []
+targets = []
 pred_labels = []
 target_labels = []
 
@@ -151,6 +154,8 @@ for i in range(len(valid_dataset)):
     pred_label = SHORT_CLASS_NAMES[pred]
     target_label = SHORT_CLASS_NAMES[target]
 
+    preds.append(pred)
+    targets.append(target)
     pred_labels.append(pred_label)
     target_labels.append(target_label)
 
@@ -166,11 +171,64 @@ for i in range(len(valid_dataset)):
 print(f'{n_correct} correct out of {n_total}')
 print(f' -> accuracy: {100 * n_correct / n_total:.2f}%')
 
-fig, ax = plt.subplots(tight_layout=True, figsize=(10, 10))
+
+preds = np.array(preds)
+targets = np.array(targets)
+
+if False:  # Sanity check: Calculate confusion matrix entries myself
+    for a in range(2, 8):
+        for b in range(2, 8):
+            v = np.sum((targets == a) & (preds == b))
+            print(f'T: {SHORT_CLASS_NAMES[a]}, P: {SHORT_CLASS_NAMES[b]} -> {v}')
+
+    # T: 1xMT3-MxEnc, P: 1xMT3-MxEnc -> 3
+    # T: 1xMT3-MxEnc, P: 1xMT3-QtEnc -> 0
+    # T: 1xMT3-MxEnc, P: 2xMT3-MxEnc -> 23
+    # T: 1xMT3-MxEnc, P: 2xMT3-QtEnc -> 0
+    # T: 1xMT3-MxEnc, P: 3xMT3-QtEnc -> 0
+    # T: 1xMT3-MxEnc, P: 1xTmEnc-BC2 -> 4
+    # T: 1xMT3-QtEnc, P: 1xMT3-MxEnc -> 0
+    # T: 1xMT3-QtEnc, P: 1xMT3-QtEnc -> 27
+    # T: 1xMT3-QtEnc, P: 2xMT3-MxEnc -> 0
+    # T: 1xMT3-QtEnc, P: 2xMT3-QtEnc -> 2
+    # T: 1xMT3-QtEnc, P: 3xMT3-QtEnc -> 1
+    # T: 1xMT3-QtEnc, P: 1xTmEnc-BC2 -> 0
+    # T: 2xMT3-MxEnc, P: 1xMT3-MxEnc -> 0
+    # T: 2xMT3-MxEnc, P: 1xMT3-QtEnc -> 0
+    # T: 2xMT3-MxEnc, P: 2xMT3-MxEnc -> 26
+    # T: 2xMT3-MxEnc, P: 2xMT3-QtEnc -> 0
+    # T: 2xMT3-MxEnc, P: 3xMT3-QtEnc -> 4
+    # T: 2xMT3-MxEnc, P: 1xTmEnc-BC2 -> 0
+    # T: 2xMT3-QtEnc, P: 1xMT3-MxEnc -> 2
+    # T: 2xMT3-QtEnc, P: 1xMT3-QtEnc -> 0
+    # T: 2xMT3-QtEnc, P: 2xMT3-MxEnc -> 17
+    # T: 2xMT3-QtEnc, P: 2xMT3-QtEnc -> 6
+    # T: 2xMT3-QtEnc, P: 3xMT3-QtEnc -> 5
+    # T: 2xMT3-QtEnc, P: 1xTmEnc-BC2 -> 0
+    # T: 3xMT3-QtEnc, P: 1xMT3-MxEnc -> 0
+    # T: 3xMT3-QtEnc, P: 1xMT3-QtEnc -> 0
+    # T: 3xMT3-QtEnc, P: 2xMT3-MxEnc -> 9
+    # T: 3xMT3-QtEnc, P: 2xMT3-QtEnc -> 0
+    # T: 3xMT3-QtEnc, P: 3xMT3-QtEnc -> 21
+    # T: 3xMT3-QtEnc, P: 1xTmEnc-BC2 -> 0
+    # T: 1xTmEnc-BC2, P: 1xMT3-MxEnc -> 0
+    # T: 1xTmEnc-BC2, P: 1xMT3-QtEnc -> 1
+    # T: 1xTmEnc-BC2, P: 2xMT3-MxEnc -> 16
+    # T: 1xTmEnc-BC2, P: 2xMT3-QtEnc -> 0
+    # T: 1xTmEnc-BC2, P: 3xMT3-QtEnc -> 2
+    # T: 1xTmEnc-BC2, P: 1xTmEnc-BC2 -> 11
 
 
-cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=SHORT_CLASS_NAMES[2:], normalize='pred', xticks_rotation='vertical', ax=ax)
-cma.figure_.savefig(f'{patches_root}/patch_confusion_matrix.pdf')
+cm = confusion_matrix(targets, preds)
+
+fig, ax = plt.subplots(tight_layout=True, figsize=(7, 5.5))
+
+cma = plot_confusion_matrix(cm, categories=SHORT_CLASS_NAMES[2:], normalize='pred', cmap='viridis', sum_stats=False, ax=ax)
+ax.set_title('Patch classification confusion matrix v4a (top: count, bottom: percentages normalized over true labels)\n')
+plt.savefig(f'{patches_root}/patch_confusion_matrix.pdf')
+
+# cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=SHORT_CLASS_NAMES[2:], normalize='pred', xticks_rotation='vertical', ax=ax)
+# cma.figure_.savefig(f'{patches_root}/patch_confusion_matrix.pdf')
 
 predictions = pd.DataFrame.from_dict(predictions, orient='index', columns=['class', 'confidence'])
 
@@ -181,3 +239,11 @@ predictions.to_excel(f'{patches_root}/samples_nnpredictions.xlsx', index_label='
 
 import IPython ; IPython.embed(); raise SystemExit
 
+# label_names = [
+#     '1xMT3-MxEnc',
+#     '1xMT3-QtEnc',
+#     '2xMT3-MxEnc',
+#     '2xMT3-QtEnc',
+#     '3xMT3-QtEnc',
+#     '1xTmEnc-BC2',
+# ]
