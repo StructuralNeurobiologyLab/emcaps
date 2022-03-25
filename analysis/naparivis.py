@@ -24,7 +24,7 @@ from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
 import torch
 
 
-INTERACTIVE = True
+INTERACTIVE = False
 
 
 def cc_label(lab):
@@ -101,7 +101,7 @@ USE_GT = True
 
 data_root = Path('~/tum/Single-table_database/').expanduser()
 segmenter_path = Path('~/tum/ptsmodels/unet_gdl_uni4_15k.pts').expanduser()
-classifier_path = Path('~/tum/ptsmodels/effnet_s_30k_uni4.pts').expanduser()
+classifier_path = Path('~/tum/ptsmodels/effnet_s_40k_uni4a.pts').expanduser()
 
 def load_torchscript_model(path):
     model = torch.jit.load(path, map_location='cpu').eval()
@@ -146,7 +146,12 @@ def assign_class_names(pred_ids):
     pred_class_names = [class_names[pred] for pred in pred_ids]
     return pred_class_names
 
+
+
+
+
 if not INTERACTIVE:
+    viewer = napari.view_image(image_raw, name='image', rgb=False)
     print('Segmenting...')
     if USE_GT:
         sem_label_image = imageio.imread(data_root / '129/129_encapsulins.tif')
@@ -182,6 +187,7 @@ if not INTERACTIVE:
     }
 
     # add the labels
+    # TODO: One label layer per patchclassify class, each with different color?
     label_layer = viewer.add_labels(label_image, name='segmentation')
 
     shapes_layer = viewer.add_shapes(
@@ -194,10 +200,9 @@ if not INTERACTIVE:
     )
 
 
-viewer = napari.view_image(image_raw, name='image', rgb=False)
-
-
 if INTERACTIVE:
+    viewer = napari.view_image(image_raw, name='image', rgb=False)  # TODO: Don't hardcode initial image
+
     button_layout = QVBoxLayout()
     process_btn = QPushButton("Full Process")
     process_btn.clicked.connect(action_segment)

@@ -124,6 +124,8 @@ targets = []
 pred_labels = []
 target_labels = []
 
+img_preds = {}
+
 predictions = {}
 meta = valid_dataset.meta
 for i in range(len(valid_dataset)):
@@ -163,6 +165,10 @@ for i in range(len(valid_dataset)):
     if pred == target:
         n_correct += 1
 
+    img_num = int(valid_dataset.meta.img_num.iloc[i])
+    if img_num not in img_preds:
+        img_preds[img_num] = []
+    img_preds[img_num].append(pred)
 
     # TODO: Fix ##
     ###
@@ -174,6 +180,16 @@ print(f' -> accuracy: {100 * n_correct / n_total:.2f}%')
 
 preds = np.array(preds)
 targets = np.array(targets)
+
+
+# TODO
+majority_preds = {}
+majority_pred_names = {}
+for k, v in img_preds.items():
+    majority_preds[k] = np.argmax(np.bincount(v))
+    majority_pred_names[k] = SHORT_CLASS_NAMES[majority_preds[k]]
+
+
 
 if False:  # Sanity check: Calculate confusion matrix entries myself
     for a in range(2, 8):
