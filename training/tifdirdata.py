@@ -74,7 +74,6 @@ def create_circular_mask(h, w, center=None, radius=None):
     return mask
 
 
-# TODO: Add support for automatic mask-dilation (-> patchifyseg4)
 class UPatches(data.Dataset):
     """Image-level classification dataset loader for small patches, similar to MNIST"""
     def __init__(
@@ -389,7 +388,7 @@ class UTifDirData2d(data.Dataset):
             print('Unusually high target mean in image number', img_num)
 
         # Mark regions to be ignored
-        if self.ignore_far_background_distance > 0:
+        if self.ignore_far_background_distance > 0 and mrow['scond'] == 'HEK-1xTmEnc-BC2-Tag':
             dilated_foreground = sm.binary_dilation(target, selem=self.ifbd_disk)
             far_background = ~dilated_foreground
             target[far_background] = -1
