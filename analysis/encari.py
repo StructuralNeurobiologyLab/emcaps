@@ -3,39 +3,27 @@ Experimental interactive visualization tool for Encapsulin classification.
 Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 """
 
-from os import major
-import numpy as np
 from pathlib import Path
+
+import imageio
+import napari
+import numpy as np
+import torch
+import yaml
+from magicgui import magic_factory, widgets
+from napari.qt.threading import FunctionWorker, thread_worker
+from napari.types import ImageData, LabelsData, LayerDataTuple
+from napari.utils.notifications import show_info
 from scipy import ndimage
 from skimage import data
-from skimage.filters import threshold_otsu
-from skimage.segmentation import clear_border
 from skimage.measure import label, regionprops_table
-from skimage.morphology import closing, square, remove_small_objects
-import imageio
-import yaml
-import napari
-
-from magicgui import magic_factory, widgets
-from skimage import data
-from skimage.feature import blob_log
+from skimage.morphology import remove_small_objects
+from skimage.segmentation import clear_border
+from tiler import Merger, Tiler
 from typing_extensions import Annotated
-
-import napari
-from napari.qt.threading import FunctionWorker, thread_worker
-from napari.types import ImageData, LayerDataTuple, LabelsData
-from napari.utils.notifications import show_info
-
-from qtpy.QtWidgets import QPushButton, QVBoxLayout, QWidget
-
-from tiler import Tiler, Merger
 
 # WARNING: This can quickly lead to OOM on systems with < 16 GB RAM
 
-import torch
-
-
-INTERACTIVE = True
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Running on {device}')
@@ -114,12 +102,11 @@ class_names = {v: k for k, v in class_ids.items()}
 
 # load the image and segment it
 
-# USE_GT = False
-USE_GT = True
 
 data_root = Path('~/tum/Single-table_database/').expanduser()
 segmenter_path = Path('~/tum/ptsmodels/unet_gdl_uni4_15k.pts').expanduser()
 classifier_path = Path('~/tum/ptsmodels/effnet_s_40k_uni4a.pts').expanduser()
+
 
 def load_torchscript_model(path):
     model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
@@ -171,7 +158,6 @@ def tiled_segment(image: np.ndarray, thresh: float, pbar=None) -> np.ndarray:
     return pred
 
 
-
 # For regionprops extra_properties
 def rp_classify(region_mask, img):
     # patch_np = image[region_mask]
@@ -188,61 +174,7 @@ def assign_class_names(pred_ids):
     return pred_class_names
 
 
-
-
-
-if not INTERACTIVE:
-    viewer = napari.view_image(image_raw, name='image', rgb=False)
-    print('Segmenting...')
-    if USE_GT:
-        sem_label_image = imageio.imread(data_root / '129/129_encapsulins.tif')
-    else:
-        sem_label_image = segment(image_normalized)
-
-    label_image = cc_label(sem_label_image)
-
-    print('Calculating rprops and classification...')
-    # create the properties dictionary
-    properties = regionprops_table(
-        label_image=label_image,
-        intensity_image=image_normalized,
-        properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
-        extra_properties=[rp_classify]
-    )
-    properties['pred_classname'] = assign_class_names(properties['rp_classify'])
-    properties['circularity'] = circularity(
-        properties['perimeter'], properties['area']
-    )
-
-
-    # create the bounding box rectangles
-    bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
-
-    # specify the display parameters for the text
-    text_parameters = {
-        'text': 'id: {label:03d}, circularity: {circularity:.2f}, solidity: {solidity:.2f}\nclass: {pred_classname}',
-        'size': 14,
-        'color': 'black',
-        'anchor': 'upper_left',
-        'translation': [-3, 0],
-    }
-
-    # add the labels
-    # TODO: One label layer per patchclassify class, each with different color?
-    label_layer = viewer.add_labels(label_image, name='segmentation')
-
-    shapes_layer = viewer.add_shapes(
-        bbox_rects,
-        face_color='transparent',
-        edge_color='green',
-        properties=properties,
-        text=text_parameters,
-        name='bounding box',
-    )
-
-
-# TODO: Use https://github.com/the-lay/tiler
-
+# TODO: Make tiling optional
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Segmenting...'})
 def make_seg_widget(
     pbar: widgets.ProgressBar,
@@ -323,26 +255,10 @@ def make_regions_widget(
     return regions()
 
 
-if INTERACTIVE:
-    # viewer = napari.Viewer()
-    viewer = napari.view_image(image_raw[:600, :600].copy(), name='image')
+# viewer = napari.Viewer()
+viewer = napari.view_image(image_raw[:600, :600].copy(), name='image')
 
-    viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
-    viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
-
-if False and INTERACTIVE:
-    viewer = napari.view_image(image_raw, name='image', rgb=False)  # TODO: Don't hardcode initial image
-
-    button_layout = QVBoxLayout()
-    process_btn = QPushButton("Full Process")
-    process_btn.clicked.connect(action_segment)
-    button_layout.addWidget(process_btn)
-
-    action_widget = QWidget()
-    action_widget.setLayout(button_layout)
-    action_widget.setObjectName("Segmentation")
-    viewer.window.add_dock_widget(action_widget)
-
-    viewer.window._status_bar._toggle_activity_dock(True)
+viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
+viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
 
 napari.run()
