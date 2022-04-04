@@ -106,10 +106,10 @@ class UPatches(data.Dataset):
 
         if self.train:
             logger.info('\nTraining data:')
-            meta = meta[meta.train]
+            meta = meta.loc[meta.train == True]  # Explicit comparison due to possible integer types
         else:
             logger.info('\nValidation data:')
-            meta = meta[meta.validation]
+            meta = meta.loc[meta.validation == True]  # Explicit comparison due to possible integer types
 
         self.meta = meta
 

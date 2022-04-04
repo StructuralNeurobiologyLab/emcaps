@@ -1,5 +1,17 @@
-_version: 4
+_version: 5
 
+class_ids_v5:
+  DRO-1M-Mx: 0
+  DRO-1M-Qt: 1
+  1M-Mx: 2
+  1M-Qt: 3
+  2M-Mx: 4
+  2M-Qt: 5
+  3M-Qt: 6
+  1M-Tm: 7
+
+
+# Legacy names
 class_ids:
   DRO_1xMT3-MxEnc-Flag-NLS: 0
   DRO_1xMT3-QtEnc-Flag-NLS: 1
