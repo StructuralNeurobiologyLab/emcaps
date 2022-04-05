@@ -124,7 +124,7 @@ EC_REGION_RADIUS = 24
 # Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
 EC_REGION_ODD_PLUS1 = 1
 
-EC_MIN_AREA = 200
+EC_MIN_AREA = 150
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
 
@@ -135,6 +135,36 @@ FILL_HOLES = True
 DILATE_MASKS_BY = 5
 
 MIN_CIRCULARITY = 0.8
+
+
+# Load mapping from class names to class IDs
+class_info_path = './class_info.yaml'
+with open(class_info_path) as f:
+    class_info = yaml.load(f, Loader=yaml.FullLoader)
+CLASS_IDS = class_info['class_ids_v5']  # Use v5 class names
+CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
+
+DATA_SELECTION = [
+    # 'DRO_1xMT3-MxEnc-Flag-NLS',
+    # 'DRO_1xMT3-QtEnc-Flag-NLS',
+    'HEK_1xMT3-MxEnc-Flag',
+    'HEK_1xMT3-QtEnc-Flag',
+    'HEK-2xMT3-MxEnc-Flag',
+    'HEK-2xMT3-QtEnc-Flag',
+    'HEK-3xMT3-QtEnc-Flag',
+    'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
+]
+
+DATA_SELECTION = [
+    # 'DRO-1M-Mx',  # Drosophila
+    # 'DRO-1M-Qt',  # Drosophila
+    '1M-Mx',
+    '1M-Qt',
+    '2M-Mx',
+    '2M-Qt',
+    '3M-Qt',
+    '1M-Tm',  # -> requires extra model
+]
 
 
 sheet = pd.read_excel(
@@ -152,24 +182,9 @@ meta = meta.loc[meta['num'] >= 16]
 meta = meta.rename(columns={'Short experimental condition': 'scond'})
 meta = meta.convert_dtypes()
 
-
-DATA_SELECTION = [
-    # 'DRO_1xMT3-MxEnc-Flag-NLS',
-    # 'DRO_1xMT3-QtEnc-Flag-NLS',
-    'HEK_1xMT3-MxEnc-Flag',
-    'HEK_1xMT3-QtEnc-Flag',
-    'HEK-2xMT3-MxEnc-Flag',
-    'HEK-2xMT3-QtEnc-Flag',
-    'HEK-3xMT3-QtEnc-Flag',
-    'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
-]
-
-# Load mapping from class names to class IDs
-class_info_path = './class_info.yaml'
-with open(class_info_path) as f:
-    class_info = yaml.load(f, Loader=yaml.FullLoader)
-class_ids = class_info['class_ids']
-class_names = {v: k for k, v in class_ids.items()}
+# Use new short names
+OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
+meta.scond.replace(OLDNAMES_TO_V5NAMES, inplace=True)
 
 # Load train/validation split
 valid_split_path = './valid_split.yaml'
@@ -226,9 +241,9 @@ def is_for_validation(path):
 #     # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_notmenc')
 #     patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
 
-patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni')
+patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v5')
 if USE_GT:
-    patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt')
+    patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v5__from_gt')
     # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
 
 
@@ -296,7 +311,7 @@ for model_path in model_paths:
     for img_path in tqdm.tqdm(img_paths, position=0, desc='Images'):
         enctype = get_enctype(img_path)
         if pd.isna(enctype) or enctype not in DATA_SELECTION:
-            print('enctype', enctype, 'not found')
+            logger.info('enctype', enctype, 'not found')
             continue
         img_path = Path(img_path)
         _img_path = Path(img_path)
@@ -316,7 +331,7 @@ for model_path in model_paths:
             mask = label
         else:
             # Use extra model for TmEnc (?)
-            if enctype == 'HEK-1xTmEnc-BC2-Tag':
+            if enctype == '1M-Tm':
                 out = tm_predictor.predict(inp)
             else:
                 out = predictor.predict(inp)
@@ -401,7 +416,10 @@ for model_path in model_paths:
                 yslice = slice(lo[1], hi[1])
 
                 raw_patch = raw[xslice, yslice]
-                mask_patch = mask[xslice, yslice]
+                # mask_patch = mask[xslice, yslice]
+                # For some reason mask[xslice, yslice] does not always contain nonzero values, but cc at the same slice does.
+                # So we rebuild the mask at the region slice by comparing cc to 0
+                mask_patch = cc[xslice, yslice] > 0
 
 
                 # Eliminate coinciding masks from other particles that can overlap with this region (this can happen because we slice the mask_patch from the global mask)
