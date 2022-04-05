@@ -1,5 +1,17 @@
-_version: 4
+_version: 5
 
+# New v5 names
+DRO-1M-Mx: [60, 114]
+DRO-1M-Qt: [43, 109]
+1M-Mx:     [153, 154]
+1M-Qt:     [26, 56]
+2M-Mx:     [82, 142]
+2M-Qt:     [74, 125]
+3M-Qt:     [130, 131]
+1M-Tm:     [147, 148]
+
+
+# Same as above, but with old names
 DRO_1xMT3-MxEnc-Flag-NLS: [60, 114]
 DRO_1xMT3-QtEnc-Flag-NLS: [43, 109]
 HEK_1xMT3-MxEnc-Flag:     [153, 154]
