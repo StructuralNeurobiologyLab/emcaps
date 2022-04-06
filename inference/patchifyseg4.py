@@ -44,6 +44,8 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
 
+from analysis.radial_patchlineplots import measure_outer_disk_radius 
+
 # torch.backends.cudnn.benchmark = True
 
 def eul(paths):
@@ -276,6 +278,12 @@ class PatchMeta(NamedTuple):
     corner_y: int
     train: bool
     validation: bool
+    radius2: float = np.nan
+    radius2_dilated: float = np.nan
+    area: float = np.nan
+    area_dilated: float = np.nan
+    circularity: float = np.nan
+
 
 
 apply_softmax = True
@@ -311,7 +319,7 @@ for model_path in model_paths:
     for img_path in tqdm.tqdm(img_paths, position=0, desc='Images'):
         enctype = get_enctype(img_path)
         if pd.isna(enctype) or enctype not in DATA_SELECTION:
-            logger.info('enctype', enctype, 'not found')
+            logger.debug(f'enctype {enctype} not found')
             continue
         img_path = Path(img_path)
         _img_path = Path(img_path)
@@ -401,11 +409,14 @@ for model_path in model_paths:
                 if rp.area < EC_MIN_AREA or rp.area > EC_MAX_AREA:
                     logger.info(f'Skipping: area size {rp.area} not within [{EC_MIN_AREA}, {EC_MAX_AREA}]')
                     continue  # Too small or too big (-> background component?) to be a normal particle
+                circularity = np.nan
                 if MIN_CIRCULARITY > 0:
                     circularity = calculate_circularity(rp.perimeter, rp.area)
                     if circularity < MIN_CIRCULARITY:
                         logger.info(f'Skipping: circularity {circularity} below {MIN_CIRCULARITY}')
                         continue  # Not circular enough (probably a false merger)
+                    circularity = np.round(circularity, 2)  # Round for more readable logging
+
                 lo = centroid - EC_REGION_RADIUS
                 hi = centroid + EC_REGION_RADIUS + EC_REGION_ODD_PLUS1
                 if np.any(lo < 0) or np.any(hi > raw.shape):
@@ -433,13 +444,22 @@ for model_path in model_paths:
                 if mask_patch.sum() == 0:
                     # No positive pixel in mask -> skip this one
                     logger.info(f'Skipping: no particle mask in region')
-                    continue  # TODO: Why does this happen although we're iterating over regionprops from mask?
+                    # TODO: Why does this happen although we're iterating over regionprops from mask?
+                    # (Only happens if using `mask_patch = mask[xslice, yslice]`. Workaround: `Use mask_patch = cc[xslice, yslice] > 0`)
+                    continue
+
+                area = int(np.sum(mask_patch))
+                radius2 = np.round(measure_outer_disk_radius(mask_patch, discrete=False), 1)
 
                 # Enlarge masks because we don't want to risk losing perimeter regions
                 if DILATE_MASKS_BY > 0:
                     disk = sm.disk(DILATE_MASKS_BY)
                     # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
                     mask_patch = sm.binary_dilation(mask_patch, selem=disk)
+
+                # Measure again after mask dilation
+                area_dilated = int(np.sum(mask_patch))
+                radius2_dilated = np.round(measure_outer_disk_radius(mask_patch, discrete=False), 1)
 
                 # Raw patch with background erased via mask
                 nobg_patch = raw_patch.copy()
@@ -462,6 +482,11 @@ for model_path in model_paths:
                     corner_x=lo[1],
                     train=is_train,
                     validation=is_validation,
+                    radius2=radius2,
+                    radius2_dilated=radius2_dilated,
+                    area=area,
+                    area_dilated=area_dilated,
+                    circularity=circularity,
                 ))
 
                 imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
