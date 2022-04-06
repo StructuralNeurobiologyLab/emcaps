@@ -8,13 +8,11 @@ Supports majority votes.
 """
 
 import argparse
-from locale import normalize
 from math import inf
 import os
 import random
 from typing import Literal
 from pathlib import Path
-from elektronn3.data.transforms.transforms import RandomCrop
 
 import imageio
 import matplotlib.pyplot as plt
@@ -29,9 +27,7 @@ from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
-from torch.nn.modules.loss import MSELoss
-from torch.utils import data
-# elektronn3.select_mpl_backend('Agg')
+elektronn3.select_mpl_backend('auto')
 
 from elektronn3.training import metrics
 from elektronn3.data import transforms
@@ -115,16 +111,9 @@ predictor = Predictor(
     # apply_argmax=True,
 )
 
-n_correct = 0
-n_total = 0
-
 # Load gt sheet for restoring original patch_id indexing
 gt_sheet = pd.read_excel(f'{patches_root}/samples_gt.xlsx')
 
-img_preds = {}
-img_pred_labels = {}
-img_targets = {}
-img_target_labels = {}
 
 # meta = pd.read_excel(f'{patches_root}/patchmeta_traintest_v5names.xlsx', sheet_name='Sheet1', index_col=0)
 meta = pd.read_excel(f'{patches_root}/patchmeta_traintest.xlsx', sheet_name='Sheet1', index_col=0)
@@ -132,81 +121,115 @@ meta = pd.read_excel(f'{patches_root}/patchmeta_traintest.xlsx', sheet_name='She
 vmeta = meta.loc[meta.validation == True]
 
 print('\n== Patch selection ==')
-for i in vmeta.img_num.unique():
-    # For each source image:
-    imgmeta = vmeta.loc[vmeta.img_num == i]
-    # Each image only contains one enctype
-    assert len(imgmeta.enctype.unique() == 1)
-    target_label = imgmeta.iloc[0].enctype
-    target = CLASS_IDS[target_label]
 
-    print(f'\nImage {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
+def evaluate(vmeta, split=None):
+    img_preds = {}
+    img_pred_labels = {}
+    img_targets = {}
+    img_target_labels = {}
 
-    if MAX_SAMPLES_PER_IMG > 0:  # Randomly sample only MAX_SAMPLES_PER_IMG patches
-        imgmeta = imgmeta.sample(min(imgmeta.shape[0], MAX_SAMPLES_PER_IMG))
-        print(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_IMG}, we now have:')
-        print(f'Image {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
+    for i in vmeta.img_num.unique():
+        # For each source image:
+        imgmeta = vmeta.loc[vmeta.img_num == i]
+        # Each image only contains one enctype
+        assert len(imgmeta.enctype.unique() == 1)
+        target_label = imgmeta.iloc[0].enctype
+        target = CLASS_IDS[target_label]
 
+        print(f'\nImage {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
 
-    img_preds[i] = []
-    img_pred_labels[i] = []
-    img_targets[i] = target
-    img_target_labels[i] = target_label
-
-    preds = []
-    targets = []
-    pred_labels = []
-    target_labels = []
-    for patch_entry in imgmeta.itertuples():
-        raw_fname = patch_entry.patch_fname
-        nobg_fname = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
-        patch = imageio.imread(nobg_fname).astype(np.float32)[None][None]
-
-        out = predictor.predict(patch)
-        pred = out[0].argmax(0).item()
-        confidence = out[0].numpy().ptp()  # peak-to-peak as confidence proxy
-
-        pred_label = CLASS_NAMES[pred]
-
-        preds.append(pred)
-        targets.append(target)
-        pred_labels.append(pred_label)
-        target_labels.append(target_label)
-
-        img_preds[i].append(pred)
-        img_pred_labels[i].append(pred_label)
-
-    preds = np.array(preds)
-    targets = np.array(targets)
-
-img_majority_preds = {}
-img_majority_pred_names = {}
-img_correct_ratios = {}
-for k, v in img_preds.items():
-    img_majority_preds[k] = np.argmax(np.bincount(v))
-    img_correct_ratios[k] = np.bincount(v)[img_targets[k]] / len(v)
-    img_majority_pred_names[k] = CLASS_NAMES[img_majority_preds[k]]
-
-print('\n\n==  Patch classification ==\n')
-for i in img_preds.keys():
-    print(f'Image {i}\nTrue class: {img_target_labels[i]}\nPredicted classes: {img_pred_labels[i]}\n-> Majority vote result: {img_majority_pred_names[i]}')
-    print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')
+        # if MAX_SAMPLES_PER_IMG > 0:  # Randomly sample only MAX_SAMPLES_PER_IMG patches
+        #     imgmeta = imgmeta.sample(min(imgmeta.shape[0], MAX_SAMPLES_PER_IMG))
+        #     print(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_IMG}, we now have:')
+        #     print(f'Image {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
 
 
+        if split is not None:
+            a, b = split
+            imgmeta = imgmeta.iloc[a:b]
 
-if False:  # Sanity check: Calculate confusion matrix entries myself
-    for a in range(2, 8):
-        for b in range(2, 8):
-            v = np.sum((targets == a) & (preds == b))
-            print(f'T: {CLASS_NAMES[a]}, P: {CLASS_NAMES[b]} -> {v}')
+        img_preds[i] = []
+        img_pred_labels[i] = []
+        img_targets[i] = target
+        img_target_labels[i] = target_label
 
-img_targets_list = []
-img_majority_preds_list = []
-for img_num in img_targets.keys():
-    img_targets_list.append(img_targets[img_num])
-    img_majority_preds_list.append(img_majority_preds[img_num])
+        preds = []
+        targets = []
+        pred_labels = []
+        target_labels = []
+        for patch_entry in imgmeta.itertuples():
+            raw_fname = patch_entry.patch_fname
+            nobg_fname = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
+            patch = imageio.imread(nobg_fname).astype(np.float32)[None][None]
 
-cm = confusion_matrix(img_targets_list, img_majority_preds_list)
+            out = predictor.predict(patch)
+            pred = out[0].argmax(0).item()
+            confidence = out[0].numpy().ptp()  # peak-to-peak as confidence proxy
+
+            pred_label = CLASS_NAMES[pred]
+
+            preds.append(pred)
+            targets.append(target)
+            pred_labels.append(pred_label)
+            target_labels.append(target_label)
+
+            img_preds[i].append(pred)
+            img_pred_labels[i].append(pred_label)
+
+        preds = np.array(preds)
+        targets = np.array(targets)
+
+    img_majority_preds = {}
+    img_majority_pred_names = {}
+    img_correct_ratios = {}
+    for k, v in img_preds.items():
+        img_majority_preds[k] = np.argmax(np.bincount(v))
+        if target in v:
+            img_correct_ratios[k] = np.bincount(v)[target] / len(v)
+        else:  # target does not appear in predicted values -> 0 correct
+            img_correct_ratios[k] = 0.
+        img_majority_pred_names[k] = CLASS_NAMES[img_majority_preds[k]]
+
+    print('\n\n==  Patch classification ==\n')
+    for i in img_preds.keys():
+        print(f'Image {i}\nTrue class: {img_target_labels[i]}\nPredicted classes: {img_pred_labels[i]}\n-> Majority vote result: {img_majority_pred_names[i]}')
+        print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')
+
+
+
+    if False:  # Sanity check: Calculate confusion matrix entries myself
+        for a in range(2, 8):
+            for b in range(2, 8):
+                v = np.sum((targets == a) & (preds == b))
+                print(f'T: {CLASS_NAMES[a]}, P: {CLASS_NAMES[b]} -> {v}')
+
+    img_targets_list = []
+    img_majority_preds_list = []
+    for img_num in img_targets.keys():
+        img_targets_list.append(img_targets[img_num])
+        img_majority_preds_list.append(img_majority_preds[img_num])
+
+    return img_targets_list,img_majority_preds_list
+
+# Split available patch collection into multiple subcollections if possible
+# (as of patches_v5 we have at least 7 patches per image, so splitting can currently only be done for N=1 and N=3)
+if MAX_SAMPLES_PER_IMG == 3:
+    splits = [(0, 3), (3, 6)]
+elif MAX_SAMPLES_PER_IMG == 1:
+    splits = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)]
+else:
+    splits = [None]
+
+full_img_targets_list = []
+full_img_majority_preds_list = []
+
+for split in splits:
+    split_img_targets_list, split_img_majority_preds_list = evaluate(vmeta, split=split)
+    full_img_targets_list.extend(split_img_targets_list)
+    full_img_majority_preds_list.extend(split_img_majority_preds_list)
+
+
+cm = confusion_matrix(full_img_targets_list, full_img_majority_preds_list)
 
 fig, ax = plt.subplots(tight_layout=True, figsize=(7, 5.5))
 
