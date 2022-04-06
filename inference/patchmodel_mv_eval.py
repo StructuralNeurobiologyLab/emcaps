@@ -8,15 +8,12 @@ Supports majority votes.
 """
 
 import argparse
-import datetime
 from locale import normalize
 from math import inf
 import os
 import random
-from tkinter.tix import MAX
 from typing import Literal
 from pathlib import Path
-from unicodedata import category
 from elektronn3.data.transforms.transforms import RandomCrop
 
 import imageio
@@ -68,6 +65,8 @@ random.seed(random_seed)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Running on device: {device}')
 
+
+CM_SHOW_PERCENTAGES = False
 
 out_channels = 8
 
@@ -132,6 +131,7 @@ meta = pd.read_excel(f'{patches_root}/patchmeta_traintest.xlsx', sheet_name='She
 
 vmeta = meta.loc[meta.validation == True]
 
+print('\n== Patch selection ==')
 for i in vmeta.img_num.unique():
     # For each source image:
     imgmeta = vmeta.loc[vmeta.img_num == i]
@@ -140,7 +140,7 @@ for i in vmeta.img_num.unique():
     target_label = imgmeta.iloc[0].enctype
     target = CLASS_IDS[target_label]
 
-    print(f'Image {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
+    print(f'\nImage {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
 
     if MAX_SAMPLES_PER_IMG > 0:  # Randomly sample only MAX_SAMPLES_PER_IMG patches
         imgmeta = imgmeta.sample(min(imgmeta.shape[0], MAX_SAMPLES_PER_IMG))
@@ -187,9 +187,10 @@ for k, v in img_preds.items():
     img_correct_ratios[k] = np.bincount(v)[img_targets[k]] / len(v)
     img_majority_pred_names[k] = CLASS_NAMES[img_majority_preds[k]]
 
+print('\n\n==  Patch classification ==\n')
 for i in img_preds.keys():
-    print(f'Image {i}\nTrue: {img_target_labels[i]}\nPred: {img_pred_labels[i]}\nMaVo: {img_majority_pred_names[i]}')
-    print(f'MaVo correct ratio: {img_correct_ratios[i] * 100:.1f}%\n')
+    print(f'Image {i}\nTrue class: {img_target_labels[i]}\nPredicted classes: {img_pred_labels[i]}\n-> Majority vote result: {img_majority_pred_names[i]}')
+    print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')
 
 
 
@@ -198,44 +199,6 @@ if False:  # Sanity check: Calculate confusion matrix entries myself
         for b in range(2, 8):
             v = np.sum((targets == a) & (preds == b))
             print(f'T: {CLASS_NAMES[a]}, P: {CLASS_NAMES[b]} -> {v}')
-
-    # T: 1xMT3-MxEnc, P: 1xMT3-MxEnc -> 3
-    # T: 1xMT3-MxEnc, P: 1xMT3-QtEnc -> 0
-    # T: 1xMT3-MxEnc, P: 2xMT3-MxEnc -> 23
-    # T: 1xMT3-MxEnc, P: 2xMT3-QtEnc -> 0
-    # T: 1xMT3-MxEnc, P: 3xMT3-QtEnc -> 0
-    # T: 1xMT3-MxEnc, P: 1xTmEnc-BC2 -> 4
-    # T: 1xMT3-QtEnc, P: 1xMT3-MxEnc -> 0
-    # T: 1xMT3-QtEnc, P: 1xMT3-QtEnc -> 27
-    # T: 1xMT3-QtEnc, P: 2xMT3-MxEnc -> 0
-    # T: 1xMT3-QtEnc, P: 2xMT3-QtEnc -> 2
-    # T: 1xMT3-QtEnc, P: 3xMT3-QtEnc -> 1
-    # T: 1xMT3-QtEnc, P: 1xTmEnc-BC2 -> 0
-    # T: 2xMT3-MxEnc, P: 1xMT3-MxEnc -> 0
-    # T: 2xMT3-MxEnc, P: 1xMT3-QtEnc -> 0
-    # T: 2xMT3-MxEnc, P: 2xMT3-MxEnc -> 26
-    # T: 2xMT3-MxEnc, P: 2xMT3-QtEnc -> 0
-    # T: 2xMT3-MxEnc, P: 3xMT3-QtEnc -> 4
-    # T: 2xMT3-MxEnc, P: 1xTmEnc-BC2 -> 0
-    # T: 2xMT3-QtEnc, P: 1xMT3-MxEnc -> 2
-    # T: 2xMT3-QtEnc, P: 1xMT3-QtEnc -> 0
-    # T: 2xMT3-QtEnc, P: 2xMT3-MxEnc -> 17
-    # T: 2xMT3-QtEnc, P: 2xMT3-QtEnc -> 6
-    # T: 2xMT3-QtEnc, P: 3xMT3-QtEnc -> 5
-    # T: 2xMT3-QtEnc, P: 1xTmEnc-BC2 -> 0
-    # T: 3xMT3-QtEnc, P: 1xMT3-MxEnc -> 0
-    # T: 3xMT3-QtEnc, P: 1xMT3-QtEnc -> 0
-    # T: 3xMT3-QtEnc, P: 2xMT3-MxEnc -> 9
-    # T: 3xMT3-QtEnc, P: 2xMT3-QtEnc -> 0
-    # T: 3xMT3-QtEnc, P: 3xMT3-QtEnc -> 21
-    # T: 3xMT3-QtEnc, P: 1xTmEnc-BC2 -> 0
-    # T: 1xTmEnc-BC2, P: 1xMT3-MxEnc -> 0
-    # T: 1xTmEnc-BC2, P: 1xMT3-QtEnc -> 1
-    # T: 1xTmEnc-BC2, P: 2xMT3-MxEnc -> 16
-    # T: 1xTmEnc-BC2, P: 2xMT3-QtEnc -> 0
-    # T: 1xTmEnc-BC2, P: 3xMT3-QtEnc -> 2
-    # T: 1xTmEnc-BC2, P: 1xTmEnc-BC2 -> 11
-
 
 img_targets_list = []
 img_majority_preds_list = []
@@ -249,8 +212,14 @@ fig, ax = plt.subplots(tight_layout=True, figsize=(7, 5.5))
 
 repr_max_samples = MAX_SAMPLES_PER_IMG if MAX_SAMPLES_PER_IMG > 0 else 'all'
 
-cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='pred', cmap='viridis', sum_stats=False, ax=ax)
-ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (top: count, bottom: percentages normalized over true labels)\n')
+if CM_SHOW_PERCENTAGES:
+    cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
+    ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (top: count, bottom: percentages normalized over true labels)\n')
+else:
+    cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=False)
+    ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (absolute counts)\n')
+
+
 plt.tight_layout()
 plt.savefig(f'{patches_root}/patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
 

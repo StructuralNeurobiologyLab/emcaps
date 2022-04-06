@@ -18,7 +18,6 @@ import logging
 
 import gzip
 from unittest.mock import patch
-import zstandard
 import numpy as np
 import imageio
 import skimage

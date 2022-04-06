@@ -42,6 +42,8 @@ def plot_confusion_matrix(cf,
 
     count:         If True, show the raw number in the confusion matrix. Default is True.
 
+    percent:       If True, show percentages in the confusion matrix. Default is True.
+
     normalize:     {'true', 'pred', 'all'}, default: 'all'
                        Normalizes confusion matrix over the true (rows), predicted (columns)
                        conditions or all the population.
