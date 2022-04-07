@@ -8,7 +8,6 @@ Supports majority votes.
 """
 
 import argparse
-from math import inf
 import os
 import random
 from typing import Literal
@@ -18,8 +17,6 @@ import imageio
 import matplotlib.pyplot as plt
 import yaml
 import torch
-from torch import nn
-from torch import optim
 import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
@@ -97,9 +94,9 @@ valid_transform = common_transforms + []
 valid_transform = transforms.Compose(valid_transform)
 
 
-# MAX_SAMPLES_PER_IMG = 'all'
-# MAX_SAMPLES_PER_IMG = 1
-MAX_SAMPLES_PER_IMG = args.nmaxsamples
+# SAMPLES_PER_IMG = 'all'
+# SAMPLES_PER_IMG = 1
+SAMPLES_PER_IMG = args.nmaxsamples
 
 
 predictor = Predictor(
@@ -138,9 +135,9 @@ def evaluate(vmeta, split=None):
 
         print(f'\nImage {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
 
-        # if MAX_SAMPLES_PER_IMG > 0:  # Randomly sample only MAX_SAMPLES_PER_IMG patches
-        #     imgmeta = imgmeta.sample(min(imgmeta.shape[0], MAX_SAMPLES_PER_IMG))
-        #     print(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_IMG}, we now have:')
+        # if SAMPLES_PER_IMG > 0:  # Randomly sample only SAMPLES_PER_IMG patches
+        #     imgmeta = imgmeta.sample(min(imgmeta.shape[0], SAMPLES_PER_IMG))
+        #     print(f'-> After reducing to a maximum of {SAMPLES_PER_IMG}, we now have:')
         #     print(f'Image {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
 
 
@@ -159,8 +156,8 @@ def evaluate(vmeta, split=None):
         target_labels = []
         for patch_entry in imgmeta.itertuples():
             raw_fname = patch_entry.patch_fname
-            nobg_fname = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
-            patch = imageio.imread(nobg_fname).astype(np.float32)[None][None]
+            nobg_fpath = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
+            patch = imageio.imread(nobg_fpath).astype(np.float32)[None][None]
 
             out = predictor.predict(patch)
             pred = out[0].argmax(0).item()
@@ -209,16 +206,19 @@ def evaluate(vmeta, split=None):
         img_targets_list.append(img_targets[img_num])
         img_majority_preds_list.append(img_majority_preds[img_num])
 
-    return img_targets_list,img_majority_preds_list
+    return img_targets_list, img_majority_preds_list
 
 # Split available patch collection into multiple subcollections if possible
 # (as of patches_v5 we have at least 7 patches per image, so splitting can currently only be done for N=1 and N=3)
-if MAX_SAMPLES_PER_IMG == 3:
-    splits = [(0, 3), (3, 6)]
-elif MAX_SAMPLES_PER_IMG == 1:
-    splits = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)]
-else:
+# TODO: Split dynamically without hardcoded rules
+if SAMPLES_PER_IMG == 0:  # No sampling, use all images
     splits = [None]
+elif SAMPLES_PER_IMG == 1:
+    splits = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)]
+elif SAMPLES_PER_IMG == 3:
+    splits = [(0, 3), (3, 6)]
+else:  # Only one split
+    splits = [(0, SAMPLES_PER_IMG)]
 
 full_img_targets_list = []
 full_img_majority_preds_list = []
@@ -233,7 +233,7 @@ cm = confusion_matrix(full_img_targets_list, full_img_majority_preds_list)
 
 fig, ax = plt.subplots(tight_layout=True, figsize=(7, 5.5))
 
-repr_max_samples = MAX_SAMPLES_PER_IMG if MAX_SAMPLES_PER_IMG > 0 else 'all'
+repr_max_samples = SAMPLES_PER_IMG if SAMPLES_PER_IMG > 0 else 'all'
 
 if CM_SHOW_PERCENTAGES:
     cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
