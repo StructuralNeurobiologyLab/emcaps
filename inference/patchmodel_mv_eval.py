@@ -119,6 +119,9 @@ vmeta = meta.loc[meta.validation == True]
 
 print('\n== Patch selection ==')
 
+all_targets = []
+all_preds = []
+
 def evaluate(vmeta, split=None):
     img_preds = {}
     img_pred_labels = {}
@@ -173,6 +176,9 @@ def evaluate(vmeta, split=None):
             img_preds[i].append(pred)
             img_pred_labels[i].append(pred_label)
 
+            all_targets.append(target)
+            all_preds.append(pred)
+
         preds = np.array(preds)
         targets = np.array(targets)
 
@@ -181,6 +187,7 @@ def evaluate(vmeta, split=None):
     img_correct_ratios = {}
     for k, v in img_preds.items():
         img_majority_preds[k] = np.argmax(np.bincount(v))
+        # TODO: This is broken!
         if target in v:
             img_correct_ratios[k] = np.bincount(v)[target] / len(v)
         else:  # target does not appear in predicted values -> 0 correct
@@ -190,7 +197,7 @@ def evaluate(vmeta, split=None):
     print('\n\n==  Patch classification ==\n')
     for i in img_preds.keys():
         print(f'Image {i}\nTrue class: {img_target_labels[i]}\nPredicted classes: {img_pred_labels[i]}\n-> Majority vote result: {img_majority_pred_names[i]}')
-        print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')
+        # print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')  # Broken
 
 
 
@@ -228,6 +235,17 @@ for split in splits:
     full_img_targets_list.extend(split_img_targets_list)
     full_img_majority_preds_list.extend(split_img_majority_preds_list)
 
+
+all_preds = np.stack(all_preds)
+all_targets = np.stack(all_targets)
+
+n_correct = np.sum(all_targets == all_preds)
+n_total = all_targets.shape[0]
+
+avg_accuracy = n_correct / n_total
+
+
+print(f'Average accuracy: {avg_accuracy * 100:.2f}%')
 
 cm = confusion_matrix(full_img_targets_list, full_img_majority_preds_list)
 
