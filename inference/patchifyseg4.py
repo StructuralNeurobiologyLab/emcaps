@@ -9,15 +9,10 @@ import os
 from enum import Enum, auto
 from pathlib import Path
 from os.path import expanduser as eu
-from random import shuffle
-from re import S
-from tkinter import E
 from typing import NamedTuple
 import shutil
 import logging
 
-import gzip
-from unittest.mock import patch
 import numpy as np
 import imageio
 import skimage

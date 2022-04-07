@@ -97,8 +97,8 @@ def make_bbox(bbox_extents):
 class_info_path = './class_info.yaml'
 with open(class_info_path) as f:
     class_info = yaml.load(f, Loader=yaml.FullLoader)
-class_ids = class_info['class_ids']
-class_names = {v: k for k, v in class_ids.items()}
+CLASS_IDS = class_info['class_ids_v5']
+CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 # load the image and segment it
 
@@ -170,7 +170,7 @@ def rp_classify(region_mask, img):
 
 
 def assign_class_names(pred_ids):
-    pred_class_names = [class_names[pred] for pred in pred_ids]
+    pred_class_names = [CLASS_NAMES[pred] for pred in pred_ids]
     return pred_class_names
 
 
@@ -224,9 +224,10 @@ def make_regions_widget(
         )
         bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
-            'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
+            # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
+            'text': 'id: {label:03d}\nclass: {pred_classname}',
             'size': 14,
-            'color': 'black',
+            'color': 'blue',
             'anchor': 'upper_left',
             'translation': [-3, 0],
         }

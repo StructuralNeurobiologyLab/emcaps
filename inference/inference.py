@@ -17,12 +17,17 @@ from skimage.color import label2rgb
 from sklearn import metrics as sme
 
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
 from elektronn3.inference import Predictor
 from elektronn3.data import transforms
+
+
+from utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES
+
 
 # torch.backends.cudnn.benchmark = True
 
@@ -48,6 +53,8 @@ pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ])
 
+ENABLE_ENCTYPE_SUBDIRS = True
+
 thresh = 127
 dt_thresh = 0.00
 multi_thresh = 100
@@ -62,7 +69,7 @@ multi_label_names = {
 }
 
 # Select validation images from all experimental conditions
-results_path = Path('/wholebrain/scratch/mdraw/tum/results_uni_model_v4').expanduser()
+results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v5').expanduser()
 data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
 
 
@@ -73,9 +80,9 @@ with open(valid_split_path) as f:
     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
 
 DATA_SELECTION = [
+    # 'DRO_1xMT3-MxEnc-Flag-NLS',
+    # 'DRO_1xMT3-QtEnc-Flag-NLS',
     'HEK_1xMT3-QtEnc-Flag',
-    'DRO_1xMT3-MxEnc-Flag-NLS',
-    'DRO_1xMT3-QtEnc-Flag-NLS',
     'HEK_1xMT3-MxEnc-Flag',
     'HEK-2xMT3-QtEnc-Flag',
     'HEK-2xMT3-MxEnc-Flag',
@@ -89,7 +96,7 @@ for condition in DATA_SELECTION:
 
 image_numbers = valid_image_numbers  # validation images, held out from training data
 
-image_numbers = [147, 148, 149, 150, 151, 152]  # extra tmenc set
+# image_numbers = [147, 148, 149, 150, 151, 152]  # extra tmenc set
 
 ## Training set:
 # image_numbers = set(list(range(16, 138 + 1)) + list(range(141, 152 + 1)))
@@ -109,20 +116,24 @@ DESIRED_OUTPUTS = [
     'lab',
     'overlays',
     'error_maps',
-    'probmaps',  # TODO
+    'probmaps',
     'metrics',
 ]
 
 label_name = 'encapsulins'
 
+if len(DATA_SELECTION) == 1:
+    v5_enctype = OLDNAMES_TO_V5NAMES[DATA_SELECTION[0]]
+    results_root = Path(f'{str(results_root)}_{v5_enctype}')
 
-for p in [results_path]:
-    os.makedirs(p, exist_ok=True)
+
+for p in [results_root]:
+    p.mkdir(exist_ok=True)
 
 
 model_paths = eul([
-    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
-    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
+    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
 ])
 
 
@@ -148,12 +159,21 @@ for model_path in model_paths:
         out = out.numpy()
         basename = os.path.splitext(os.path.basename(img_path))[0]
 
+        if ENABLE_ENCTYPE_SUBDIRS:
+            # enctype = get_old_enctype(img_path)
+            enctype = get_v5_enctype(img_path)
+            results_path = results_root / enctype
+            results_path.mkdir(exist_ok=True)
+        else:
+            results_path = results_root
+
         if out.shape[1] in {1, 2}:
             if out.shape[1] == 2:  # Binary segmentation -> only export channel 1
                 cout = out[0, 1]
                 cout = (cout * 255.).astype(np.uint8)
                 cout = cout > thresh
-                kind = f'thresh{thresh}'
+                # kind = f'thresh{thresh}'
+                kind = f'thresh'
             elif out.shape[1] == 1:  # Distance transform regression
                 cout = out[0, 0]
                 cout = cout <= dt_thresh
@@ -255,6 +275,8 @@ for model_path in model_paths:
         m_targets = np.concatenate(m_targets, axis=None)
         m_probs = np.concatenate(m_probs, axis=None)
         m_preds = np.concatenate(m_preds, axis=None)
+        iou = sme.jaccard_score(m_targets, m_preds)  # iou == jaccard score
+        dsc = sme.f1_score(m_targets, m_preds)  # dsc == f1 score
         precision = sme.precision_score(m_targets, m_preds)
         recall = sme.recall_score(m_targets, m_preds)
         # Plot pixelwise PR curve
@@ -270,18 +292,17 @@ for model_path in model_paths:
         # Get index of pr-curve's threshold that's nearest to the one used in practice for this segmentation
         _i = np.abs(t - thresh/255).argmin()
         plt.scatter(r[_i], p[_i])
-        plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
+        # plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
 
         plt.tight_layout()
-        plt.savefig(eu(f'{results_path}/prcurve.pdf'), dpi=300)
+        plt.savefig(eu(f'{results_root}/prcurve.pdf'), dpi=300)
         
-        # with open(eu(f'{results_path}/{modelname}_{kind}_pr.txt'), 'w') as f:
-        with open(eu(f'{results_path}/info.txt'), 'w') as f:
+        with open(eu(f'{results_root}/info.txt'), 'w') as f:
             f.write(
     f"""Output description:
 - X_raw.jpg: raw image (image number X from the shared dataset)
 - X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
-- X_thresh127.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
+- X_thresh.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
 - X_overlay_lab.jpg: given GT label annotations, overlayed on raw image
 - X_overlay_pred.jpg: prediction by the neural network, overlayed on raw image
 - X_fn_error.png: map of false negative predictions w.r.t. GT labels
@@ -294,9 +315,11 @@ Model info:
 - model: {model_path}
 - thresh: {thresh}
 
+- IoU: {iou}
+- DSC: {dsc}
 - precision: {precision}
 - recall: {recall}
 """
 )
 
-import IPython; IPython.embed(); exit()
+# import IPython; IPython.embed(); exit()

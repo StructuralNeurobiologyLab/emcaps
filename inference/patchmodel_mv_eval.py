@@ -59,7 +59,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Running on device: {device}')
 
 
-CM_SHOW_PERCENTAGES = False
+CM_SHOW_PERCENTAGES = True
 
 out_channels = 8
 
