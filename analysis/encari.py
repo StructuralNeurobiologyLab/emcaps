@@ -16,8 +16,8 @@ from napari.types import ImageData, LabelsData, LayerDataTuple
 from napari.utils.notifications import show_info
 from scipy import ndimage
 from skimage import data
-from skimage.measure import label, regionprops_table
-from skimage.morphology import remove_small_objects
+from skimage.measure import label, regionprops_table, regionprops
+from skimage import morphology as sm
 from skimage.segmentation import clear_border
 from tiler import Merger, Tiler
 from typing_extensions import Annotated
@@ -30,16 +30,24 @@ print(f'Running on {device}')
 
 DTYPE = torch.float16 if 'cuda' in str(device) else torch.float32
 
-
-def cc_label(lab, minsize=20, noborder=True):
+def cc_label(lab, minsize=20, maxsize=600, noborder=True, min_circularity=0.8):
     # remove artifacts connected to image border
     if noborder:
         lab = clear_border(lab)
-    cleared = remove_small_objects(lab, minsize)
-    # cleared = ndimage.binary_dilation(cleared, iterations=4)  # Enlarge (provoke false mergers)
+    cleared = sm.remove_small_objects(lab, minsize)
 
     # label image regions
     label_image = label(cleared)
+
+    rprops = regionprops(label_image, extra_properties=[circularity])
+    for rp in rprops:
+        if circularity(rp.perimeter, rp.area) < min_circularity:
+            label_image[rp.slice] = 0
+        elif rp.area > maxsize:
+            label_image[rp.slice] = 0
+
+    # TODO: ^ Don't remove complete slice but only the actually covered area
+    # TODO: Relabel?
 
     return label_image
 
@@ -159,12 +167,22 @@ def tiled_segment(image: np.ndarray, thresh: float, pbar=None) -> np.ndarray:
 
 
 # For regionprops extra_properties
-def rp_classify(region_mask, img):
-    # patch_np = image[region_mask]
-    patch_np = img.astype(np.float32)
-    patch = torch.from_numpy(patch_np)[None, None]
+def rp_classify(region_mask, img, patch_shape=(49, 49), dilate_masks_by=5):
+
+    # Pad to standardized patch shape
+    padding = np.subtract(patch_shape, img.shape) // 2
+    padding = padding.clip(dilate_masks_by, None)  # Ensure that padding is non-negative and the mask can be dilated
+    img = np.pad(img, padding)
+    region_mask = np.pad(region_mask, padding)
+
+    if dilate_masks_by > 0:
+        disk = sm.disk(dilate_masks_by)
+        region_mask = sm.binary_dilation(region_mask, selem=disk)
+    nobg = img.astype(np.float32)
+    nobg[~region_mask] = 0
+    inp = torch.from_numpy(nobg)[None, None]
     with torch.inference_mode():
-        out = classifier_model(patch)
+        out = classifier_model(inp)
         pred = torch.argmax(out, dim=1)[0].item()
     return pred
 
@@ -205,12 +223,13 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 10}] = 20,
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 10}] = 150,
+    maxsize: Annotated[int, {"min": 1, "max": 1000, "step": 10}] = 500,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
     def regions() -> LayerDataTuple:
-        instance_labels = cc_label(labels, minsize=minsize)
+        instance_labels = cc_label(labels, minsize=minsize, maxsize=maxsize)
 
         properties = regionprops_table(
             label_image=instance_labels,
@@ -225,7 +244,8 @@ def make_regions_widget(
         bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
             # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
-            'text': 'id: {label:03d}\nclass: {pred_classname}',
+            # 'text': 'id: {label:03d}\nclass: {pred_classname}',
+            'text': '{pred_classname}',
             'size': 14,
             'color': 'blue',
             'anchor': 'upper_left',
@@ -244,6 +264,7 @@ def make_regions_widget(
             name='regions',
             # features={'class': properties['pred_classname'], 'majority_class_name': majority_class_name},
             edge_color='pred_classname',
+            edge_color_cycle=['red', 'green', 'blue', 'purple', 'orange', 'magenta', 'cyan', 'yellow'],
             face_color='transparent',
             properties=properties,
             text=text_parameters,
