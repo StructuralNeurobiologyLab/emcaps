@@ -53,7 +53,8 @@ pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ])
 
-ENABLE_ENCTYPE_SUBDIRS = True
+ENABLE_ENCTYPE_SUBDIRS = False
+ZERO_LABELS = False
 
 thresh = 127
 dt_thresh = 0.00
@@ -106,6 +107,9 @@ image_numbers = valid_image_numbers  # validation images, held out from training
 img_paths = [
     str(data_root / f'{i}/{i}.tif') for i in image_numbers
 ]
+
+# img_paths = [f'/wholebrain/scratch/mdraw/tum/formartin_idx/{i}.TIF' for i in range(1, 6 + 1)]
+# img_paths = [f'/wholebrain/scratch/mdraw/tum/Drosophila_validation/{i}.TIF' for i in range(1, 20 + 1)]
 
 # for p in [results_path / scond for scond in DATA_SELECTION]:
 #     os.makedirs(p, exist_ok=True)
@@ -197,20 +201,24 @@ for model_path in model_paths:
                 probmap_path = eu(f'{results_path}/{basename}_probmap.jpg')
                 imageio.imwrite(probmap_path, probmap)
 
-            # Write raw and gt labels
-            lab_path = f'{img_path[:-4]}_{label_name}.tif'
-            if not Path(lab_path).exists():
-                lab_path = f'{img_path[:-4]}_{label_name}.TIF'
-            lab_img = np.array(imageio.imread(lab_path))
-            if invert_labels:
-                lab_img = (lab_img == 0).astype(np.int64)
-            if ENABLE_PARTIAL_INVERSION_HACK and int(basename) >= 55:
-                lab_img = (lab_img == 0).astype(np.int64)
-
-            # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
-            lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
-
             raw_img = imageio.imread(img_path)
+
+            # Write raw and gt labels
+            if ZERO_LABELS:
+                lab_img = np.zeros_like(raw_img, dtype=np.uint8)
+            else:
+                lab_path = f'{img_path[:-4]}_{label_name}.tif'
+                if not Path(lab_path).exists():
+                    lab_path = f'{img_path[:-4]}_{label_name}.TIF'
+                lab_img = np.array(imageio.imread(lab_path))
+                if invert_labels:
+                    lab_img = (lab_img == 0).astype(np.int64)
+                if ENABLE_PARTIAL_INVERSION_HACK and int(basename) >= 55:
+                    lab_img = (lab_img == 0).astype(np.int64)
+
+                # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
+                lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
+
             if 'raw' in DESIRED_OUTPUTS:
                 imageio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
             if 'lab' in DESIRED_OUTPUTS:
@@ -228,7 +236,8 @@ for model_path in model_paths:
                 lab_overlay = (lab_overlay * 255.).astype(np.uint8)
                 pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-                imageio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
+                if not ZERO_LABELS:
+                    imageio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
                 imageio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
             if 'error_maps' in DESIRED_OUTPUTS:
