@@ -1,4 +1,4 @@
-_version: 5
+_version: 6
 
 class_ids_v5:
   DRO-1M-Mx: 0
@@ -9,6 +9,8 @@ class_ids_v5:
   2M-Qt: 5
   3M-Qt: 6
   1M-Tm: 7
+
+label_name: encapsulins
 
 
 # Legacy names
