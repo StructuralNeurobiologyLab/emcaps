@@ -52,9 +52,8 @@ import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
 from tqdm import tqdm
-from torch.cuda import amp
 
-from training.tifdirdata import UTifDirData2d
+from training.tifdirdata import V6TifDirData2d
 
 
 # @dataclass
@@ -154,14 +153,15 @@ DATA_SELECTION = [
 
 
 IGNORE_INDEX = -1
-IGNORE_FAR_BACKGROUND_DISTANCE = 16
+# IGNORE_FAR_BACKGROUND_DISTANCE = 16
+IGNORE_FAR_BACKGROUND_DISTANCE = 0
 
 # BG_WEIGHT = 0.2
 BG_WEIGHT = 0.3
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
-ENABLE_PARTIAL_INVERSION_HACK = True
+ENABLE_PARTIAL_INVERSION_HACK = False
 
 
 VEC_DT = False
@@ -239,7 +239,8 @@ model = UNet(
 # save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
 # save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
 # save_root = Path(conf.save_root).expanduser()
-save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4_ifbg').expanduser()
+# save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4_ifbg').expanduser()
+save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6').expanduser()
 
 
 max_steps = conf.max_steps
@@ -262,7 +263,7 @@ dt_scale = 30
 
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
-    transforms.RandomCrop((768, 768)),
+    # transforms.RandomCrop((512, 512)),
     # transforms.DropIfTooMuchBG(threshold=1 - (1 / 500**2)),
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
     transforms.RandomFlip(ndim_spatial=2),
@@ -274,6 +275,7 @@ train_transform = common_transforms + [
         p=0.98, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
     # transforms.ElasticTransform(prob=0.5, sigma=2, alpha=5),
+    transforms.RandomCrop((384, 384)),
 ]
 if USE_GRAY_AUG:
     train_transform.extend([
@@ -292,13 +294,13 @@ train_transform = transforms.Compose(train_transform)
 valid_transform = transforms.Compose(valid_transform)
 
 
-valid_split_path = './valid_split.yaml'
-with open(valid_split_path) as f:
-    valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
+# valid_split_path = './valid_split.yaml'
+# with open(valid_split_path) as f:
+#     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
 
-valid_image_numbers = []
-for condition in DATA_SELECTION:
-    valid_image_numbers.extend(valid_image_dict[condition])
+# valid_image_numbers = []
+# for condition in DATA_SELECTION:
+#     valid_image_numbers.extend(valid_image_dict[condition])
 
 
 # print('Training on images ', train_image_numbers)
@@ -326,7 +328,7 @@ def meta_filter(meta):
     meta = meta.loc[meta['scond'].isin(DATA_SELECTION)]
     return meta
 
-train_dataset = UTifDirData2d(
+train_dataset = V6TifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
@@ -342,7 +344,7 @@ train_dataset = UTifDirData2d(
     epoch_multiplier=30,
 )
 
-valid_dataset = UTifDirData2d(
+valid_dataset = V6TifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
