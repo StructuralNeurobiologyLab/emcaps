@@ -26,7 +26,7 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 
 
-from utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES
+from utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted
 
 
 # torch.backends.cudnn.benchmark = True
@@ -46,14 +46,14 @@ dataset_std = (128.0,)
 
 invert_labels = True  # Workaround: Fixes inverted TIF loading
 
-ENABLE_PARTIAL_INVERSION_HACK = True  # Another hacky inversion fix
-# ENABLE_PARTIAL_INVERSION_HACK = False
+# ENABLE_PARTIAL_INVERSION_HACK = True  # Another hacky inversion fix
+ENABLE_PARTIAL_INVERSION_HACK = False
 
 pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ])
 
-ENABLE_ENCTYPE_SUBDIRS = False
+ENABLE_ENCTYPE_SUBDIRS = True
 ZERO_LABELS = False
 
 thresh = 127
@@ -70,32 +70,55 @@ multi_label_names = {
 }
 
 # Select validation images from all experimental conditions
-results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v5').expanduser()
+results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v6').expanduser()
 data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
 
 
 # TODO: Migrate from valid_split.yaml to xlsx parsing like in patchifyseg4
 
-valid_split_path = './valid_split.yaml'
-with open(valid_split_path) as f:
-    valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
+# valid_split_path = './valid_split.yaml'
+# with open(valid_split_path) as f:
+#     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
 
-DATA_SELECTION = [
-    # 'DRO_1xMT3-MxEnc-Flag-NLS',
-    # 'DRO_1xMT3-QtEnc-Flag-NLS',
-    'HEK_1xMT3-QtEnc-Flag',
-    'HEK_1xMT3-MxEnc-Flag',
-    'HEK-2xMT3-QtEnc-Flag',
-    'HEK-2xMT3-MxEnc-Flag',
-    'HEK-3xMT3-QtEnc-Flag',
-    'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
+# DATA_SELECTION = [
+#     # 'DRO_1xMT3-MxEnc-Flag-NLS',
+#     # 'DRO_1xMT3-QtEnc-Flag-NLS',
+#     'HEK_1xMT3-QtEnc-Flag',
+#     'HEK_1xMT3-MxEnc-Flag',
+#     'HEK-2xMT3-QtEnc-Flag',
+#     'HEK-2xMT3-MxEnc-Flag',
+#     'HEK-3xMT3-QtEnc-Flag',
+#     'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
+# ]
+
+DATA_SELECTION_V5NAMES = [
+    '1M-Mx',
+    '1M-Qt',
+    '2M-Mx',
+    '2M-Qt',
+    '3M-Qt',
+    '1M-Tm',
+    # 'DRO-1M-Mx',
+    # 'DRO-1M-Qt',
 ]
 
-valid_image_numbers = []
-for condition in DATA_SELECTION:
-    valid_image_numbers.extend(valid_image_dict[condition])
 
-image_numbers = valid_image_numbers  # validation images, held out from training data
+def find_v6_val_images(isplitpath=None):
+    """Find paths to all raw validation images of split v6"""
+    if isplitpath is None:
+        isplitpath = data_root / 'isplitdata_v6'
+    val_img_paths = []
+    for p in isplitpath.rglob('*_val.tif'):  # Look for all validation raw images recursively
+        if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
+            val_img_paths.append(p)
+    return val_img_paths
+
+
+# valid_image_numbers = []
+# for condition in DATA_SELECTION:
+#     valid_image_numbers.extend(valid_image_dict[condition])
+
+# image_numbers = valid_image_numbers  # validation images, held out from training data
 
 # image_numbers = [147, 148, 149, 150, 151, 152]  # extra tmenc set
 
@@ -104,12 +127,15 @@ image_numbers = valid_image_numbers  # validation images, held out from training
 # image_numbers = image_numbers - set(valid_image_numbers)
 # print('Selected image numbers:', image_numbers)
 
-img_paths = [
-    str(data_root / f'{i}/{i}.tif') for i in image_numbers
-]
+# img_paths = [
+#     str(data_root / f'{i}/{i}.tif') for i in image_numbers
+# ]
 
 # img_paths = [f'/wholebrain/scratch/mdraw/tum/formartin_idx/{i}.TIF' for i in range(1, 6 + 1)]
 # img_paths = [f'/wholebrain/scratch/mdraw/tum/Drosophila_validation/{i}.TIF' for i in range(1, 20 + 1)]
+
+img_paths = find_v6_val_images()
+
 
 # for p in [results_path / scond for scond in DATA_SELECTION]:
 #     os.makedirs(p, exist_ok=True)
@@ -126,8 +152,8 @@ DESIRED_OUTPUTS = [
 
 label_name = 'encapsulins'
 
-if len(DATA_SELECTION) == 1:
-    v5_enctype = OLDNAMES_TO_V5NAMES[DATA_SELECTION[0]]
+if len(DATA_SELECTION_V5NAMES) == 1:
+    v5_enctype = DATA_SELECTION_V5NAMES[0]
     results_root = Path(f'{str(results_root)}_{v5_enctype}')
 
 
@@ -137,7 +163,8 @@ for p in [results_root]:
 
 model_paths = eul([
     # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
-    f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/B_GA___UNet__22-04-26_01-30-56/model_step130000.pt'
 ])
 
 
@@ -207,14 +234,15 @@ for model_path in model_paths:
             if ZERO_LABELS:
                 lab_img = np.zeros_like(raw_img, dtype=np.uint8)
             else:
-                lab_path = f'{img_path[:-4]}_{label_name}.tif'
+                lab_path = f'{str(img_path)[:-4]}_{label_name}.tif'
                 if not Path(lab_path).exists():
                     lab_path = f'{img_path[:-4]}_{label_name}.TIF'
                 lab_img = np.array(imageio.imread(lab_path))
-                if invert_labels:
-                    lab_img = (lab_img == 0).astype(np.int64)
-                if ENABLE_PARTIAL_INVERSION_HACK and int(basename) >= 55:
-                    lab_img = (lab_img == 0).astype(np.int64)
+                lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False).astype(np.int64)
+                # if invert_labels:
+                #     lab_img = (lab_img == 0).astype(np.int64)
+                # if ENABLE_PARTIAL_INVERSION_HACK and clean_int(basename) >= 55:
+                    # lab_img = (lab_img == 0).astype(np.int64)
 
                 # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
                 lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
@@ -324,10 +352,10 @@ Model info:
 - model: {model_path}
 - thresh: {thresh}
 
-- IoU: {iou}
-- DSC: {dsc}
-- precision: {precision}
-- recall: {recall}
+- IoU: {iou * 100:.1f}%
+- DSC: {dsc * 100:.1f}%
+- precision: {precision * 100:.1f}%
+- recall: {recall * 100:.1f}%
 """
 )
 

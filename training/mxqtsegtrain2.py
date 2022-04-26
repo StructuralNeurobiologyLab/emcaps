@@ -54,6 +54,7 @@ import albumentations
 from tqdm import tqdm
 
 from training.tifdirdata import V6TifDirData2d
+from utils import V5NAMES_TO_OLDNAMES
 
 
 # @dataclass
@@ -106,6 +107,7 @@ parser.add_argument(
     '--deterministic', action='store_true',
     help='Run in fully deterministic mode (at the cost of execution speed).'
 )
+parser.add_argument('-c', '--constraintype', default=None, help='Constrain training and validation to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
 args = parser.parse_args()
 
 conf = args # TODO
@@ -137,16 +139,33 @@ print(f'Running on device: {device}')
 SHEET_NAME = 'all_metadata'
 
 
-DATA_SELECTION = [
-    'HEK_1xMT3-QtEnc-Flag',
-    'DRO_1xMT3-MxEnc-Flag-NLS',
-    'DRO_1xMT3-QtEnc-Flag-NLS',
-    'HEK_1xMT3-MxEnc-Flag',
-    'HEK-2xMT3-QtEnc-Flag',
-    'HEK-2xMT3-MxEnc-Flag',
-    'HEK-3xMT3-QtEnc-Flag',
-    'HEK-1xTmEnc-BC2-Tag',
-]
+if args.constraintype is None:
+    DATA_SELECTION_V5NAMES = [
+        '1M-Mx',
+        '1M-Qt',
+        '2M-Mx',
+        '2M-Qt',
+        '3M-Qt',
+        '1M-Tm',
+        'DRO-1M-Mx',
+        'DRO-1M-Qt',
+    ]
+else:
+    DATA_SELECTION_V5NAMES = [args.constraintype]
+
+DATA_SELECTION = [V5NAMES_TO_OLDNAMES[n] for n in DATA_SELECTION_V5NAMES]
+
+
+# DATA_SELECTION = [
+#     'HEK_1xMT3-QtEnc-Flag',
+#     'DRO_1xMT3-MxEnc-Flag-NLS',
+#     'DRO_1xMT3-QtEnc-Flag-NLS',
+#     'HEK_1xMT3-MxEnc-Flag',
+#     'HEK-2xMT3-QtEnc-Flag',
+#     'HEK-2xMT3-MxEnc-Flag',
+#     'HEK-3xMT3-QtEnc-Flag',
+#     'HEK-1xTmEnc-BC2-Tag',
+# ]
 
 # HOST_ORG = 'Drosophila'
 # HOST_ORG = 'all'
@@ -236,11 +255,8 @@ model = UNet(
 ).to(device)
 
 # USER PATHS
-# save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_hek4_bin').expanduser()
-# save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_{"dro" if HOST_ORG == "Drosophila" else "hek"}_bin').expanduser()
-# save_root = Path(conf.save_root).expanduser()
-# save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4_ifbg').expanduser()
-save_root = Path('/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6').expanduser()
+sr_suffix = ''
+save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6{sr_suffix}').expanduser()
 
 
 max_steps = conf.max_steps
@@ -263,14 +279,14 @@ dt_scale = 30
 
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
-    # transforms.RandomCrop((512, 512)),
+    transforms.RandomCrop((512, 512)),
     # transforms.DropIfTooMuchBG(threshold=1 - (1 / 500**2)),
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
     transforms.RandomFlip(ndim_spatial=2),
 ]
 
 train_transform = common_transforms + [
-    transforms.RandomCrop((512, 512)),
+    # transforms.RandomCrop((512, 512)),
     transforms.AlbuSeg2d(albumentations.ShiftScaleRotate(
         p=0.98, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
@@ -341,7 +357,7 @@ train_dataset = V6TifDirData2d(
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
-    epoch_multiplier=30,
+    epoch_multiplier=300,
 )
 
 valid_dataset = V6TifDirData2d(
@@ -357,7 +373,7 @@ valid_dataset = V6TifDirData2d(
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
-    epoch_multiplier=20,
+    epoch_multiplier=40,
 )
 
 
@@ -496,12 +512,17 @@ _MTCE = 'MTCE_' if USE_MTCE else ''
 _GRAY_AUG = 'GA_' if USE_GRAY_AUG else ''
 _GDL_CE = 'GDL_CE_' if USE_GDL_CE else ''
 
+if len(DATA_SELECTION_V5NAMES) == 1:
+    _CONSTR_TYPE = f'{DATA_SELECTION_V5NAMES[0]}_'
+else:
+    _CONSTR_TYPE = ''
+
 exp_name = conf.exp_name
 if exp_name is None:
     exp_name = ''
 timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
-exp_name = f'{_GDL_CE}{_MTCE}{_MQ}{_VEC_DT}{_MULTILABEL}{_DT}{_GRAY_AUG}{exp_name}'
+exp_name = f'{_CONSTR_TYPE}{_GDL_CE}{_MTCE}{_MQ}{_VEC_DT}{_MULTILABEL}{_DT}{_GRAY_AUG}{exp_name}'
 
 
 

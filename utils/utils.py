@@ -63,6 +63,7 @@ LABEL_NAME = class_info['label_name']
 OLD_CLASS_IDS = class_info['class_ids']  # Use v5 class names
 OLD_CLASS_NAMES = {v: k for k, v in OLD_CLASS_IDS.items()}
 OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
+V5NAMES_TO_OLDNAMES = {v: k for k, v in OLDNAMES_TO_V5NAMES.items()}
 
 
 def get_path_prefix() -> Path:
@@ -86,8 +87,7 @@ def get_meta(sheet_path=None, sheet_name=0, v5names=True) -> pd.DataFrame:
     meta = meta.loc[meta['num'] >= 16]
     meta = meta.rename(columns={'Short experimental condition': 'scond'})
     meta = meta.convert_dtypes()
-    if v5names:
-        meta.scond.replace(OLDNAMES_TO_V5NAMES, inplace=True)
+    meta['scondv5'] = meta.scond.replace(OLDNAMES_TO_V5NAMES)
     return meta
 
 
@@ -101,13 +101,25 @@ OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
 #     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
 
 
+def clean_int(text: str) -> int:
+    cleaned = ''.join([c for c in text if c.isdigit()])
+    return int(cleaned)
+
+
 # Also works for numbers
 @lru_cache(maxsize=1024)
 def get_meta_row(path_or_num, *args, **kwargs) -> pd.Series:
     meta = get_meta(*args, **kwargs)
-    if not isinstance(path_or_num, Path):
-        path = Path(str(path_or_num))
-    row = meta.loc[meta['num'] == int(path.stem)]
+    if isinstance(path_or_num, Path):
+        path_or_num = path_or_num.stem
+    if isinstance(path_or_num, str):
+        dirty_img_num = str(path_or_num)  # can contain other non-digit characters (e.g. "_val")
+        img_num = clean_int(dirty_img_num)  # only retain digits and convert to int
+    elif isinstance(path_or_num, int):
+        img_num = path_or_num
+    else:
+        raise TypeError(f'{path_or_num} has unhandled type {type(path_or_num)}.')
+    row = meta.loc[meta.num == img_num]
     assert row.shape[0] == 1  # num is unique
     row = row.squeeze(0) #  -> to pd.Series
     return row
@@ -116,15 +128,19 @@ def get_meta_row(path_or_num, *args, **kwargs) -> pd.Series:
 @lru_cache(maxsize=1024)
 def get_old_enctype(path) -> str:
     row = get_meta_row(path)
-    old_enctype = row.scond.item()
+    # old_enctype = row.scond.item()
+    old_enctype = row.scond
     assert old_enctype in OLD_CLASS_NAMES.values(), f'{old_enctype} not in {OLD_CLASS_NAMES.values()}'
     return old_enctype
 
 
 @lru_cache(maxsize=1024)
 def get_v5_enctype(path) -> str:
-    old_enctype = get_old_enctype(path)
-    v5_enctype = OLDNAMES_TO_V5NAMES[old_enctype]
+    # old_enctype = get_old_enctype(path)
+    # v5_enctype = OLDNAMES_TO_V5NAMES[old_enctype]
+    row = get_meta_row(path)
+    # old_enctype = row.scond.item()
+    v5_enctype = row.scondv5
     assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
     return v5_enctype
 
@@ -162,13 +178,16 @@ def read_image(path: Path) -> np.ndarray:
     return img
 
 
-def ensure_not_inverted(lab: np.ndarray, threshold: float = 0.5, verbose=True) -> np.ndarray:
+def ensure_not_inverted(lab: np.ndarray, threshold: float = 0.5, verbose=True, error=False) -> np.ndarray:
     """Heuristic to ensure that the label is not inverted.
     
     It is not plausible that there is more foreground than background in a label image."""
     if np.any(lab < 0) or np.any(lab > 1):
         raise ValueError('Labels must be in the range [0, 1] (binary).')
-    if lab.mean().item() > 0.5:
+    mean = lab.mean().item()
+    if mean > threshold:
+        if error:
+            raise ValueError(f'Binary label has unplausibly high mean {mean:.2f}. Please check if it is inverted.')
         if verbose:
             print('ensure_not_inverted: re-inverting labels')
         lab = ~lab
