@@ -56,6 +56,22 @@ pre_predict_transform = transforms.Compose([
 ENABLE_ENCTYPE_SUBDIRS = True
 ZERO_LABELS = False
 
+
+import argparse
+parser = argparse.ArgumentParser(description='Train a network.')
+parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
+parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
+args = parser.parse_args()
+
+selected_enctype = args.constraintype
+use_expert = args.use_expert
+
+"""
+for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
+    python -m inference.inference -c $ETYPE
+end
+"""
+
 thresh = 127
 dt_thresh = 0.00
 multi_thresh = 100
@@ -69,16 +85,14 @@ multi_label_names = {
     5: 'cytoplasmic_region',
 }
 
-# Select validation images from all experimental conditions
-results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v6').expanduser()
+if selected_enctype is None:
+    # Select validation images from all experimental conditions
+    results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v6').expanduser()
+else:
+    msuffix = 'expert' if use_expert else 'common'
+    results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v6{msuffix}-{selected_enctype}').expanduser()
 data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
 
-
-# TODO: Migrate from valid_split.yaml to xlsx parsing like in patchifyseg4
-
-# valid_split_path = './valid_split.yaml'
-# with open(valid_split_path) as f:
-#     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
 
 # DATA_SELECTION = [
 #     # 'DRO_1xMT3-MxEnc-Flag-NLS',
@@ -91,16 +105,19 @@ data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expandu
 #     'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
 # ]
 
-DATA_SELECTION_V5NAMES = [
-    '1M-Mx',
-    '1M-Qt',
-    '2M-Mx',
-    '2M-Qt',
-    '3M-Qt',
-    '1M-Tm',
-    # 'DRO-1M-Mx',
-    # 'DRO-1M-Qt',
-]
+if selected_enctype is None:
+    DATA_SELECTION_V5NAMES = [
+        '1M-Mx',
+        '1M-Qt',
+        '2M-Mx',
+        '2M-Qt',
+        '3M-Qt',
+        '1M-Tm',
+        # 'DRO-1M-Mx',
+        # 'DRO-1M-Qt',
+    ]
+else:
+    DATA_SELECTION_V5NAMES = [selected_enctype]
 
 
 def find_v6_val_images(isplitpath=None):
@@ -161,11 +178,23 @@ for p in [results_root]:
     p.mkdir(exist_ok=True)
 
 
-model_paths = eul([
-    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
-    # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/B_GA___UNet__22-04-26_01-30-56/model_step130000.pt'
-])
+if use_expert:
+    _empaths = {
+        '1M-Mx': '1M-Mx_B_GA___UNet__22-04-26_22-33-13',
+        '1M-Qt': '1M-Qt_B_GA___UNet__22-04-26_22-34-22',
+        '2M-Mx': '2M-Mx_B_GA___UNet__22-04-26_22-34-00',
+        '2M-Qt': '2M-Qt_B_GA___UNet__22-04-26_22-34-38',
+        '3M-Qt': '3M-Qt_B_GA___UNet__22-04-26_22-36-23',
+        '1M-Tm': '1M-Tm_B_GA___UNet__22-04-26_22-36-20',
+    }
+    _empaths = {k: f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/{v}/model_step130000.pt' for k, v in _empaths.items()}
+    model_paths = [_empaths[selected_enctype]]
+else:
+    model_paths = [
+        # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
+        # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
+        '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/B_GA___UNet__22-04-26_01-30-56/model_step130000.pt'
+    ]
 
 
 for model_path in model_paths:
