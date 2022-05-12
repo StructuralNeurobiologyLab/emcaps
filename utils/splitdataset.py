@@ -89,6 +89,8 @@ for entry in meta.itertuples():
     img_num = entry.num
     # Load original images and resources
     res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True)
+    if res.was_inverted:
+        logger.info(f'Image {img_num} was re-inverted.')
     if is_excluded(res.metarow):
         logger.info(f'Skipping image {img_num} because it is excluded from ML usage via meta spreadsheet.')
         continue

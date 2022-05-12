@@ -40,7 +40,7 @@ parser.add_argument(
     '-m', '--model-path', metavar='PATH',
     help='Path to pretrained model which to use.',
     # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v4a_uni/erasemaskbg___EffNetV2__22-03-19_02-42-10/model_final.pt',
-    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6/erasemaskbg_dr5__EffNetV2__22-05-09_15-45-27/model_step20000.pts',
+    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6/erasemaskbg_dr5_M__EffNetV2__22-05-09_15-48-52/model_step40000.pts',
 )
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument(
@@ -115,21 +115,30 @@ print('\n== Patch selection ==')
 all_targets = []
 all_preds = []
 
-def evaluate(vmeta, split=None):
-    img_preds = {}
-    img_pred_labels = {}
-    img_targets = {}
-    img_target_labels = {}
+def evaluate(vmeta, groupkey, split=None):
+    group_preds = {}
+    group_pred_labels = {}
+    group_targets = {}
+    group_target_labels = {}
 
-    for i in vmeta.img_num.unique():
-        # For each source image:
-        imgmeta = vmeta.loc[vmeta.img_num == i]
-        # Each image only contains one enctype
-        assert len(imgmeta.enctype.unique() == 1)
-        target_label = imgmeta.iloc[0].enctype
+    # img_preds = {k: [] for k in CLASS_IDS.keys()}
+    # img_pred_labels = {k: [] for k in CLASS_IDS.keys()}
+    # img_targets = {k: [] for k in CLASS_IDS.keys()}
+    # img_target_labels = {k: [] for k in CLASS_IDS.keys()}
+
+    for group in vmeta[groupkey].unique():
+        # For each group instance:
+        gvmeta = vmeta.loc[vmeta[groupkey] == group]
+        assert len(gvmeta.enctype.unique() == 1)
+        target_label = gvmeta.iloc[0].enctype
         target = CLASS_IDS[target_label]
 
-        print(f'\nImage {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
+        print(f'\Group {group} yields {gvmeta.shape[0]} patches.')
+
+        group_preds[group] = []
+        group_pred_labels[group] = []
+        group_targets[group] = []
+        group_target_labels[group] = []
 
         # if SAMPLES_PER_IMG > 0:  # Randomly sample only SAMPLES_PER_IMG patches
         #     imgmeta = imgmeta.sample(min(imgmeta.shape[0], SAMPLES_PER_IMG))
@@ -137,20 +146,11 @@ def evaluate(vmeta, split=None):
         #     print(f'Image {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
 
 
-        if split is not None:
-            a, b = split
-            imgmeta = imgmeta.iloc[a:b]
-
-        img_preds[i] = []
-        img_pred_labels[i] = []
-        img_targets[i] = target
-        img_target_labels[i] = target_label
-
         preds = []
         targets = []
         pred_labels = []
         target_labels = []
-        for patch_entry in imgmeta.itertuples():
+        for patch_entry in gvmeta.itertuples():
             raw_fname = patch_entry.patch_fname
             nobg_fpath = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
             patch = imageio.imread(nobg_fpath).astype(np.float32)[None][None]
@@ -179,8 +179,6 @@ def evaluate(vmeta, split=None):
     img_majority_pred_names = {}
     img_correct_ratios = {}
     for k, v in img_preds.items():
-        if not v:
-            continue
         img_majority_preds[k] = np.argmax(np.bincount(v))
         # TODO: This is broken!
         if target in v:

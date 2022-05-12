@@ -10,6 +10,7 @@ from os.path import expanduser as eu
 from pathlib import Path
 from functools import lru_cache
 from dataclasses import dataclass
+from typing import Tuple
 
 import imageio
 import numpy as np
@@ -178,20 +179,21 @@ def read_image(path: Path) -> np.ndarray:
     return img
 
 
-def ensure_not_inverted(lab: np.ndarray, threshold: float = 0.5, verbose=True, error=False) -> np.ndarray:
+def ensure_not_inverted(lab: np.ndarray, threshold: float = 0.5, verbose=True, error=False) -> Tuple[np.ndarray, bool]:
     """Heuristic to ensure that the label is not inverted.
     
     It is not plausible that there is more foreground than background in a label image."""
     if np.any(lab < 0) or np.any(lab > 1):
         raise ValueError('Labels must be in the range [0, 1] (binary).')
     mean = lab.mean().item()
+    was_inverted = False
     if mean > threshold:
         if error:
             raise ValueError(f'Binary label has unplausibly high mean {mean:.2f}. Please check if it is inverted.')
         if verbose:
             print('ensure_not_inverted: re-inverting labels')
         lab = ~lab
-    return lab
+    return lab, was_inverted
 
 
 @dataclass
@@ -203,6 +205,7 @@ class ImageResources:
     roimask: Optional[np.ndarray] = None
     rawpath: Optional[Path] = None
     curated: bool = False
+    was_inverted: bool = False
 
 
 def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True):
@@ -223,10 +226,11 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
                 label_path = candidate  # Update label_path
                 is_curated = True
                 break  # Found it, stop searching
+    was_inverted = False
     if label_path.is_file():
         label = imageio.imread(label_path)
         label = label > 0  # Binarize
-        label = ensure_not_inverted(label)
+        label, was_inverted = ensure_not_inverted(label)
     else:
         label = None
 
@@ -239,6 +243,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
         metarow=metarow,
         rawpath=raw_path,
         curated=is_curated,
+        was_inverted=was_inverted,
     )
 
     return imgres

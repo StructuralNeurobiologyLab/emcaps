@@ -21,6 +21,9 @@ import yaml
 
 from elektronn3.data import transforms
 
+import utils
+from utils.utils import OLD_CLASS_IDS, OLD_CLASS_NAMES, CLASS_NAMES, CLASS_IDS
+
 logger = logging.getLogger('elektronn3log')
 
 
@@ -38,12 +41,6 @@ EFULLNAMES = {
     1: 'QtEnc'
 }
 
-valid_split_path = './class_info.yaml'
-with open(valid_split_path) as f:
-    CLASS_INFO = yaml.load(f, Loader=yaml.FullLoader)
-
-CLASS_IDS = CLASS_INFO['class_ids']
-CLASS_NAMES = list(CLASS_IDS.keys())
 
 MMMT3_TYPE = '1xMmMT3'
 # MMMT3_TYPE = '2xMmMT3'
@@ -72,6 +69,102 @@ def create_circular_mask(h, w, center=None, radius=None):
     dist_from_center = np.sqrt((xx - center[0])**2 + (yy - center[1])**2)
     mask = dist_from_center <= radius
     return mask
+
+
+class V6Patches(data.Dataset):
+    """Image-level classification dataset loader for small patches, similar to MNIST"""
+    def __init__(
+            self,
+            # data_root: str,
+            descr_sheet: Tuple[Union[str, Path], str],
+            train: bool = True,
+            transform=transforms.Identity(),
+            inp_dtype=np.float32,
+            target_dtype=np.int64,
+            dilate_masks_by: int = 0,
+            erase_mask_bg: bool = False,
+            erase_disk_mask_radius: int = 0,
+            epoch_multiplier: int = 1,  # Pretend to have more data in one epoch
+    ):
+        super().__init__()
+        # self.data_root = data_root
+        self.train = train
+        self.transform = transform
+        self.inp_dtype = inp_dtype
+        self.target_dtype = target_dtype
+        self.dilate_masks_by = dilate_masks_by
+        self.erase_mask_bg = erase_mask_bg
+        self.erase_disk_mask_radius = erase_disk_mask_radius
+        self.epoch_multiplier = epoch_multiplier
+
+        sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
+        self._sheet = sheet
+        meta = sheet.copy()
+
+        if self.train:
+            logger.info('\nTraining data:')
+            meta = meta.loc[meta.train == True]  # Explicit comparison due to possible integer types
+        else:
+            logger.info('\nValidation data:')
+            meta = meta.loc[meta.validation == True]  # Explicit comparison due to possible integer types
+
+        self.meta = meta
+
+        # self.root_path = Path(data_root).expanduser()
+        self.root_path = Path(descr_sheet[0]).parent
+
+        self.inps = []
+        self.targets = []
+
+        for patch_meta in self.meta.itertuples():
+            inp = mimread(self.root_path / 'raw' / patch_meta.patch_fname)
+            if self.erase_mask_bg:
+                # Erase mask background from inputs
+                mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+                if self.dilate_masks_by > 0:
+                    disk = sm.disk(self.dilate_masks_by)
+                    # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
+                    mask = sm.binary_dilation(mask, selem=disk)
+                inp[mask == 0] = 0
+            if self.erase_disk_mask_radius > 0:
+                mask = create_circular_mask(*inp.shape, radius=self.erase_disk_mask_radius)
+                inp[mask > 0] = 0
+
+            # mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+            # inp = mask * 255
+
+            target = CLASS_IDS[patch_meta.enctype]
+            self.inps.append(inp)
+            self.targets.append(target)
+
+        self.inps = np.stack(self.inps).astype(self.inp_dtype)
+        self.targets = np.stack(self.targets).astype(self.target_dtype)
+
+        for enctype in meta.enctype.unique():
+            logger.info(f'{enctype}: {meta[meta.enctype == enctype].shape[0]}')
+
+
+
+    def __getitem__(self, index):
+        index %= len(self.meta)  # Wrap around to support epoch_multiplier
+        inp = self.inps[index]
+        target = self.targets[index]
+        fname = self.meta.patch_fname.iloc[index]
+        label_name = target
+        fname = f'{fname} ({label_name})'
+        inp = inp[None]  # (C=1, H, W)
+        # Pass None instead of target because scalar targets are not to be augmented.
+        inp, _ = self.transform(inp, None)
+        sample = {
+            'inp': torch.as_tensor(inp),
+            'target': torch.as_tensor(target),
+            'fname': fname,
+        }
+        return sample
+
+    def __len__(self):
+        return len(self.meta) * self.epoch_multiplier
+
 
 
 class UPatches(data.Dataset):

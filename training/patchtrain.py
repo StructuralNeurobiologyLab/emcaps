@@ -41,7 +41,7 @@ from torch.utils import data
 
 elektronn3.select_mpl_backend('Agg')
 
-from elektronn3.training import Trainer, Backup
+from elektronn3.training import Trainer, Backup, SWA
 from elektronn3.training import metrics
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
@@ -49,17 +49,19 @@ from elektronn3.models.unet import UNet
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import UPatches
+from training.tifdirdata import V6Patches
 
 from models.effnetv2 import effnetv2_s, effnetv2_m
 from models.cct import CCT
+
+import utils
 
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=40_000,
+    '-m', '--max-steps', type=int, default=80_000,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -104,15 +106,6 @@ if NEGATIVE_SAMPLING:
     assert not ERASE_MASK_BG
 
 
-valid_split_path = './class_info.yaml'
-with open(valid_split_path) as f:
-    CLASS_INFO = yaml.load(f, Loader=yaml.FullLoader)
-
-CLASS_IDS = CLASS_INFO['class_ids']
-# CLASS_NAMES = list(CLASS_IDS.keys())
-CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
-
-
 
 
 # if NEGATIVE_SAMPLING:
@@ -121,13 +114,13 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
     # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4a_uni/patchmeta_traintest.xlsx'), 'Sheet1')
+descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v6_dr5/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
 out_channels = 8
 
-model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
-# model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
+# model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
+model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
 # model = CCT(
 #     img_size=28,
 #     n_input_channels=1,
@@ -142,7 +135,7 @@ model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 # USER PATHS
 # save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/trainings3')
 # save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/trainings3_hek')
-save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patch_trainings_v4a_uni')
+save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patch_trainings_v6')
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -166,7 +159,7 @@ common_transforms = [
 
 train_transform = common_transforms + [
     transforms.AlbuSeg2d(albumentations.ShiftScaleRotate(
-        p=0.99, rotate_limit=180, shift_limit=0.0, scale_limit=0.02, interpolation=2
+        p=0.9, rotate_limit=180, shift_limit=0.0, scale_limit=0.02, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
     # transforms.ElasticTransform(prob=0.5, sigma=2, alpha=5),
     # transforms.AdditiveGaussianNoise(prob=0.9, sigma=0.1),
@@ -183,7 +176,7 @@ valid_transform = transforms.Compose(valid_transform)
 # Specify data set
 
 
-train_dataset = UPatches(
+train_dataset = V6Patches(
     descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
@@ -192,7 +185,7 @@ train_dataset = UPatches(
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
 
-valid_dataset = UPatches(
+valid_dataset = V6Patches(
     descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,
@@ -209,6 +202,26 @@ optimizer = optim.Adam(
     amsgrad=True
 )
 lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+
+# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
+
+# # Set to True to perform Cyclical LR range test instead of normal training
+# #  (see https://arxiv.org/abs/1506.01186, sec. 3.3).
+# do_lr_range_test = False
+# if do_lr_range_test:
+#     # Begin with a very small lr and double it every 450 steps.
+#     for grp in optimizer.param_groups:
+#         grp['lr'] = 1e-7  
+#     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, 450, 2)
+# else:
+#     lr_sched = torch.optim.lr_scheduler.CyclicLR(
+#         optimizer,
+#         base_lr=1e-5,
+#         max_lr=5e-4,
+#         step_size_up=4_000,
+#         step_size_down=4_000,
+#         cycle_momentum=True if 'momentum' in optimizer.defaults else False
+#     )
 
 # Validation metrics
 
@@ -234,9 +247,8 @@ valid_metrics = {}
 
 for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall]:
     for c in range(out_channels):
-        valid_metrics[f'val_{evaluator.name}_{CLASS_NAMES[c]}'] = evaluator(c)
-
-valid_metrics[f'val_accuracy_mean'] = metrics.Accuracy()  # Mean metric
+        valid_metrics[f'val_{evaluator.name}_{utils.CLASS_NAMES[c]}'] = evaluator(c)
+    valid_metrics[f'val_{evaluator.name}_mean'] = evaluator()
 
 criterion = nn.CrossEntropyLoss().to(device)
 
@@ -272,12 +284,12 @@ trainer = Trainer(
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
-    save_jit=None,
+    save_jit='script',
     schedulers={"lr": lr_sched},
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(2000, 30_000 + 1, 2000)),
+    extra_save_steps=list(range(4000, 60_000 + 1, 4000)),
 )
 
 # Archiving training script, src folder, env info
