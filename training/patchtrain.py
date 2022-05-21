@@ -51,7 +51,7 @@ import albumentations
 
 from training.tifdirdata import V6Patches
 
-from models.effnetv2 import effnetv2_s, effnetv2_m
+from models.effnetv2 import effnetv2_s, effnetv2_m, effnetv2_l
 from models.cct import CCT
 
 import utils
@@ -61,7 +61,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=80_000,
+    '-m', '--max-steps', type=int, default=80_001,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -114,28 +114,18 @@ if NEGATIVE_SAMPLING:
     # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v6_dr5/patchmeta_traintest.xlsx'), 'Sheet1')
+descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v6e_dr5/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
 out_channels = 8
 
 # model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
 model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
-# model = CCT(
-#     img_size=28,
-#     n_input_channels=1,
-#     kernel_size=3,
-#     embedding_dim=96,
-# )
-
-
-
+# model = effnetv2_l(in_c=1, num_classes=out_channels).to(device)
 
 
 # USER PATHS
-# save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/trainings3')
-# save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/trainings3_hek')
-save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patch_trainings_v6')
+save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patch_trainings_v6e')
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -180,7 +170,7 @@ train_dataset = V6Patches(
     descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
-    epoch_multiplier=5 if NEGATIVE_SAMPLING else 10,
+    epoch_multiplier=5 if NEGATIVE_SAMPLING else 50,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
@@ -189,7 +179,7 @@ valid_dataset = V6Patches(
     descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,
-    epoch_multiplier=4 if NEGATIVE_SAMPLING else 10,
+    epoch_multiplier=4 if NEGATIVE_SAMPLING else 30,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
@@ -280,7 +270,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=2,  # TODO
+    num_workers=8,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
@@ -289,7 +279,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(4000, 60_000 + 1, 4000)),
+    extra_save_steps=list(range(10_000, max_steps - 1, 10_000)),
 )
 
 # Archiving training script, src folder, env info

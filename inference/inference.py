@@ -26,7 +26,7 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 
 
-from utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted
+from utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
 
 
 # torch.backends.cudnn.benchmark = True
@@ -85,13 +85,11 @@ multi_label_names = {
     5: 'cytoplasmic_region',
 }
 
-if selected_enctype is None:
-    # Select validation images from all experimental conditions
-    results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v6').expanduser()
-else:
-    msuffix = 'expert' if use_expert else 'common'
-    results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v6{msuffix}-{selected_enctype}').expanduser()
-data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expanduser()
+results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v6e')
+if selected_enctype is not None:
+    msuffix = '_expert' if use_expert else ''
+    results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
+data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 
 
 # DATA_SELECTION = [
@@ -104,6 +102,7 @@ data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/').expandu
 #     'HEK-3xMT3-QtEnc-Flag',
 #     'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
 # ]
+DRO_V5NAMES = ['DRO-1M-Mx', 'DRO-1M-Qt']
 
 if selected_enctype is None:
     DATA_SELECTION_V5NAMES = [
@@ -116,14 +115,26 @@ if selected_enctype is None:
         # 'DRO-1M-Mx',
         # 'DRO-1M-Qt',
     ]
+    # DATA_SELECTION_V5NAMES = [  # for Drosophila
+    #     'DRO-1M-Mx',
+    #     'DRO-1M-Qt',
+    # ]
 else:
     DATA_SELECTION_V5NAMES = [selected_enctype]
 
 
+def find_full_dro_images():
+    meta = get_meta()
+    dro_meta = meta.loc[meta.scondv5.isin(DRO_V5NAMES)]
+    dro_image_numbers = dro_meta.num.to_list()
+    paths = [data_root / f'{i}/{i}.tif' for i in dro_image_numbers]
+    return paths
+
+
 def find_v6_val_images(isplitpath=None):
-    """Find paths to all raw validation images of split v6"""
+    """Find paths to all raw validation images of split v6a"""
     if isplitpath is None:
-        isplitpath = data_root / 'isplitdata_v6'
+        isplitpath = data_root / 'isplitdata_v6a'
     val_img_paths = []
     for p in isplitpath.rglob('*_val.tif'):  # Look for all validation raw images recursively
         if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
@@ -152,6 +163,7 @@ def find_v6_val_images(isplitpath=None):
 # img_paths = [f'/wholebrain/scratch/mdraw/tum/Drosophila_validation/{i}.TIF' for i in range(1, 20 + 1)]
 
 img_paths = find_v6_val_images()
+# img_paths = find_full_dro_images()
 
 
 # for p in [results_path / scond for scond in DATA_SELECTION]:
@@ -191,12 +203,14 @@ if use_expert:
     model_paths = [_empaths[selected_enctype]]
 else:
     model_paths = [
-        # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA_tm_only__UNet__22-02-28_20-13-52/model_step30000.pt'  # TmEnc only
-        # f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_uni_v4/GDL_CE_B_GA___UNet__22-02-26_02-02-13/model_step150000.pt'  # universal
-        '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/B_GA___UNet__22-04-26_01-30-56/model_step130000.pt'
+        # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_nodro__UNet__22-05-16_15-45-43/model_step160000.pts'  # without Drosophila classes
+        # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_notm_nodro__UNet__22-05-16_01-44-01/model_step160000.pts'  # without Tm and Drosophila classes
+        '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # without Drosophila classes
+        # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro_notm__UNet__22-05-19_01-43-20/model_step160000.pts'  # without Tm and Drosophila classes
+        
     ]
 
-
+assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
 for model_path in model_paths:
     modelname = os.path.basename(os.path.dirname(model_path))
 
@@ -267,7 +281,7 @@ for model_path in model_paths:
                 if not Path(lab_path).exists():
                     lab_path = f'{img_path[:-4]}_{label_name}.TIF'
                 lab_img = np.array(imageio.imread(lab_path))
-                lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False).astype(np.int64)
+                lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False)[0].astype(np.int64)
                 # if invert_labels:
                 #     lab_img = (lab_img == 0).astype(np.int64)
                 # if ENABLE_PARTIAL_INVERSION_HACK and clean_int(basename) >= 55:

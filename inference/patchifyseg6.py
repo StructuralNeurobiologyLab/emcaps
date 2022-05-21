@@ -99,9 +99,6 @@ dataset_mean = (128.0,)
 dataset_std = (128.0,)
 
 
-invert_labels = True  # Workaround: Fixes inverted TIF loading
-
-
 pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ])
@@ -131,9 +128,9 @@ USE_GT = False
 FILL_HOLES = True
 DILATE_MASKS_BY = 5
 
-MIN_CIRCULARITY = 0.7
+MIN_CIRCULARITY = 0.8
 
-USE_EXTRA_TM_MODEL = True
+USE_EXTRA_TM_MODEL = False
 
 
 
@@ -159,10 +156,15 @@ DATA_SELECTION = [
     '1M-Tm',  # -> requires extra model
 ]
 
+# DATA_SELECTION = [
+#     'DRO-1M-Mx',  # Drosophila
+#     'DRO-1M-Qt',  # Drosophila
+# ]
+
 
 root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 sheet_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
-isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v6/')
+isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v6a/')
 
 
 
@@ -175,15 +177,16 @@ for p in isplitdata_root.rglob('*.tif'):
         img_paths.append(p)
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
-_gt_str = '_gt' if USE_GT else ''
-patch_out_path = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6_dr{DILATE_MASKS_BY}{_tmextra_str}')
-if USE_GT:
-    patch_out_path = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6__{_gt_str}_dr{DILATE_MASKS_BY}{_tmextra_str}')
-    # patch_out_path = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v4_uni__from_gt_a')
+# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6_notm_nodro_dr{DILATE_MASKS_BY}{_tmextra_str}')
+patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6e_dr{DILATE_MASKS_BY}')
 
+if USE_GT:
+    patch_out_path = f'{patch_out_path}__gt'
 
 model_paths = eul([
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/B_GA___UNet__22-04-26_01-30-56/model_step130000.pt'
+    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_nodro__UNet__22-05-16_15-45-43/model_step160000.pts'  # without Drosophila classes
+    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_notm_nodro__UNet__22-05-16_01-44-01/model_step160000.pts'  # without Tm and Drosophila classes
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # data split v6a, without Drosophila classes
 ])
 
 # Create output directories
@@ -200,7 +203,6 @@ logger.addHandler(fh)
 logger.info(f'Using data from {isplitdata_root}')
 logger.info(f'Using meta spreadsheet {sheet_path}')
 logger.info(f'Writing outputs to {patch_out_path}')
-
 
 
 class PatchMeta(NamedTuple):
@@ -260,8 +262,9 @@ for model_path in model_paths:
         enctype = imgmeta.scondv5
 
         if pd.isna(enctype) or enctype not in DATA_SELECTION:
-            logger.debug(f'enctype {enctype} not found')
+            logger.debug(f'enctype {enctype} skipped')
             continue
+        # enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
 
         inp = np.array(imageio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
@@ -289,6 +292,7 @@ for model_path in model_paths:
         img_num = imgmeta.num
 
         is_validation = '_val' in img_path.stem
+        # is_validation = True  #DRO
         is_train = not is_validation
 
         cc, n_comps = ndimage.label(mask)
@@ -405,6 +409,7 @@ for role in ['train', 'validation']:
     min_n_samples = 1_000_000  # Unexpected high value for initialization
     min_scond = None
     for scond in DATA_SELECTION:
+        # scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
         matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
         n_samples[scond] = len(matching_patches)
         print(f'({role}, {scond}) n_samples: {n_samples[scond]}')
@@ -416,6 +421,7 @@ for role in ['train', 'validation']:
     # Sample min_scond patches each to create a balanced dataset
     scond_samples = {}
     for scond in DATA_SELECTION:
+        # scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
         # scond_samples[scond] = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
         matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
         scond_samples = matching_patches.sample(min_n_samples)

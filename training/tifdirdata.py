@@ -363,7 +363,7 @@ class V6TifDirData2d(data.Dataset):
             label_names: Sequence[str],
             valid_nums: Optional[Sequence[int]] = None,
             descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
-            data_subdirname: str = 'isplitdata_v6',
+            data_subdirname: str = 'isplitdata_v6a',
             meta_filter = lambda x: x,
             train: bool = True,
             transform=transforms.Identity(),
@@ -375,6 +375,7 @@ class V6TifDirData2d(data.Dataset):
             enable_binary_seg: bool = False,
             ignore_far_background_distance: int = 0,
             enable_partial_inversion_hack: bool = False,
+            dilate_targets_by: int = 0,
             epoch_multiplier=1,  # Pretend to have more data in one epoch
     ):
         super().__init__()
@@ -393,9 +394,12 @@ class V6TifDirData2d(data.Dataset):
         self.valid_nums = valid_nums
         self.enable_binary_seg = enable_binary_seg
         self.enable_partial_inversion_hack = enable_partial_inversion_hack
+        self.dilate_targets_by = dilate_targets_by
 
         if self.ignore_far_background_distance:
             self.ifbd_disk = sm.disk(self.ignore_far_background_distance)
+        if self.dilate_targets_by > 0:
+            self.td_disk = sm.disk(self.dilate_targets_by)
 
         sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
         self.sheet = sheet
@@ -493,6 +497,9 @@ class V6TifDirData2d(data.Dataset):
 
         if target.mean().item() > 0.2:
             print('Unusually high target mean in image number', img_num)
+
+        if self.dilate_targets_by > 0:
+            target = sm.binary_dilation(target, selem=self.td_disk).astype(target.dtype)
 
         # Mark regions to be ignored
         if self.ignore_far_background_distance > 0 and mrow['scond'] == 'HEK-1xTmEnc-BC2-Tag':

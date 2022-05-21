@@ -19,6 +19,7 @@ import yaml
 import torch
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 
@@ -39,14 +40,15 @@ parser = argparse.ArgumentParser(description='Evaluate a network.')
 parser.add_argument(
     '-m', '--model-path', metavar='PATH',
     help='Path to pretrained model which to use.',
-    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v4a_uni/erasemaskbg___EffNetV2__22-03-19_02-42-10/model_final.pt',
-    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6/erasemaskbg_dr5_M__EffNetV2__22-05-09_15-48-52/model_step40000.pts',
+    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6_notm_nodro/erasemaskbg_notm_dr5_M_ra__EffNetV2__22-05-16_01-56-49/model_step80000.pt'  # best without Tm, for patches_v6_dr5
+    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6e/erasemaskbg_S__EffNetV2__22-05-20_17-02-05/model_step80000.pts'  # best with Tm, for patches_v6e_dr5
 )
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument(
     '-n', '--nmaxsamples', type=int, default=0,
     help='Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).'
 )
+parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 args = parser.parse_args()
 
 
@@ -67,8 +69,16 @@ out_channels = 8
 from utils.utils import CLASS_NAMES, CLASS_IDS
 
 
+ENABLE_BINARY_1M = False  # restrict to only binary classification into 1M-Qt vs 1M-Mx
+ENABLE_TM = True  # Enable 1M-Tm type in evaluation
+
 CLASS_NAMES_IN_USE = list(CLASS_NAMES.values())[2:]
 
+if not ENABLE_TM:
+    CLASS_NAMES_IN_USE = CLASS_NAMES_IN_USE[:-1]
+
+if ENABLE_BINARY_1M:
+    CLASS_NAMES_IN_USE = CLASS_NAMES_IN_USE[:2]
 
 # USER PATHS
 
@@ -77,8 +87,11 @@ if os.getenv('CLUSTER') == 'WHOLEBRAIN':
 else:
     path_prefix = Path('~/tum/').expanduser()
 
-# patches_root = path_prefix / 'patches_v4a_uni/'
-patches_root = path_prefix / 'patches_v6_dr5/'
+# patches_root = path_prefix / 'patches_v6d_dro_0shot_dr5/'
+# patches_root = path_prefix / 'patches_v6_notm_nodro_dr5/'
+# patches_root = path_prefix / 'patches_v6_dr5/'
+patches_root = path_prefix / 'patches_v6e_dr5/'
+
 
 dataset_mean = (128.0,)
 dataset_std = (128.0,)
@@ -93,7 +106,14 @@ valid_transform = transforms.Compose(valid_transform)
 
 # SAMPLES_PER_IMG = 'all'
 # SAMPLES_PER_IMG = 1
-SAMPLES_PER_IMG = args.nmaxsamples
+MAX_SAMPLES_PER_GROUP = args.nmaxsamples
+
+
+# TODO: Random sampling
+
+
+# GROUPKEY = 'img_num'
+GROUPKEY = 'enctype'
 
 
 predictor = Predictor(
@@ -110,10 +130,37 @@ meta = pd.read_excel(f'{patches_root}/patchmeta_traintest.xlsx', sheet_name='She
 
 vmeta = meta.loc[meta.validation == True]
 
+# vmeta = vmeta.loc[vmeta.enctype != '1M-Tm']
+
 print('\n== Patch selection ==')
 
 all_targets = []
 all_preds = []
+
+
+# min_group_samples = min((vmeta[GROUPKEY].isin([g])).shape[0] for g in vmeta[GROUPKEY].unique())
+min_group_samples = np.inf
+for g in vmeta[GROUPKEY].unique():
+    min_group_samples = min(min_group_samples, (vmeta.loc[vmeta[GROUPKEY] == g]).shape[0])
+
+if MAX_SAMPLES_PER_GROUP == 0:
+    subseq_splits = [None]  # TODO: [None] has ambiguous meaning below
+else:
+    subseq_splits = []
+    for k in range(0, min_group_samples // MAX_SAMPLES_PER_GROUP, MAX_SAMPLES_PER_GROUP):
+        subseq_splits.append(range(k, k + MAX_SAMPLES_PER_GROUP))
+
+splits = subseq_splits
+
+# splits = range(min_group_samples)  # iterate over all individuals
+
+# splits = [None]  # do random sampling
+
+if args.verbose:
+    _print = print
+else:
+    def _print(*args, **kwargs): pass
+
 
 def evaluate(vmeta, groupkey, split=None):
     group_preds = {}
@@ -126,6 +173,7 @@ def evaluate(vmeta, groupkey, split=None):
     # img_targets = {k: [] for k in CLASS_IDS.keys()}
     # img_target_labels = {k: [] for k in CLASS_IDS.keys()}
 
+    _print(f'Grouping by {groupkey}')
     for group in vmeta[groupkey].unique():
         # For each group instance:
         gvmeta = vmeta.loc[vmeta[groupkey] == group]
@@ -133,17 +181,22 @@ def evaluate(vmeta, groupkey, split=None):
         target_label = gvmeta.iloc[0].enctype
         target = CLASS_IDS[target_label]
 
-        print(f'\Group {group} yields {gvmeta.shape[0]} patches.')
+        _print(f'Group {group} yields {gvmeta.shape[0]} patches.')
 
         group_preds[group] = []
         group_pred_labels[group] = []
         group_targets[group] = []
         group_target_labels[group] = []
 
-        # if SAMPLES_PER_IMG > 0:  # Randomly sample only SAMPLES_PER_IMG patches
-        #     imgmeta = imgmeta.sample(min(imgmeta.shape[0], SAMPLES_PER_IMG))
-        #     print(f'-> After reducing to a maximum of {SAMPLES_PER_IMG}, we now have:')
-        #     print(f'Image {i:03d} (class {target_label}) yields {imgmeta.shape[0]} patches.')
+        if MAX_SAMPLES_PER_GROUP > 0:
+            if split is None:  # Randomly sample only MAX_SAMPLES_PER_GROUP patches
+                gvmeta = gvmeta.sample(min(gvmeta.shape[0], MAX_SAMPLES_PER_GROUP))
+            elif isinstance(split, int):
+                gvmeta = gvmeta.iloc[split:split+1]
+            else:
+                gvmeta = gvmeta.iloc[split]
+            _print(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_GROUP}, we now have:')
+            _print(f'Group {group} yields {gvmeta.shape[0]} patches.')
 
 
         preds = []
@@ -156,8 +209,11 @@ def evaluate(vmeta, groupkey, split=None):
             patch = imageio.imread(nobg_fpath).astype(np.float32)[None][None]
 
             out = predictor.predict(patch)
-            pred = out[0].argmax(0).item()
-            confidence = out[0].numpy().ptp()  # peak-to-peak as confidence proxy
+            if ENABLE_BINARY_1M:
+                # Slice the 2 classes of interest, do argmax between them and restore class ID
+                pred = out[0, 2:4].argmax(0).item() + 2
+            else:
+                pred = out[0].argmax(0).item()
 
             pred_label = CLASS_NAMES[pred]
 
@@ -166,8 +222,15 @@ def evaluate(vmeta, groupkey, split=None):
             pred_labels.append(pred_label)
             target_labels.append(target_label)
 
-            img_preds[i].append(pred)
-            img_pred_labels[i].append(pred_label)
+            group_preds[group].append(pred)
+            group_pred_labels[group].append(pred_label)
+
+            # group_targets[group].append(target)
+            # group_target_labels[group].append(target_label)
+
+            group_targets[group] = target
+            group_target_labels[group] = target_label
+
 
             all_targets.append(target)
             all_preds.append(pred)
@@ -175,21 +238,21 @@ def evaluate(vmeta, groupkey, split=None):
         preds = np.array(preds)
         targets = np.array(targets)
 
-    img_majority_preds = {}
-    img_majority_pred_names = {}
-    img_correct_ratios = {}
-    for k, v in img_preds.items():
-        img_majority_preds[k] = np.argmax(np.bincount(v))
+    group_majority_preds = {}
+    group_majority_pred_names = {}
+    group_correct_ratios = {}
+    for k, v in group_preds.items():
+        group_majority_preds[k] = np.argmax(np.bincount(v))
         # TODO: This is broken!
-        if target in v:
-            img_correct_ratios[k] = np.bincount(v)[target] / len(v)
-        else:  # target does not appear in predicted values -> 0 correct
-            img_correct_ratios[k] = 0.
-        img_majority_pred_names[k] = CLASS_NAMES[img_majority_preds[k]]
+        # if pred in v:
+        #     group_correct_ratios[k] = np.bincount(v)[pred] / len(v)
+        # else:  # target does not appear in predicted values -> 0 correct
+        #     group_correct_ratios[k] = 0.
+        group_majority_pred_names[k] = CLASS_NAMES[group_majority_preds[k]]
 
-    print('\n\n==  Patch classification ==\n')
-    for i in img_preds.keys():
-        print(f'Image {i}\nTrue class: {img_target_labels[i]}\nPredicted classes: {img_pred_labels[i]}\n-> Majority vote result: {img_majority_pred_names[i]}')
+    _print('\n\n==  Patch classification ==\n')
+    for group in group_preds.keys():
+        _print(f'Group {group}\nTrue class: {group_target_labels[group]}\nPredicted classes: {group_pred_labels[group]}\n-> Majority vote result: {group_majority_pred_names[group]}')
         # print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')  # Broken
 
 
@@ -200,58 +263,53 @@ def evaluate(vmeta, groupkey, split=None):
                 v = np.sum((targets == a) & (preds == b))
                 print(f'T: {CLASS_NAMES[a]}, P: {CLASS_NAMES[b]} -> {v}')
 
-    img_targets_list = []
-    img_majority_preds_list = []
-    for img_num in img_targets.keys():
-        img_targets_list.append(img_targets[img_num])
-        img_majority_preds_list.append(img_majority_preds[img_num])
+    group_targets_list = []
+    group_majority_preds_list = []
+    for g in group_targets.keys():
+        group_targets_list.append(group_targets[g])
+        group_majority_preds_list.append(group_majority_preds[g])
 
-    return img_targets_list, img_majority_preds_list
+    return group_targets_list, group_majority_preds_list
 
-# Split available patch collection into multiple subcollections if possible
-# (as of patches_v5 we have at least 7 patches per image, so splitting can currently only be done for N=1 and N=3)
-# TODO: Split dynamically without hardcoded rules
-if SAMPLES_PER_IMG == 0:  # No sampling, use all images
-    splits = [None]
-elif SAMPLES_PER_IMG == 1:
-    splits = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)]
-elif SAMPLES_PER_IMG == 3:
-    splits = [(0, 3), (3, 6)]
-else:  # Only one split
-    splits = [(0, SAMPLES_PER_IMG)]
 
-full_img_targets_list = []
-full_img_majority_preds_list = []
+full_group_targets = []
+full_group_majority_preds = []
 
-for split in splits:
-    split_img_targets_list, split_img_majority_preds_list = evaluate(vmeta, split=split)
-    full_img_targets_list.extend(split_img_targets_list)
-    full_img_majority_preds_list.extend(split_img_majority_preds_list)
+
+for split in tqdm(splits):
+    split_group_targets, split_group_majority_preds = evaluate(vmeta, groupkey=GROUPKEY, split=split)
+    full_group_targets.extend(split_group_targets)
+    full_group_majority_preds.extend(split_group_majority_preds)
 
 
 all_preds = np.stack(all_preds)
 all_targets = np.stack(all_targets)
+instance_n_correct = np.sum(all_targets == all_preds)
+instance_n_total = all_targets.shape[0]
+instance_avg_accuracy = instance_n_correct / instance_n_total
+print(f'Instance-level average accuracy: {instance_avg_accuracy * 100:.2f}%')
 
-n_correct = np.sum(all_targets == all_preds)
-n_total = all_targets.shape[0]
+full_group_targets = np.stack(full_group_targets)
+full_group_majority_preds = np.stack(full_group_majority_preds)
+group_n_correct = np.sum(full_group_targets == full_group_majority_preds)
+group_n_total = full_group_targets.shape[0]
+group_avg_accuracy = group_n_correct / group_n_total
+print(f'Group-level average accuracy: {group_avg_accuracy * 100:.2f}%')
 
-avg_accuracy = n_correct / n_total
 
-
-print(f'Average accuracy: {avg_accuracy * 100:.2f}%')
-
-cm = confusion_matrix(full_img_targets_list, full_img_majority_preds_list)
+cm = confusion_matrix(full_group_targets, full_group_majority_preds)
 
 fig, ax = plt.subplots(tight_layout=True, figsize=(7, 5.5))
 
-repr_max_samples = SAMPLES_PER_IMG if SAMPLES_PER_IMG > 0 else 'all'
+repr_max_samples = MAX_SAMPLES_PER_GROUP if MAX_SAMPLES_PER_GROUP > 0 else 'all'
 
 if CM_SHOW_PERCENTAGES:
     cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
-    ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (top: count, bottom: percentages normalized over true labels)\n')
+    # ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (top: count, bottom: percentages normalized over true labels)\n')
+    ax.set_title(f'Confusion matrix for N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\n')
 else:
     cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=False)
-    ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (absolute counts)\n')
+    ax.set_title(f'Confusion matrix for N = {repr_max_samples} (absolute counts)\n')
 
 
 plt.tight_layout()

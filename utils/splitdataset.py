@@ -22,7 +22,7 @@ from utils import get_meta, get_path_prefix, get_image_resources
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v6'
+isplit_data_root = data_root / 'isplitdata_v6a'
 sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 
@@ -86,7 +86,7 @@ def is_excluded(resmeta: pd.Series) -> bool:
 
 
 for entry in meta.itertuples():
-    img_num = entry.num
+    img_num = int(entry.num)
     # Load original images and resources
     res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True)
     if res.was_inverted:

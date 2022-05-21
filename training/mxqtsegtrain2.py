@@ -95,7 +95,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=160_000,
+    '-m', '--max-steps', type=int, default=160_001,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -146,9 +146,9 @@ if args.constraintype is None:
         '2M-Mx',
         '2M-Qt',
         '3M-Qt',
-        '1M-Tm',
-        'DRO-1M-Mx',
-        'DRO-1M-Qt',
+        # '1M-Tm',
+        # 'DRO-1M-Mx',
+        # 'DRO-1M-Qt',
     ]
 else:
     DATA_SELECTION_V5NAMES = [args.constraintype]
@@ -176,7 +176,7 @@ IGNORE_INDEX = -1
 IGNORE_FAR_BACKGROUND_DISTANCE = 0
 
 # BG_WEIGHT = 0.2
-BG_WEIGHT = 0.3
+BG_WEIGHT = 0.2
 
 
 # TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
@@ -199,11 +199,14 @@ BINARY_SEG = True
 USE_MTCE = False
 # USE_MTCE = True
 
-USE_GDL_CE = False
-# USE_GDL_CE = True
+# USE_GDL_CE = False
+USE_GDL_CE = True
 
 # USE_GRAY_AUG = False
 USE_GRAY_AUG = True
+
+DILATE_TARGETS_BY = 0
+
 
 data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database').expanduser()
 # data_root = Path(conf.data_root).expanduser()
@@ -256,7 +259,7 @@ model = UNet(
 
 # USER PATHS
 sr_suffix = ''
-save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6{sr_suffix}').expanduser()
+save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d{sr_suffix}').expanduser()
 
 
 max_steps = conf.max_steps
@@ -288,16 +291,16 @@ common_transforms = [
 train_transform = common_transforms + [
     # transforms.RandomCrop((512, 512)),
     transforms.AlbuSeg2d(albumentations.ShiftScaleRotate(
-        p=0.98, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
+        p=0.9, rotate_limit=180, shift_limit=0.0625, scale_limit=0.1, interpolation=2
     )),  # interpolation=2 means cubic interpolation (-> cv2.CUBIC constant).
     # transforms.ElasticTransform(prob=0.5, sigma=2, alpha=5),
     transforms.RandomCrop((384, 384)),
 ]
 if USE_GRAY_AUG:
     train_transform.extend([
-        transforms.AdditiveGaussianNoise(prob=0.5, sigma=0.1),
-        transforms.RandomGammaCorrection(prob=0.5, gamma_std=0.2),
-        transforms.RandomBrightnessContrast(prob=0.5, brightness_std=0.125, contrast_std=0.125),
+        transforms.AdditiveGaussianNoise(prob=0.4, sigma=0.1),
+        transforms.RandomGammaCorrection(prob=0.4, gamma_std=0.1),
+        transforms.RandomBrightnessContrast(prob=0.4, brightness_std=0.1, contrast_std=0.1),
     ])
 
 valid_transform = common_transforms + []
@@ -357,7 +360,8 @@ train_dataset = V6TifDirData2d(
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
-    epoch_multiplier=300,
+    dilate_targets_by=DILATE_TARGETS_BY,
+    epoch_multiplier=1000,
 )
 
 valid_dataset = V6TifDirData2d(
@@ -373,7 +377,8 @@ valid_dataset = V6TifDirData2d(
     enable_binary_seg=BINARY_SEG,
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
-    epoch_multiplier=40,
+    dilate_targets_by=DILATE_TARGETS_BY,
+    epoch_multiplier=20,
 )
 
 
@@ -413,9 +418,9 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 valid_metrics = {}
 if not DT and not MULTILABEL:
     for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall, metrics.DSC, metrics.IoU]:
-        valid_metrics[f'val_{evaluator.name}_mean'] = evaluator(ignore=IGNORE_INDEX)  # Mean metrics
+        valid_metrics[f'val_{evaluator.name}_mean'] = evaluator()  # Mean metrics
         for c in range(out_channels):
-            valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c, ignore=IGNORE_INDEX)
+            valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
 
 
 class MTCELoss(nn.Module):
@@ -470,14 +475,14 @@ else:
             class_weights = torch.tensor([BG_WEIGHT, 1.0]).to(device)
         else:
             class_weights = torch.tensor([BG_WEIGHT, 1.0, 1.0]).to(device)
-        criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_INDEX).to(device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights).to(device)
 
 
 if USE_MTCE:
     criterion = MTCELoss(weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))
 
 if USE_GDL_CE:
-    ce = CrossEntropyLoss(weight=torch.tensor([BG_WEIGHT, 1.0]), ignore_index=IGNORE_INDEX).to(device)
+    ce = CrossEntropyLoss(weight=torch.tensor([BG_WEIGHT, 1.0])).to(device)
     # gdl = GeneralizedDiceLoss(softmax=True, to_onehot_y=True, w_type='simple').to(device)
     gdl = DiceLoss(apply_softmax=True, weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))  # TODO: Support ignore_index
     criterion = CombinedLoss([ce, gdl], device=device)
@@ -535,7 +540,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=2,  # TODO
+    num_workers=8,  # TODO
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
@@ -544,7 +549,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(0, max_steps, 10_000)),
+    extra_save_steps=list(range(0, max_steps - 1, 40_000)),
 )
 
 
