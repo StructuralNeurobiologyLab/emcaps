@@ -114,7 +114,9 @@ if NEGATIVE_SAMPLING:
     # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v6e_dr5/patchmeta_traintest.xlsx'), 'Sheet1')
+_dscr = 'v7_trhek_evdro_dr5'
+# _dscr = 'v7_tr-hgt_ev-dro_gdr5__gt'
+descr_sheet = (os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_{_dscr}/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
 out_channels = 8
@@ -125,7 +127,7 @@ model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
 
 
 # USER PATHS
-save_root = os.path.expanduser('/wholebrain/scratch/mdraw/tum/patch_trainings_v6e')
+save_root = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patch_trainings_{_dscr}')
 
 max_steps = args.max_steps
 lr = 1e-3

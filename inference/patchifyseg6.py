@@ -122,8 +122,8 @@ EC_MIN_AREA = 150
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
 
-USE_GT = False
-# USE_GT = True
+# USE_GT = False
+USE_GT = True
 
 FILL_HOLES = True
 DILATE_MASKS_BY = 5
@@ -132,7 +132,9 @@ MIN_CIRCULARITY = 0.8
 
 USE_EXTRA_TM_MODEL = False
 
+DRO_MODE = True
 
+ALL_VALIDATION = False
 
 # DATA_SELECTION = [
 #     # 'DRO_1xMT3-MxEnc-Flag-NLS',
@@ -145,26 +147,33 @@ USE_EXTRA_TM_MODEL = False
 #     'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
 # ]
 
-DATA_SELECTION = [
-    # 'DRO-1M-Mx',  # Drosophila
-    # 'DRO-1M-Qt',  # Drosophila
-    '1M-Mx',
-    '1M-Qt',
-    '2M-Mx',
-    '2M-Qt',
-    '3M-Qt',
-    '1M-Tm',  # -> requires extra model
-]
-
-# DATA_SELECTION = [
-#     'DRO-1M-Mx',  # Drosophila
-#     'DRO-1M-Qt',  # Drosophila
-# ]
+if DRO_MODE:
+    DATA_SELECTION = [
+        'DRO-1M-Mx',  # Drosophila
+        'DRO-1M-Qt',  # Drosophila
+        # '1M-Mx',
+        # '1M-Qt',
+        # '2M-Mx',
+        # '2M-Qt',
+        # '3M-Qt',
+        # '1M-Tm',  # -> requires extra model
+    ]
+else:
+    DATA_SELECTION = [
+        # 'DRO-1M-Mx',  # Drosophila
+        # 'DRO-1M-Qt',  # Drosophila
+        '1M-Mx',
+        '1M-Qt',
+        '2M-Mx',
+        '2M-Qt',
+        '3M-Qt',
+        '1M-Tm',  # -> requires extra model
+    ]
 
 
 root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 sheet_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
-isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v6a/')
+isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v7/')
 
 
 
@@ -178,7 +187,9 @@ for p in isplitdata_root.rglob('*.tif'):
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6_notm_nodro_dr{DILATE_MASKS_BY}{_tmextra_str}')
-patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6e_dr{DILATE_MASKS_BY}')
+# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6e_dr{DILATE_MASKS_BY}')
+# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v7_trhek_evhek_dr{DILATE_MASKS_BY}')
+patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v7_tr-hgt_ev-dro_gdr{DILATE_MASKS_BY}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'
@@ -186,7 +197,11 @@ if USE_GT:
 model_paths = eul([
     # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_nodro__UNet__22-05-16_15-45-43/model_step160000.pts'  # without Drosophila classes
     # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_notm_nodro__UNet__22-05-16_01-44-01/model_step160000.pts'  # without Tm and Drosophila classes
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # data split v6a, without Drosophila classes
+    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # data split v6a, without Drosophila classes
+
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_alldata__UNet__22-05-29_02-22-27/model_final.pts'  # data split v7, all HEK and Drosophila classes
+    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlyhek__UNet__22-05-29_02-25-35/model_final.pts'  # data split v7, without Drosophila classes
+    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlydro__UNet__22-05-29_02-25-16/model_final.pts'  # v7, only Drosophila
 ])
 
 # Create output directories
@@ -264,7 +279,8 @@ for model_path in model_paths:
         if pd.isna(enctype) or enctype not in DATA_SELECTION:
             logger.debug(f'enctype {enctype} skipped')
             continue
-        # enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+        if DRO_MODE:
+            enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
 
         inp = np.array(imageio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
@@ -291,8 +307,10 @@ for model_path in model_paths:
 
         img_num = imgmeta.num
 
-        is_validation = '_val' in img_path.stem
-        # is_validation = True  #DRO
+        if ALL_VALIDATION:
+            is_validation = True  #DRO
+        else:
+            is_validation = '_val' in img_path.stem
         is_train = not is_validation
 
         cc, n_comps = ndimage.label(mask)
@@ -409,7 +427,8 @@ for role in ['train', 'validation']:
     min_n_samples = 1_000_000  # Unexpected high value for initialization
     min_scond = None
     for scond in DATA_SELECTION:
-        # scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+        if DRO_MODE:
+            scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
         matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
         n_samples[scond] = len(matching_patches)
         print(f'({role}, {scond}) n_samples: {n_samples[scond]}')
@@ -421,7 +440,8 @@ for role in ['train', 'validation']:
     # Sample min_scond patches each to create a balanced dataset
     scond_samples = {}
     for scond in DATA_SELECTION:
-        # scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+        if DRO_MODE:
+            scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
         # scond_samples[scond] = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
         matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
         scond_samples = matching_patches.sample(min_n_samples)

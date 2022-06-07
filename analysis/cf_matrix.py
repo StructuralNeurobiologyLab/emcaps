@@ -97,15 +97,14 @@ def plot_confusion_matrix(cf,
         accuracy  = np.trace(cf) / float(np.sum(cf))
 
         #if it is a binary confusion matrix, show some more stats
-        if len(cf)==2:
-            #Metrics for Binary Confusion Matrices
-            precision = cf[1,1] / sum(cf[:,1])
-            recall    = cf[1,1] / sum(cf[1,:])
-            f1_score  = 2*precision*recall / (precision + recall)
-            stats_text = "\n\nAccuracy={:0.3f}\nPrecision={:0.3f}\nRecall={:0.3f}\nF1 Score={:0.3f}".format(
-                accuracy,precision,recall,f1_score)
-        else:
-            stats_text = "\n\nAccuracy={:0.3f}".format(accuracy)
+        stats_text = "\n\nAccuracy={:0.3f}".format(accuracy)
+        # if len(cf)==2:
+        #     #Metrics for Binary Confusion Matrices
+        #     precision = cf[1,1] / sum(cf[:,1])
+        #     recall    = cf[1,1] / sum(cf[1,:])
+        #     f1_score  = 2*precision*recall / (precision + recall)
+        #     stats_text = "\n\nAccuracy={:0.3f}\nPrecision={:0.3f}\nRecall={:0.3f}\nF1 Score={:0.3f}".format(
+        #         accuracy,precision,recall,f1_score)
     else:
         stats_text = ""
 

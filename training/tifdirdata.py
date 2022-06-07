@@ -355,7 +355,7 @@ class Patches(data.Dataset):
 class V6TifDirData2d(data.Dataset):
     """Using a special TIF file directory structure for segmentation data loading.
 
-    Version for mxqtsegtrain2.py and dataset v6.
+    Version for mxqtsegtrain2.py and dataset v6+.
     For training on all conditions or a subset thereof."""
     def __init__(
             self,
@@ -363,7 +363,7 @@ class V6TifDirData2d(data.Dataset):
             label_names: Sequence[str],
             valid_nums: Optional[Sequence[int]] = None,
             descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
-            data_subdirname: str = 'isplitdata_v6a',
+            data_subdirname: str = 'isplitdata_v7',
             meta_filter = lambda x: x,
             train: bool = True,
             transform=transforms.Identity(),

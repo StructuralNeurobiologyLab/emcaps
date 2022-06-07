@@ -41,12 +41,21 @@ parser.add_argument(
     '-m', '--model-path', metavar='PATH',
     help='Path to pretrained model which to use.',
     # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6_notm_nodro/erasemaskbg_notm_dr5_M_ra__EffNetV2__22-05-16_01-56-49/model_step80000.pt'  # best without Tm, for patches_v6_dr5
-    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6e/erasemaskbg_S__EffNetV2__22-05-20_17-02-05/model_step80000.pts'  # best with Tm, for patches_v6e_dr5
+    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6e/erasemaskbg_S__EffNetV2__22-05-20_17-02-05/model_step80000.pts'  # best with Tm, for patches_v6e_dr5
+
+    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trdro_evdro_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-15-30/model_final.pts'  # Best for DRO v7
+    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trhek_evhek_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-25-11/model_final.pts'  # Best for HEK v7
+
+    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_tr-hgt_ev-dro_gdr5__gt/erasemaskbg___EffNetV2__22-06-07_12-13-56/model_final.pts'  # Human GT -> DRO
 )
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument(
-    '-n', '--nmaxsamples', type=int, default=0,
+    '-n', '--nmaxsamples', type=int, default=1,
     help='Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).'
+)
+parser.add_argument(
+    '-r', '--rdraws', type=int, default=1000,
+    help='Number of independent draws for majority vote.'
 )
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 args = parser.parse_args()
@@ -69,7 +78,7 @@ out_channels = 8
 from utils.utils import CLASS_NAMES, CLASS_IDS
 
 
-ENABLE_BINARY_1M = False  # restrict to only binary classification into 1M-Qt vs 1M-Mx
+ENABLE_BINARY_1M = True  # restrict to only binary classification into 1M-Qt vs 1M-Mx
 ENABLE_TM = True  # Enable 1M-Tm type in evaluation
 
 CLASS_NAMES_IN_USE = list(CLASS_NAMES.values())[2:]
@@ -87,10 +96,13 @@ if os.getenv('CLUSTER') == 'WHOLEBRAIN':
 else:
     path_prefix = Path('~/tum/').expanduser()
 
-# patches_root = path_prefix / 'patches_v6d_dro_0shot_dr5/'
+# patches_root = path_prefix / 'patches_v6d_generalization_dro_dr5/'
 # patches_root = path_prefix / 'patches_v6_notm_nodro_dr5/'
 # patches_root = path_prefix / 'patches_v6_dr5/'
-patches_root = path_prefix / 'patches_v6e_dr5/'
+# patches_root = path_prefix / 'patches_v6e_dr5/'
+
+# patches_root = path_prefix / 'patches_v7_trhek_evdro_dr5'
+patches_root = path_prefix / 'patches_v7_trdro_evdro_dr5'
 
 
 dataset_mean = (128.0,)
@@ -108,8 +120,6 @@ valid_transform = transforms.Compose(valid_transform)
 # SAMPLES_PER_IMG = 1
 MAX_SAMPLES_PER_GROUP = args.nmaxsamples
 
-
-# TODO: Random sampling
 
 
 # GROUPKEY = 'img_num'
@@ -132,6 +142,13 @@ vmeta = meta.loc[meta.validation == True]
 
 # vmeta = vmeta.loc[vmeta.enctype != '1M-Tm']
 
+# assert vmeta.loc[vmeta.img_num.isin(range(90, 94+1))].enctype.unique() == '1M-Qt'  # Ensure v7 labeling
+# vmeta.loc[vmeta.img_num.isin(range(90, 94+1)), 'enctype'] = '1M-Qt'  # Relabel wrong images
+# assert vmeta.loc[vmeta.img_num.isin(range(90, 94+1))].enctype.unique() == '1M-Qt'
+
+# qtp = vmeta.loc[vmeta.enctype == '1M-Qt'].sample(387).index
+# vmeta = vmeta.loc[(vmeta.index.isin(qtp)) | (vmeta.enctype == '1M-Mx')]
+
 print('\n== Patch selection ==')
 
 all_targets = []
@@ -150,11 +167,13 @@ else:
     for k in range(0, min_group_samples // MAX_SAMPLES_PER_GROUP, MAX_SAMPLES_PER_GROUP):
         subseq_splits.append(range(k, k + MAX_SAMPLES_PER_GROUP))
 
-splits = subseq_splits
+if MAX_SAMPLES_PER_GROUP > 1:
+    splits = [None] * args.rdraws  # do random sampling
+else:
+    splits = subseq_splits
 
 # splits = range(min_group_samples)  # iterate over all individuals
 
-# splits = [None]  # do random sampling
 
 if args.verbose:
     _print = print
@@ -306,14 +325,14 @@ repr_max_samples = MAX_SAMPLES_PER_GROUP if MAX_SAMPLES_PER_GROUP > 0 else 'all'
 if CM_SHOW_PERCENTAGES:
     cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
     # ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (top: count, bottom: percentages normalized over true labels)\n')
-    ax.set_title(f'Confusion matrix for N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\n')
+    ax.set_title(f'Confusion matrix for N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\nAvg. accuracy: {group_avg_accuracy * 100:.2f}%\n')
 else:
     cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=False)
     ax.set_title(f'Confusion matrix for N = {repr_max_samples} (absolute counts)\n')
 
 
 plt.tight_layout()
-plt.savefig(f'{patches_root}/patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
+plt.savefig(f'{patches_root}/uc_patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
 
 # cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=SHORT_CLASS_NAMES[2:], normalize='pred', xticks_rotation='vertical', ax=ax)
 # cma.figure_.savefig(f'{patches_root}/patch_confusion_matrix.pdf')

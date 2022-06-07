@@ -36,18 +36,10 @@ def eul(paths):
     return [os.path.expanduser(p) for p in paths]
 
 
-
 # Keep this in sync with training normalization
 dataset_mean = (128.0,)
 dataset_std = (128.0,)
 
-
-# TODO: Rewrite as invert_labels = False and flip meaning of ENABLE_PARTIAL_INVERSION_HACK so it triggers on num < 55 (see YTifDirData2d implementation)
-
-invert_labels = True  # Workaround: Fixes inverted TIF loading
-
-# ENABLE_PARTIAL_INVERSION_HACK = True  # Another hacky inversion fix
-ENABLE_PARTIAL_INVERSION_HACK = False
 
 pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
@@ -56,9 +48,11 @@ pre_predict_transform = transforms.Compose([
 ENABLE_ENCTYPE_SUBDIRS = True
 ZERO_LABELS = False
 
+EVAL_ON_DRO = True
+
 
 import argparse
-parser = argparse.ArgumentParser(description='Train a network.')
+parser = argparse.ArgumentParser(description='Run inference with a trained network.')
 parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
 parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
 args = parser.parse_args()
@@ -85,7 +79,8 @@ multi_label_names = {
     5: 'cytoplasmic_region',
 }
 
-results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v6e')
+# results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v7_tr-all_ev-onlyhek')
+results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v7_')
 if selected_enctype is not None:
     msuffix = '_expert' if use_expert else ''
     results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
@@ -105,36 +100,39 @@ data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 DRO_V5NAMES = ['DRO-1M-Mx', 'DRO-1M-Qt']
 
 if selected_enctype is None:
-    DATA_SELECTION_V5NAMES = [
-        '1M-Mx',
-        '1M-Qt',
-        '2M-Mx',
-        '2M-Qt',
-        '3M-Qt',
-        '1M-Tm',
-        # 'DRO-1M-Mx',
-        # 'DRO-1M-Qt',
-    ]
-    # DATA_SELECTION_V5NAMES = [  # for Drosophila
-    #     'DRO-1M-Mx',
-    #     'DRO-1M-Qt',
-    # ]
+    if EVAL_ON_DRO:
+        DATA_SELECTION_V5NAMES = [  # for Drosophila
+            'DRO-1M-Mx',
+            'DRO-1M-Qt',
+        ]
+    else:
+        DATA_SELECTION_V5NAMES = [
+            '1M-Mx',
+            '1M-Qt',
+            '2M-Mx',
+            '2M-Qt',
+            '3M-Qt',
+            '1M-Tm',
+            # 'DRO-1M-Mx',
+            # 'DRO-1M-Qt',
+        ]
 else:
     DATA_SELECTION_V5NAMES = [selected_enctype]
 
 
 def find_full_dro_images():
     meta = get_meta()
-    dro_meta = meta.loc[meta.scondv5.isin(DRO_V5NAMES)]
+    # dro_meta = meta.loc[meta.scondv5.isin(DRO_V5NAMES)]
+    dro_meta = meta.loc[meta.scondv5.isin(DATA_SELECTION_V5NAMES)]
     dro_image_numbers = dro_meta.num.to_list()
     paths = [data_root / f'{i}/{i}.tif' for i in dro_image_numbers]
     return paths
 
 
-def find_v6_val_images(isplitpath=None):
-    """Find paths to all raw validation images of split v6a"""
+def find_v7_val_images(isplitpath=None):
+    """Find paths to all raw validation images of split v7"""
     if isplitpath is None:
-        isplitpath = data_root / 'isplitdata_v6a'
+        isplitpath = data_root / 'isplitdata_v7'
     val_img_paths = []
     for p in isplitpath.rglob('*_val.tif'):  # Look for all validation raw images recursively
         if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
@@ -162,12 +160,15 @@ def find_v6_val_images(isplitpath=None):
 # img_paths = [f'/wholebrain/scratch/mdraw/tum/formartin_idx/{i}.TIF' for i in range(1, 6 + 1)]
 # img_paths = [f'/wholebrain/scratch/mdraw/tum/Drosophila_validation/{i}.TIF' for i in range(1, 20 + 1)]
 
-img_paths = find_v6_val_images()
-# img_paths = find_full_dro_images()
-
+if EVAL_ON_DRO:
+    img_paths = find_full_dro_images()
+else:
+    img_paths = find_v7_val_images()
 
 # for p in [results_path / scond for scond in DATA_SELECTION]:
 #     os.makedirs(p, exist_ok=True)
+
+# img_paths = ['/wholebrain/scratch/mdraw/tum/data-targeted/EM2022_75_R3Box33_01_07_39_69.TIF']
 
 DESIRED_OUTPUTS = [
     'raw',
@@ -190,6 +191,12 @@ for p in [results_root]:
     p.mkdir(exist_ok=True)
 
 
+class Randomizer(torch.nn.Module):
+    """Fake module for producing correctly shaped random outputs in range [0, 1]"""
+    def forward(self, x):
+        return torch.rand(x.shape[0], 2, *x.shape[2:])
+
+
 if use_expert:
     _empaths = {
         '1M-Mx': '1M-Mx_B_GA___UNet__22-04-26_22-33-13',
@@ -205,9 +212,13 @@ else:
     model_paths = [
         # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_nodro__UNet__22-05-16_15-45-43/model_step160000.pts'  # without Drosophila classes
         # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_notm_nodro__UNet__22-05-16_01-44-01/model_step160000.pts'  # without Tm and Drosophila classes
-        '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # without Drosophila classes
+        # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # without Drosophila classes
         # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro_notm__UNet__22-05-19_01-43-20/model_step160000.pts'  # without Tm and Drosophila classes
         
+        '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_alldata__UNet__22-05-29_02-22-27/model_final.pts'
+        # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlyhek__UNet__22-05-29_02-25-35/model_final.pts'
+        # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlydro__UNet__22-05-29_02-25-16/model_final.pts'
+        # Randomizer()  # produce random outputs instead
     ]
 
 assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
@@ -282,10 +293,6 @@ for model_path in model_paths:
                     lab_path = f'{img_path[:-4]}_{label_name}.TIF'
                 lab_img = np.array(imageio.imread(lab_path))
                 lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False)[0].astype(np.int64)
-                # if invert_labels:
-                #     lab_img = (lab_img == 0).astype(np.int64)
-                # if ENABLE_PARTIAL_INVERSION_HACK and clean_int(basename) >= 55:
-                    # lab_img = (lab_img == 0).astype(np.int64)
 
                 # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
                 lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)

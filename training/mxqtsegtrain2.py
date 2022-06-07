@@ -146,7 +146,7 @@ if args.constraintype is None:
         '2M-Mx',
         '2M-Qt',
         '3M-Qt',
-        # '1M-Tm',
+        '1M-Tm',
         # 'DRO-1M-Mx',
         # 'DRO-1M-Qt',
     ]
@@ -259,7 +259,7 @@ model = UNet(
 
 # USER PATHS
 sr_suffix = ''
-save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d{sr_suffix}').expanduser()
+save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7{sr_suffix}').expanduser()
 
 
 max_steps = conf.max_steps
@@ -352,6 +352,7 @@ train_dataset = V6TifDirData2d(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=True,
+    data_subdirname='isplitdata_v7',
     label_names=label_names,
     transform=train_transform,
     target_dtype=target_dtype,
@@ -361,7 +362,7 @@ train_dataset = V6TifDirData2d(
     enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     dilate_targets_by=DILATE_TARGETS_BY,
-    epoch_multiplier=1000,
+    epoch_multiplier=100,
 )
 
 valid_dataset = V6TifDirData2d(
@@ -369,6 +370,7 @@ valid_dataset = V6TifDirData2d(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=False,
+    data_subdirname='isplitdata_v7',
     label_names=label_names,
     transform=valid_transform,
     target_dtype=target_dtype,
@@ -549,7 +551,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(0, max_steps - 1, 40_000)),
+    extra_save_steps=list(range(40_000, max_steps, 40_000)),
 )
 
 

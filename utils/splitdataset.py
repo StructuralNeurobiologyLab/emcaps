@@ -9,10 +9,7 @@ from typing import Tuple, List
 import imageio
 import numpy as np
 import pandas as pd
-import skimage
-from scipy import ndimage
 from skimage import measure
-from skimage import morphology as sm
 
 from utils import get_meta, get_path_prefix, get_image_resources
 
@@ -22,7 +19,7 @@ from utils import get_meta, get_path_prefix, get_image_resources
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v6a'
+isplit_data_root = data_root / 'isplitdata_v7'
 sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 
@@ -89,6 +86,7 @@ for entry in meta.itertuples():
     img_num = int(entry.num)
     # Load original images and resources
     res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True)
+    logger.info(f'Using label source {res.labelpath}{" (curated)" if res.curated else ""}')
     if res.was_inverted:
         logger.info(f'Image {img_num} was re-inverted.')
     if is_excluded(res.metarow):

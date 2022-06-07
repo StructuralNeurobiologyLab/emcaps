@@ -204,6 +204,7 @@ class ImageResources:
     label: Optional[np.ndarray] = None
     roimask: Optional[np.ndarray] = None
     rawpath: Optional[Path] = None
+    labelpath: Optional[Path] = None
     curated: bool = False
     was_inverted: bool = False
 
@@ -242,6 +243,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
         roimask=roimask,
         metarow=metarow,
         rawpath=raw_path,
+        labelpath=label_path,
         curated=is_curated,
         was_inverted=was_inverted,
     )
