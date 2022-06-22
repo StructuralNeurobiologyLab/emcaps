@@ -78,7 +78,7 @@ out_channels = 8
 from utils.utils import CLASS_NAMES, CLASS_IDS
 
 
-ENABLE_BINARY_1M = True  # restrict to only binary classification into 1M-Qt vs 1M-Mx
+ENABLE_BINARY_1M = False  # restrict to only binary classification into 1M-Qt vs 1M-Mx
 ENABLE_TM = True  # Enable 1M-Tm type in evaluation
 
 CLASS_NAMES_IN_USE = list(CLASS_NAMES.values())[2:]
@@ -332,7 +332,7 @@ else:
 
 
 plt.tight_layout()
-plt.savefig(f'{patches_root}/uc_patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
+plt.savefig(f'{patches_root}/{"bin_" if ENABLE_BINARY_1M else ""}patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
 
 # cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=SHORT_CLASS_NAMES[2:], normalize='pred', xticks_rotation='vertical', ax=ax)
 # cma.figure_.savefig(f'{patches_root}/patch_confusion_matrix.pdf')

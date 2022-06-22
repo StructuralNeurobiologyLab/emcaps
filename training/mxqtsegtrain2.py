@@ -551,7 +551,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(40_000, max_steps, 40_000)),
+    extra_save_steps=list(range(40_000, max_steps + 1, 40_000)),
 )
 
 

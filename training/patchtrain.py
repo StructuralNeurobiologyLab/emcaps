@@ -44,15 +44,13 @@ elektronn3.select_mpl_backend('Agg')
 from elektronn3.training import Trainer, Backup, SWA
 from elektronn3.training import metrics
 from elektronn3.data import transforms
-from elektronn3.models.unet import UNet
 
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
 from training.tifdirdata import V6Patches
 
-from models.effnetv2 import effnetv2_s, effnetv2_m, effnetv2_l
-from models.cct import CCT
+from models.effnetv2 import effnetv2_s, effnetv2_m
 
 import utils
 
@@ -281,7 +279,7 @@ trainer = Trainer(
     valid_metrics=valid_metrics,
     out_channels=out_channels,
     mixed_precision=True,
-    extra_save_steps=list(range(10_000, max_steps - 1, 10_000)),
+    extra_save_steps=list(range(10_000, max_steps + 1, 10_000)),
 )
 
 # Archiving training script, src folder, env info
