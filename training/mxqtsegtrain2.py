@@ -36,8 +36,6 @@ import hydra
 from omegaconf import OmegaConf, DictConfig
 from hydra.core.config_store import ConfigStore
 
-# from monai.losses import GeneralizedDiceLoss
-
 
 elektronn3.select_mpl_backend('Agg')
 logger = logging.getLogger('elektronn3log')
@@ -135,7 +133,6 @@ print(f'Running on device: {device}')
 # 5: cytoplasmic_region
 
 
-# SHEET_NAME = 'Copy of Image_origin_information_GGW'
 SHEET_NAME = 'all_metadata'
 
 
@@ -156,26 +153,11 @@ else:
 DATA_SELECTION = [V5NAMES_TO_OLDNAMES[n] for n in DATA_SELECTION_V5NAMES]
 
 
-# DATA_SELECTION = [
-#     'HEK_1xMT3-QtEnc-Flag',
-#     'DRO_1xMT3-MxEnc-Flag-NLS',
-#     'DRO_1xMT3-QtEnc-Flag-NLS',
-#     'HEK_1xMT3-MxEnc-Flag',
-#     'HEK-2xMT3-QtEnc-Flag',
-#     'HEK-2xMT3-MxEnc-Flag',
-#     'HEK-3xMT3-QtEnc-Flag',
-#     'HEK-1xTmEnc-BC2-Tag',
-# ]
-
-# HOST_ORG = 'Drosophila'
-# HOST_ORG = 'all'
-
 
 IGNORE_INDEX = -1
 # IGNORE_FAR_BACKGROUND_DISTANCE = 16
 IGNORE_FAR_BACKGROUND_DISTANCE = 0
 
-# BG_WEIGHT = 0.2
 BG_WEIGHT = 0.2
 
 
@@ -183,24 +165,10 @@ BG_WEIGHT = 0.2
 ENABLE_PARTIAL_INVERSION_HACK = False
 
 
-VEC_DT = False
-DT = False
-MULTILABEL = False
-
 INPUTMASK = False
 
 INVERT_LABELS = False
 # INVERT_LABELS = True
-
-# BINARY_SEG = False
-BINARY_SEG = True
-
-
-USE_MTCE = False
-# USE_MTCE = True
-
-# USE_GDL_CE = False
-USE_GDL_CE = True
 
 # USE_GRAY_AUG = False
 USE_GRAY_AUG = True
@@ -211,43 +179,10 @@ DILATE_TARGETS_BY = 0
 data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database').expanduser()
 # data_root = Path(conf.data_root).expanduser()
 
-if MULTILABEL:
-    label_names = [
-        'background',
-        'membranes',
-        'encapsulins',
-        'nuclear_membrane',
-        'nuclear_region',
-        'cytoplasmic_region',
-    ]
-else:
-    # label_names = ['=ZEROS=', 'membranes']
-    label_names = ['=ZEROS=', 'encapsulins']
+label_names = ['=ZEROS=', 'encapsulins']
+target_dtype = np.int64
 
-if DT or MULTILABEL:
-    target_dtype = np.float32
-else:
-    target_dtype = np.int64
-
-# if DT:
-#     out_channels = 1 if not VEC_DT else 3
-# else:
-#     out_channels = len(label_names)
-
-out_channels = 3
-if BINARY_SEG:
-    out_channels = 2
-if USE_MTCE:
-    out_channels = 4
-
-# model = UNet(
-#     out_channels=out_channels,
-#     n_blocks=2,
-#     start_filts=64,
-#     activation='relu',
-#     normalization='batch',
-#     dim=2
-# ).to(device)
+out_channels = 2
 model = UNet(
     out_channels=out_channels,
     n_blocks=5,
@@ -275,15 +210,12 @@ if conf.resume is not None:  # Load pretrained network params
 dataset_mean = (128.0,)
 dataset_std = (128.0,)
 
-dt_scale = 30
-
 
 # TODO: https://github.com/Project-MONAI/MONAI/blob/384c7181e3730988fe5318e9592f4d65c12af843/monai/transforms/croppad/array.py#L831
 
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
     transforms.RandomCrop((512, 512)),
-    # transforms.DropIfTooMuchBG(threshold=1 - (1 / 500**2)),
     transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
     transforms.RandomFlip(ndim_spatial=2),
 ]
@@ -305,47 +237,16 @@ if USE_GRAY_AUG:
 
 valid_transform = common_transforms + []
 
-if DT:
-    train_transform.append(transforms.DistanceTransformTarget(scale=dt_scale, vector=VEC_DT))
-    valid_transform.append(transforms.DistanceTransformTarget(scale=dt_scale, vector=VEC_DT))
 
 train_transform = transforms.Compose(train_transform)
 valid_transform = transforms.Compose(valid_transform)
 
 
-# valid_split_path = './valid_split.yaml'
-# with open(valid_split_path) as f:
-#     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
-
-# valid_image_numbers = []
-# for condition in DATA_SELECTION:
-#     valid_image_numbers.extend(valid_image_dict[condition])
-
-
-# print('Training on images ', train_image_numbers)
-# print('Validating on images ', valid_image_numbers)
-
-
-
-# def meta_filter(meta):
-#     meta_orig = meta
-#     meta = meta.copy()
-#     if DATA_SELECTION == 'all':
-#         meta = meta.loc[(meta['1xMmMT3'] | meta['2xMmMT3'])]
-#     else:
-#         meta = meta.loc[meta[f'{DATA_SELECTION}MmMT3']]
-#     # meta = meta.loc[meta['Host organism'] == 'HEK cell culture']
-#     meta = meta.loc[meta['Host organism'] == HOST_ORG]
-#     meta = meta.loc[meta['Modality'] == 'TEM']
-#     meta = meta[['num', 'MxEnc', 'QtEnc', '1xMmMT3', '2xMmMT3']]
-#     return meta
-
-
 def meta_filter(meta):
-    meta_orig = meta
     meta = meta.copy()
     meta = meta.loc[meta['scond'].isin(DATA_SELECTION)]
     return meta
+
 
 train_dataset = V6TifDirData2d(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
@@ -384,7 +285,6 @@ valid_dataset = V6TifDirData2d(
 )
 
 
-
 # Set up optimization
 optimizer = optim.Adam(
     model.parameters(),
@@ -392,26 +292,6 @@ optimizer = optim.Adam(
     lr=lr,
     amsgrad=True
 )
-# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
-
-# # Set to True to perform Cyclical LR range test instead of normal training
-# #  (see https://arxiv.org/abs/1506.01186, sec. 3.3).
-# do_lr_range_test = False
-# if do_lr_range_test:
-#     # Begin with a very small lr and double it every 450 steps.
-#     for grp in optimizer.param_groups:
-#         grp['lr'] = 1e-7  
-#     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, 450, 2)
-# else:
-#     lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#         optimizer,
-#         base_lr=1e-6,
-#         max_lr=1e-3,
-#         step_size_up=10_000,
-#         step_size_down=30_000,
-#         cycle_momentum=True if 'momentum' in optimizer.defaults else False
-#     )
-
 lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
 
@@ -425,99 +305,17 @@ if not DT and not MULTILABEL:
             valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
 
 
-class MTCELoss(nn.Module):
-    def __init__(self, binseg_weight=1., fgtype_weight=1., fgtype_per_pix=False, *args, **kwargs) -> None:
-        super().__init__()
-        self.binseg_ce = nn.CrossEntropyLoss(*args, **kwargs)  # fg vs bg
-        self.fgtype_ce = nn.CrossEntropyLoss()  # fg type vs other fg type
-        self.binseg_weight = binseg_weight
-        self.fgtype_weight = fgtype_weight
-        self.fgtype_per_pix = fgtype_per_pix
+class_weights = torch.tensor([BG_WEIGHT, 1.0]).to(device)
+ce = CrossEntropyLoss(weight=torch.tensor([BG_WEIGHT, 1.0])).to(device)
+gdl = DiceLoss(apply_softmax=True, weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))  # TODO: Support ignore_index
+criterion = CombinedLoss([ce, gdl], device=device)
 
+inference_kwargs = {
+    'apply_softmax': True,
+    'transform': valid_transform,
+}
 
-    def forward(self, output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        # Prepare targets and weight mask
-        with torch.no_grad():
-            binseg_target = (target > 0).to(torch.int64)
-            fg_mask = binseg_target.to(output.dtype)
-            fgtype_target = target - 1
-        binseg_loss = self.binseg_ce(output[:, :2], binseg_target)
-        if self.fgtype_per_pix:  # Per pixel loss
-            # fgtype_loss = F.cross_entropy(output[:, 2:], fgtype_target, weight=fg_mask)
-            fgtype_loss_pix = F.cross_entropy(output[:, 2:], fgtype_target, reduction='none')
-            fgtype_loss = torch.mean(fgtype_loss_pix * fg_mask)
-        else:  # Average -> one scalar per image
-            out_avg = F.adaptive_avg_pool2d(output[:, 2:], 1)
-            with torch.no_grad():
-                fgtype_target = target
-                uniq = torch.unique(fgtype_target)
-                if len(uniq) == 0:  # No fg -> no fg type targets, only bg
-                    fgtype_loss = 0.
-            if len(uniq) == 1:  # containing fg type targets of one type
-                with torch.no_grad():
-                    fgtype_target_single = torch.max(uniq).to(torch.int64)  # foreground class label is always maximum
-                fgtype_loss = F.cross_entropy(out_avg, fgtype_target_single)
-            elif len(uniq) > 1:
-                print('Oh no')
-                import IPython ; IPython.embed(); raise SystemExit
-                raise ValueError(uniq)
-        return self.binseg_weight * binseg_loss + self.fgtype_weight * fgtype_loss
-
-
-if DT:
-    criterion = MSELoss()
-else:
-    if MULTILABEL:
-        _cw = [1.0 for _ in label_names]
-        _cw[0] = BG_WEIGHT  # reduced loss weight for background labels
-        class_weights = torch.tensor(_cw).to(device)
-        criterion = nn.BCEWithLogitsLoss()#(pos_weight=class_weights)
-    else:
-        if BINARY_SEG:
-            class_weights = torch.tensor([BG_WEIGHT, 1.0]).to(device)
-        else:
-            class_weights = torch.tensor([BG_WEIGHT, 1.0, 1.0]).to(device)
-        criterion = nn.CrossEntropyLoss(weight=class_weights).to(device)
-
-
-if USE_MTCE:
-    criterion = MTCELoss(weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))
-
-if USE_GDL_CE:
-    ce = CrossEntropyLoss(weight=torch.tensor([BG_WEIGHT, 1.0])).to(device)
-    # gdl = GeneralizedDiceLoss(softmax=True, to_onehot_y=True, w_type='simple').to(device)
-    gdl = DiceLoss(apply_softmax=True, weight=torch.tensor([BG_WEIGHT, 1.0]).to(device))  # TODO: Support ignore_index
-    criterion = CombinedLoss([ce, gdl], device=device)
-
-if USE_MTCE:
-    inference_kwargs = {
-        'apply_softmax': False,
-        'transform': valid_transform,
-    }
-elif DT:
-    inference_kwargs = {
-        'apply_softmax': False,
-        'transform': valid_transform,
-    }
-elif MULTILABEL:
-    inference_kwargs = {
-        'apply_softmax': False,
-        'apply_sigmoid': True,
-        'transform': valid_transform,
-    }
-else:
-    inference_kwargs = {
-        'apply_softmax': True,
-        'transform': valid_transform,
-    }
-
-_MULTILABEL = 'M_' if MULTILABEL else ''
-_DT = 'D_' if DT else ''
-_VEC_DT = 'V_' if VEC_DT else ''
-_MQ = 'MQ_' if not BINARY_SEG else 'B_'
-_MTCE = 'MTCE_' if USE_MTCE else ''
 _GRAY_AUG = 'GA_' if USE_GRAY_AUG else ''
-_GDL_CE = 'GDL_CE_' if USE_GDL_CE else ''
 
 if len(DATA_SELECTION_V5NAMES) == 1:
     _CONSTR_TYPE = f'{DATA_SELECTION_V5NAMES[0]}_'
@@ -529,7 +327,7 @@ if exp_name is None:
     exp_name = ''
 timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
 exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
-exp_name = f'{_CONSTR_TYPE}{_GDL_CE}{_MTCE}{_MQ}{_VEC_DT}{_MULTILABEL}{_DT}{_GRAY_AUG}{exp_name}'
+exp_name = f'{_CONSTR_TYPE}{_GRAY_AUG}{exp_name}'
 
 
 
@@ -553,7 +351,6 @@ trainer = Trainer(
     mixed_precision=True,
     extra_save_steps=list(range(40_000, max_steps + 1, 40_000)),
 )
-
 
 
 

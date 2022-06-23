@@ -6,7 +6,6 @@ segmentation masks and masks are used to crop 28x28 pixel patches centered
 around particle centroids
 """
 import os
-from enum import Enum, auto
 from pathlib import Path
 from os.path import expanduser as eu
 from typing import NamedTuple
@@ -29,10 +28,6 @@ from skimage.color import label2rgb
 from skimage import measure
 from sklearn import metrics as sme
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
 
 from elektronn3.inference import Predictor
 from elektronn3.data import transforms
@@ -41,7 +36,6 @@ from elektronn3.models.unet import UNet
 from analysis.radial_patchlineplots import measure_outer_disk_radius
 import utils
 
-# torch.backends.cudnn.benchmark = True
 
 def eul(paths):
     """Shortcut for expanding all user paths in a list"""
