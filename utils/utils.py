@@ -5,24 +5,16 @@ Utility functions and resources.
 # TODO: Eliminate duplicated code elsewhere by importing from here.
 
 import os
-from typing import Optional, Union
-from os.path import expanduser as eu
-from pathlib import Path
-from functools import lru_cache
 from dataclasses import dataclass
-from typing import Tuple
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional, Tuple
 
 import imageio
 import numpy as np
 import pandas as pd
-import skimage
-import tqdm
 import yaml
 from PIL import Image, ImageDraw
-from scipy import ndimage
-from skimage import measure
-from skimage import morphology as sm
-
 
 
 def eul(paths):
@@ -96,11 +88,6 @@ def get_meta(sheet_path=None, sheet_name=0, v5names=True) -> pd.DataFrame:
 OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
 # meta.scond.replace(OLDNAMES_TO_V5NAMES, inplace=True)
 
-# # Load train/validation split
-# valid_split_path = './valid_split.yaml'
-# with open(valid_split_path) as f:
-#     valid_image_dict = yaml.load(f, Loader=yaml.FullLoader)
-
 
 def clean_int(text: str) -> int:
     cleaned = ''.join([c for c in text if c.isdigit()])
@@ -161,6 +148,7 @@ def get_raw_path(img_num: int, sheet_path=None) -> Path:
     subdir_path = sheet_path.parent / f'{img_num}'
     img_path = subdir_path / f'{img_num}.tif'
     return img_path
+
 
 @lru_cache(maxsize=1024)
 def get_raw(img_num: int, sheet_path=None) -> np.ndarray:
