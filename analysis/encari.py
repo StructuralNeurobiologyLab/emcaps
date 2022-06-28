@@ -19,7 +19,6 @@ from skimage import data
 from skimage.measure import label, regionprops_table, regionprops
 from skimage import morphology as sm
 from skimage.segmentation import clear_border
-from tiler import Merger, Tiler
 from typing_extensions import Annotated
 
 # WARNING: This can quickly lead to OOM on systems with < 16 GB RAM
@@ -112,8 +111,8 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
 data_root = Path('~/tum/Single-table_database/').expanduser()
-segmenter_path = Path('~/tum/ptsmodels/unet_gdl_uni4_15k.pts').expanduser()
-classifier_path = Path('~/tum/ptsmodels/effnet_s_40k_uni4a.pts').expanduser()
+segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
+classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
 
 
 def load_torchscript_model(path):
@@ -146,6 +145,7 @@ def segment(image: np.ndarray, thresh: float) -> np.ndarray:
 
 
 def tiled_segment(image: np.ndarray, thresh: float, pbar=None) -> np.ndarray:
+    from tiler import Tiler, Merger
     tiler = Tiler(
         data_shape=image.shape,
         tile_shape=(256, 256),
@@ -192,6 +192,29 @@ def assign_class_names(pred_ids):
     return pred_class_names
 
 
+def compute_rprops(image, labels, minsize, maxsize):
+    instance_labels = cc_label(labels, minsize=minsize, maxsize=maxsize)
+
+    properties = regionprops_table(
+        label_image=instance_labels,
+        intensity_image=normalize(image),
+        properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
+        extra_properties=[rp_classify]
+    )
+    properties['pred_classname'] = assign_class_names(properties['rp_classify'])
+    properties['circularity'] = circularity(
+        properties['perimeter'], properties['area']
+    )
+    
+    return properties
+
+
+def compute_majority_class_name(class_preds):
+    majority_class = np.argmax(np.bincount(class_preds))
+    majority_class_name = assign_class_names([majority_class])[0]
+    return majority_class_name
+
+
 # TODO: Make tiling optional
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Segmenting...'})
 def make_seg_widget(
@@ -229,18 +252,7 @@ def make_regions_widget(
 
     @thread_worker(connect={'returned': pbar.hide})
     def regions() -> LayerDataTuple:
-        instance_labels = cc_label(labels, minsize=minsize, maxsize=maxsize)
-
-        properties = regionprops_table(
-            label_image=instance_labels,
-            intensity_image=normalize(image),
-            properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
-            extra_properties=[rp_classify]
-        )
-        properties['pred_classname'] = assign_class_names(properties['rp_classify'])
-        properties['circularity'] = circularity(
-            properties['perimeter'], properties['area']
-        )
+        properties = compute_rprops(image=image, labels=labels, minsize=minsize, maxsize=maxsize)
         bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
             # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
@@ -252,12 +264,10 @@ def make_regions_widget(
             'translation': [-3, 0],
         }
 
-        majority_class = np.argmax(np.bincount(properties['rp_classify']))
-        majority_class_name = assign_class_names([majority_class])[0]
+        majority_class_name = compute_majority_class_name(class_preds=properties['rp_classify'])
 
         text_display =  f'Majority vote: {majority_class_name}'
         print(f'\n{text_display}')
-        # resultlabel.label
         show_info(text_display)
 
         meta = dict(
