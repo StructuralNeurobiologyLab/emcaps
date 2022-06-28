@@ -48,7 +48,7 @@ from elektronn3.data import transforms
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import V6Patches
+from training.tifdirdata import EncPatchData
 
 from models.effnetv2 import effnetv2_s, effnetv2_m
 
@@ -166,7 +166,7 @@ valid_transform = transforms.Compose(valid_transform)
 # Specify data set
 
 
-train_dataset = V6Patches(
+train_dataset = EncPatchData(
     descr_sheet=descr_sheet,
     train=True,
     transform=train_transform,
@@ -175,7 +175,7 @@ train_dataset = V6Patches(
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )
 
-valid_dataset = V6Patches(
+valid_dataset = EncPatchData(
     descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,

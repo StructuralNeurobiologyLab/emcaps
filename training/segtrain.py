@@ -51,7 +51,7 @@ import albumentations
 
 from tqdm import tqdm
 
-from training.tifdirdata import V6TifDirData2d
+from training.tifdirdata import EncSegData
 from utils import V5NAMES_TO_OLDNAMES
 
 
@@ -248,7 +248,7 @@ def meta_filter(meta):
     return meta
 
 
-train_dataset = V6TifDirData2d(
+train_dataset = EncSegData(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
@@ -266,7 +266,7 @@ train_dataset = V6TifDirData2d(
     epoch_multiplier=100,
 )
 
-valid_dataset = V6TifDirData2d(
+valid_dataset = EncSegData(
     descr_sheet=(data_root / 'Image_annotation_for_ML_single_table.xlsx', SHEET_NAME),
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table

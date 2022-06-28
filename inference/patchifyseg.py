@@ -1,7 +1,7 @@
 """
 Script for cropping patches from the raw data with segmentation masks:
 
-A trained neural network model (from mxqtsegtrain2.py) is used to predict
+A trained neural network model (from segtrain.py) is used to predict
 segmentation masks and masks are used to crop 28x28 pixel patches centered
 around particle centroids
 """
