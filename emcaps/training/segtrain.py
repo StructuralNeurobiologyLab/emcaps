@@ -51,8 +51,8 @@ import albumentations
 
 from tqdm import tqdm
 
-from training.tifdirdata import EncSegData
-from utils import V5NAMES_TO_OLDNAMES
+from emcaps.training.tifdirdata import EncSegData
+from emcaps.utils import V5NAMES_TO_OLDNAMES
 
 
 # @dataclass
@@ -150,7 +150,7 @@ if args.constraintype is None:
 else:
     DATA_SELECTION_V5NAMES = [args.constraintype]
 
-DATA_SELECTION = [V5NAMES_TO_OLDNAMES[n] for n in DATA_SELECTION_V5NAMES]
+DATA_SELECTION = [utils.V5NAMES_TO_OLDNAMES[n] for n in DATA_SELECTION_V5NAMES]
 
 
 

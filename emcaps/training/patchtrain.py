@@ -48,11 +48,9 @@ from elektronn3.data import transforms
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from training.tifdirdata import EncPatchData
-
-from models.effnetv2 import effnetv2_s, effnetv2_m
-
-import utils
+from emcaps.training.tifdirdata import EncPatchData
+from emcaps.models.effnetv2 import effnetv2_s, effnetv2_m
+from emcaps import utils
 
 
 parser = argparse.ArgumentParser(description='Train a network.')

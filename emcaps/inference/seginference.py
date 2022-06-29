@@ -26,7 +26,7 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 
 
-from utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
+from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
 
 
 # torch.backends.cudnn.benchmark = True

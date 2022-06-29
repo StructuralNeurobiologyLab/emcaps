@@ -17,7 +17,7 @@ from elektronn3.data import transforms
 from skimage import morphology as sm
 from torch.utils import data
 
-import utils
+from emcaps import utils
 
 logger = logging.getLogger('elektronn3log')
 

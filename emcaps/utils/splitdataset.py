@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from skimage import measure
 
-from utils import get_meta, get_path_prefix, get_image_resources
+from emcaps.utils import get_meta, get_path_prefix, get_image_resources
 
 
 # Load original image sheet

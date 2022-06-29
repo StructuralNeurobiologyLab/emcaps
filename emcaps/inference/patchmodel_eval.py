@@ -15,13 +15,11 @@ from pathlib import Path
 
 import imageio
 import matplotlib.pyplot as plt
-import yaml
 import torch
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-
+from sklearn.metrics import confusion_matrix
 
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
@@ -31,10 +29,7 @@ from elektronn3.training import metrics
 from elektronn3.data import transforms
 from elektronn3.inference import Predictor
 
-from training.tifdirdata import UPatches
-
-from models.effnetv2 import effnetv2_s, effnetv2_m
-from analysis.cf_matrix import plot_confusion_matrix
+from emcaps.analysis.cf_matrix import plot_confusion_matrix
 
 parser = argparse.ArgumentParser(description='Evaluate a network.')
 parser.add_argument(

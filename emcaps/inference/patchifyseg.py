@@ -33,8 +33,8 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
 
-from analysis.radial_patchlineplots import measure_outer_disk_radius
-import utils
+from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius
+from emcaps import utils
 
 
 def eul(paths):
