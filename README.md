@@ -4,12 +4,12 @@
 
 ### Step 1
 
-- `training.mxqtsegtrain2`: Train 2D segmentation models.
+- `training.segtsegtrain`: Train 2D segmentation models.
 
 ### Step 2
 
 - `inference.inference`: Perform 2D segmentation model batch inference, visualize and evaluate results.
-- `inference.patchifyseg4`: Based on segmentation (from NN and/or GT), extract particle-centered image patches and store them as separate files in addition to metadata. The resulting patch dataset can be used for training models for patch-based classification. In addition, A random sample of the validation patches is prepared for evaluation of human and NN-based classification evaluation.
+- `inference.patchifyseg`: Based on segmentation (from NN and/or GT), extract particle-centered image patches and store them as separate files in addition to metadata. The resulting patch dataset can be used for training models for patch-based classification. In addition, A random sample of the validation patches is prepared for evaluation of human and NN-based classification evaluation.
 
 ### Step 3
 
@@ -17,7 +17,7 @@
 
 ### Step 4
 
-- `inference.patchmodel_eval4`: Evaluate patch classification results (TODO)
+- `inference.patchmodel_eval`: Evaluate patch classification results (TODO)
 
 
 ## Dataset
@@ -34,7 +34,7 @@ TODO
 
 All scripts should be executed from the current directory using `python3 -m`, for example:
 
-    $ python3 -m training.mxqtsegtrain2
+    $ python3 -m training.segtrain
 
 
 ## Further notes

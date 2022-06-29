@@ -186,7 +186,6 @@ if len(DATA_SELECTION_V5NAMES) == 1:
     v5_enctype = DATA_SELECTION_V5NAMES[0]
     results_root = Path(f'{str(results_root)}_{v5_enctype}')
 
-
 for p in [results_root]:
     p.mkdir(exist_ok=True)
 
