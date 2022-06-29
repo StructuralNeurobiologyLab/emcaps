@@ -4,7 +4,7 @@
 
 ### Step 1
 
-- `training.segtsegtrain`: Train 2D segmentation models.
+- `training.segtrain`: Train 2D segmentation models.
 
 ### Step 2
 
@@ -34,7 +34,7 @@ TODO
 
 All scripts should be executed from the current directory using `python3 -m`, for example:
 
-    $ python3 -m training.segtrain
+    $ python3 -m emcaps.training.segtrain
 
 
 ## Further notes
