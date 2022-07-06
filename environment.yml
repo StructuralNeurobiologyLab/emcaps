@@ -22,10 +22,11 @@ dependencies:
   - scipy >=1.8
   - seaborn >=0.11
   - setuptools >=62
-  - pytorch >=1.12
+  - pytorch >=1.12 # [not osx]
   - tqdm >=4.64
   - typing_extensions >=4.2
 
   - pip
   - pip:
-    - git+https://github.com/ELEKTRONN/elektronn3.git@master#egg=elektronn3
+    - torch >=1.12 # [osx]  # use pip version because conda version segfaults (TODO: debug)
+    - git+https://github.com/ELEKTRONN/elektronn3.git@emcaps#egg=elektronn3

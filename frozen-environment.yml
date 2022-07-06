@@ -9,9 +9,9 @@ dependencies:
   - hydra-core=1.1.*
   - imageio=2.19.*
   - ipython=8.4.*
-  - magicgui=0.5.*
+  # - magicgui=0.5.*
+  # - napari=0.4.16.*
   - matplotlib=3.5.*
-  - napari=0.4.16.*
   - numpy=1.22.*
   - omegaconf=2.2.*
   - pandas=1.4.*
@@ -22,10 +22,11 @@ dependencies:
   - scipy=1.8.*
   - seaborn=0.11.*
   - setuptools=62.6.*
-  - pytorch=1.12.*
+  - pytorch=1.12.* # [not osx]
   - tqdm=4.64.*
   - typing_extensions=4.2.*
 
   - pip
   - pip:
+    - torch # [osx]  # use pip version because conda version segfaults (TODO: debug)
     - git+https://github.com/ELEKTRONN/elektronn3.git@master#egg=elektronn3
