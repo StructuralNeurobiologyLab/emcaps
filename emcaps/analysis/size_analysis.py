@@ -1,5 +1,5 @@
 """
-Uses binary segmentation results (from seginference.py) to estimate
+Uses binary segmentation results (from segment.py) to estimate
 typical size of encapsulin particles, by median or by finding the first KDE
 peak.
 """

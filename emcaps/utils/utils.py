@@ -46,7 +46,7 @@ def image_grid(imgs, rows, cols, enable_grid_lines=True, text_color=255) -> Imag
 
 
 # Load mapping from class names to class IDs
-class_info_path = './class_info.yaml'
+class_info_path = './emcaps/class_info.yaml'  # TODO: proper relative path
 with open(class_info_path) as f:
     class_info = yaml.load(f, Loader=yaml.FullLoader)
 CLASS_IDS = class_info['class_ids_v5']  # Use v5 class names

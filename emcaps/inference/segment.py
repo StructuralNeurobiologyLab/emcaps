@@ -49,20 +49,22 @@ def main():
         transforms.Normalize(mean=dataset_mean, std=dataset_std)
     ])
 
-    ENABLE_ENCTYPE_SUBDIRS = True
+    ENABLE_ENCTYPE_SUBDIRS = False
     ZERO_LABELS = False
 
-    EVAL_ON_DRO = True
+    EVAL_ON_DRO = False
 
 
     import argparse
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
+    parser.add_argument('srcpath', help='Path to input file', default=None)
     parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
     parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
     args = parser.parse_args()
 
     selected_enctype = args.constraintype
     use_expert = args.use_expert
+    srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
 
     """
     for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
@@ -72,107 +74,74 @@ def main():
 
     thresh = 127
     dt_thresh = 0.00
-    multi_thresh = 100
 
-    multi_label_names = {
-        0: 'background',
-        1: 'membranes',
-        2: 'encapsulins',
-        3: 'nuclear_membrane',
-        4: 'nuclear_region',
-        5: 'cytoplasmic_region',
-    }
-
-    # results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v7_tr-all_ev-onlyhek')
-    results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v7_')
-    if selected_enctype is not None:
-        msuffix = '_expert' if use_expert else ''
-        results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
-    data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
+    if srcpath is None:
+        results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v7_')
+        if selected_enctype is not None:
+            msuffix = '_expert' if use_expert else ''
+            results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
+        data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 
 
-    # DATA_SELECTION = [
-    #     # 'DRO_1xMT3-MxEnc-Flag-NLS',
-    #     # 'DRO_1xMT3-QtEnc-Flag-NLS',
-    #     'HEK_1xMT3-QtEnc-Flag',
-    #     'HEK_1xMT3-MxEnc-Flag',
-    #     'HEK-2xMT3-QtEnc-Flag',
-    #     'HEK-2xMT3-MxEnc-Flag',
-    #     'HEK-3xMT3-QtEnc-Flag',
-    #     'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
-    # ]
-    DRO_V5NAMES = ['DRO-1M-Mx', 'DRO-1M-Qt']
+        DRO_V5NAMES = ['DRO-1M-Mx', 'DRO-1M-Qt']
 
-    if selected_enctype is None:
-        if EVAL_ON_DRO:
-            DATA_SELECTION_V5NAMES = [  # for Drosophila
-                'DRO-1M-Mx',
-                'DRO-1M-Qt',
-            ]
+        if selected_enctype is None:
+            if EVAL_ON_DRO:
+                DATA_SELECTION_V5NAMES = [  # for Drosophila
+                    'DRO-1M-Mx',
+                    'DRO-1M-Qt',
+                ]
+            else:
+                DATA_SELECTION_V5NAMES = [
+                    '1M-Mx',
+                    '1M-Qt',
+                    '2M-Mx',
+                    '2M-Qt',
+                    '3M-Qt',
+                    '1M-Tm',
+                    # 'DRO-1M-Mx',
+                    # 'DRO-1M-Qt',
+                ]
         else:
-            DATA_SELECTION_V5NAMES = [
-                '1M-Mx',
-                '1M-Qt',
-                '2M-Mx',
-                '2M-Qt',
-                '3M-Qt',
-                '1M-Tm',
-                # 'DRO-1M-Mx',
-                # 'DRO-1M-Qt',
-            ]
+            DATA_SELECTION_V5NAMES = [selected_enctype]
+
+
+        def find_full_dro_images():
+            meta = get_meta()
+            # dro_meta = meta.loc[meta.scondv5.isin(DRO_V5NAMES)]
+            dro_meta = meta.loc[meta.scondv5.isin(DATA_SELECTION_V5NAMES)]
+            dro_image_numbers = dro_meta.num.to_list()
+            paths = [data_root / f'{i}/{i}.tif' for i in dro_image_numbers]
+            return paths
+
+
+        def find_v7_val_images(isplitpath=None):
+            """Find paths to all raw validation images of split v7"""
+            if isplitpath is None:
+                isplitpath = data_root / 'isplitdata_v7'
+            val_img_paths = []
+            for p in isplitpath.rglob('*_val.tif'):  # Look for all validation raw images recursively
+                if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
+                    val_img_paths.append(p)
+            return val_img_paths
+
+
+        if EVAL_ON_DRO:
+            img_paths = find_full_dro_images()
+        else:
+            img_paths = find_v7_val_images()
+
+        # for p in [results_path / scond for scond in DATA_SELECTION]:
+        #     os.makedirs(p, exist_ok=True)
+
+        if len(DATA_SELECTION_V5NAMES) == 1:
+            v5_enctype = DATA_SELECTION_V5NAMES[0]
+            results_root = Path(f'{str(results_root)}_{v5_enctype}')
+
     else:
-        DATA_SELECTION_V5NAMES = [selected_enctype]
+        img_paths = [srcpath]
+        results_root = Path(img_paths[0]).parent
 
-
-    def find_full_dro_images():
-        meta = get_meta()
-        # dro_meta = meta.loc[meta.scondv5.isin(DRO_V5NAMES)]
-        dro_meta = meta.loc[meta.scondv5.isin(DATA_SELECTION_V5NAMES)]
-        dro_image_numbers = dro_meta.num.to_list()
-        paths = [data_root / f'{i}/{i}.tif' for i in dro_image_numbers]
-        return paths
-
-
-    def find_v7_val_images(isplitpath=None):
-        """Find paths to all raw validation images of split v7"""
-        if isplitpath is None:
-            isplitpath = data_root / 'isplitdata_v7'
-        val_img_paths = []
-        for p in isplitpath.rglob('*_val.tif'):  # Look for all validation raw images recursively
-            if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
-                val_img_paths.append(p)
-        return val_img_paths
-
-
-    # valid_image_numbers = []
-    # for condition in DATA_SELECTION:
-    #     valid_image_numbers.extend(valid_image_dict[condition])
-
-    # image_numbers = valid_image_numbers  # validation images, held out from training data
-
-    # image_numbers = [147, 148, 149, 150, 151, 152]  # extra tmenc set
-
-    ## Training set:
-    # image_numbers = set(list(range(16, 138 + 1)) + list(range(141, 152 + 1)))
-    # image_numbers = image_numbers - set(valid_image_numbers)
-    # print('Selected image numbers:', image_numbers)
-
-    # img_paths = [
-    #     str(data_root / f'{i}/{i}.tif') for i in image_numbers
-    # ]
-
-    # img_paths = [f'/wholebrain/scratch/mdraw/tum/formartin_idx/{i}.TIF' for i in range(1, 6 + 1)]
-    # img_paths = [f'/wholebrain/scratch/mdraw/tum/Drosophila_validation/{i}.TIF' for i in range(1, 20 + 1)]
-
-    if EVAL_ON_DRO:
-        img_paths = find_full_dro_images()
-    else:
-        img_paths = find_v7_val_images()
-
-    # for p in [results_path / scond for scond in DATA_SELECTION]:
-    #     os.makedirs(p, exist_ok=True)
-
-    # img_paths = ['/wholebrain/scratch/mdraw/tum/data-targeted/EM2022_75_R3Box33_01_07_39_69.TIF']
 
     DESIRED_OUTPUTS = [
         'raw',
@@ -186,9 +155,7 @@ def main():
 
     label_name = 'encapsulins'
 
-    if len(DATA_SELECTION_V5NAMES) == 1:
-        v5_enctype = DATA_SELECTION_V5NAMES[0]
-        results_root = Path(f'{str(results_root)}_{v5_enctype}')
+
 
     for p in [results_root]:
         p.mkdir(exist_ok=True)
@@ -224,6 +191,8 @@ def main():
             # Randomizer()  # produce random outputs instead
         ]
 
+    model_paths = ['./unet_v7_all.pts']
+
     assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
     for model_path in model_paths:
         modelname = os.path.basename(os.path.dirname(model_path))
@@ -231,7 +200,7 @@ def main():
         apply_softmax = True
         predictor = Predictor(
             model=model_path,
-            device='cuda',
+            device=None,
             # float16=True,
             transform=pre_predict_transform,
             verbose=True,
