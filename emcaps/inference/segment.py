@@ -146,11 +146,11 @@ def main():
     DESIRED_OUTPUTS = [
         'raw',
         'thresh',
-        'lab',
-        'overlays',
-        'error_maps',
+        # 'lab',
+        # 'overlays',
+        # 'error_maps',
         'probmaps',
-        'metrics',
+        # 'metrics',
     ]
 
     label_name = 'encapsulins'
