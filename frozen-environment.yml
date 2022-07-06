@@ -1,0 +1,31 @@
+name: emcaps
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python =3.10.*
+  - albumentations=1.0.*
+  - hydra-core=1.1.*
+  - imageio=2.19.*
+  - ipython=8.4.*
+  - magicgui=0.5.*
+  - matplotlib=3.5.*
+  - napari=0.4.16.*
+  - numpy=1.22.*
+  - omegaconf=2.2.*
+  - pandas=1.4.*
+  - Pillow=9.1.*
+  - PyYAML=6.0.*
+  - scikit-image=0.19.*
+  - scikit-learn=1.1.*
+  - scipy=1.8.*
+  - seaborn=0.11.*
+  - setuptools=62.6.*
+  - pytorch=1.12.*
+  - tqdm=4.64.*
+  - typing_extensions=4.2.*
+
+  - pip
+  - pip:
+    - git+https://github.com/ELEKTRONN/elektronn3.git@master#egg=elektronn3

@@ -1,5 +1,24 @@
 # Experiments on encapsulin analysis with data from TUM
 
+
+## Installation
+
+```
+conda env create -f environment.yml
+conda activate emcaps
+# TODO: Next steps
+
+```
+
+
+## Execution
+
+All scripts should be executed from the current directory using `python3 -m`, for example:
+
+    $ python3 -m emcaps.training.segtrain
+
+
+
 ## Most important entry points
 
 ### Step 1
@@ -17,24 +36,12 @@
 
 ### Step 4
 
-- `inference.patchmodel_eval`: Evaluate patch classification results (TODO)
+- `inference.patchmodel_eval`: Evaluate patch classification results.
 
 
 ## Dataset
 
 TODO
-
-
-## Requirements
-
-TODO
-
-
-## Execution
-
-All scripts should be executed from the current directory using `python3 -m`, for example:
-
-    $ python3 -m emcaps.training.segtrain
 
 
 ## Further notes
