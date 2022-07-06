@@ -50,7 +50,7 @@ def main():
     ])
 
     ENABLE_ENCTYPE_SUBDIRS = False
-    ZERO_LABELS = False
+    ZERO_LABELS = True
 
     EVAL_ON_DRO = False
 
@@ -58,6 +58,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('srcpath', help='Path to input file', default=None)
+    parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
     parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
     args = parser.parse_args()
@@ -147,7 +148,7 @@ def main():
         'raw',
         'thresh',
         # 'lab',
-        # 'overlays',
+        'overlays',
         # 'error_maps',
         'probmaps',
         # 'metrics',
@@ -196,6 +197,17 @@ def main():
     assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
     for model_path in model_paths:
         modelname = os.path.basename(os.path.dirname(model_path))
+
+        if args.t:
+            tile_shape = (128, 128)
+            overlap_shape = (32, 32)
+            # TODO
+            out_shape = np.array(imageio.imread(img_paths[0])).shape
+            out_shape = (2, *out_shape)
+        else:
+            tile_shape = None
+            overlap_shape = None
+            out_shape = None
 
         apply_softmax = True
         predictor = Predictor(
