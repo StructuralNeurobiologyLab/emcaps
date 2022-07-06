@@ -9,7 +9,7 @@ import os
 import random
 from pathlib import Path
 
-import imageio
+import imageio.v3 as iio
 import yaml
 import numpy as np
 import pandas as pd
@@ -64,7 +64,7 @@ def get_enctype_patches(meta, enctype):
     for patch_entry in enctypemeta.itertuples():
         raw_fname = patch_entry.patch_fname
         raw_fname = patches_root / 'raw' / raw_fname
-        patch = imageio.imread(raw_fname)
+        patch = iio.imread(raw_fname)
         patches.append(patch)
     patches = np.stack(patches)
     return patches
@@ -76,7 +76,7 @@ def get_enctype_patches_by_img(meta, enctype):
     for patch_entry in enctypemeta.itertuples():
         raw_fname = patch_entry.patch_fname
         raw_fname = patches_root / 'raw' / raw_fname
-        patch = imageio.imread(raw_fname)
+        patch = iio.imread(raw_fname)
         patches[patch_entry.img_num].append(patch)
     for num in patches.keys():
         patches[num] = np.stack(patches[num])
@@ -97,13 +97,13 @@ if BY_IMG:
         # print(f'{enctype}: got {patches.shape[0]} patches.')
         for num, npa in patches.items():
             avg_patch = create_avg_img(npa).astype(np.uint8)
-            imageio.imwrite(avg_output_dir / f'avg-{enctype}_{num}_n{npa.shape[0]}.png', avg_patch)
+            iio.imwrite(avg_output_dir / f'avg-{enctype}_{num}_n{npa.shape[0]}.png', avg_patch)
 else:
     for enctype in CLASS_NAMES_IN_USE:
         patches = get_enctype_patches(vmeta, enctype=enctype)
         print(f'{enctype}: got {patches.shape[0]} patches.')
         avg_patch = create_avg_img(patches).astype(np.uint8)
-        imageio.imwrite(avg_output_dir / f'avg_{enctype}.png', avg_patch)
+        iio.imwrite(avg_output_dir / f'avg_{enctype}.png', avg_patch)
         for i in range(patches.shape[0]):
             rpath = raw_by_class_dir / enctype / f'rv_{i:04d}.png'
-            imageio.imwrite(rpath, patches[i])
+            iio.imwrite(rpath, patches[i])

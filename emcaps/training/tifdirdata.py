@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence, Tuple, Union
 
-import imageio
+import imageio.v3 as iio
 import numpy as np
 import pandas as pd
 import torch
@@ -25,7 +25,7 @@ logger = logging.getLogger('elektronn3log')
 @lru_cache(maxsize=1024)
 def mimread(*args, **kwargs):
     """Memoize imread to avoid disk I/O"""
-    return imageio.imread(*args, **kwargs)
+    return iio.imread(*args, **kwargs)
 
 
 # Credit: https://newbedev.com/how-can-i-create-a-circular-mask-for-a-numpy-array

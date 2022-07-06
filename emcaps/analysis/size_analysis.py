@@ -10,7 +10,7 @@ from pathlib import Path
 from os.path import expanduser as eu
 
 import numpy as np
-import imageio
+import imageio.v3 as iio
 from numpy.core.fromnumeric import ndim
 import skimage
 
@@ -55,12 +55,12 @@ pred_paths = [
 #         raise FileNotFoundError(p)
 
 
-labs = [imageio.imread(p) for p in lab_paths]
-preds = [imageio.imread(p) for p in pred_paths]
+labs = [iio.imread(p) for p in lab_paths]
+preds = [iio.imread(p) for p in pred_paths]
 
 # Horizontally stack all images
-# hs_labs = np.hstack([imageio.imread(p) for p in lab_paths])
-# hs_preds = np.hstack([imageio.imread(p) for p in pred_paths])
+# hs_labs = np.hstack([iio.imread(p) for p in lab_paths])
+# hs_preds = np.hstack([iio.imread(p) for p in pred_paths])
 
 all_imgs = {'GT': labs, 'Prediction': preds}
 

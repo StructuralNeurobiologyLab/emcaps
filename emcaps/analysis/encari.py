@@ -5,7 +5,7 @@ Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 
 from pathlib import Path
 
-import imageio
+import imageio.v3 as iio
 import napari
 import numpy as np
 import torch
@@ -101,7 +101,7 @@ def make_bbox(bbox_extents):
     return bbox_rect
 
 # Load mapping from class names to class IDs
-class_info_path = './class_info.yaml'
+class_info_path = './emcaps/class_info.yaml'
 with open(class_info_path) as f:
     class_info = yaml.load(f, Loader=yaml.FullLoader)
 CLASS_IDS = class_info['class_ids_v5']
@@ -129,7 +129,7 @@ def normalize(image: np.ndarray) -> np.ndarray:
 classifier_model = load_torchscript_model(classifier_path)
 seg_model = load_torchscript_model(segmenter_path)
 
-image_raw = imageio.imread(data_root / '129/129.tif')
+image_raw = iio.imread(data_root / '129/129.tif')
 image_normalized = normalize(image_raw)
 
 

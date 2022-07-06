@@ -12,7 +12,7 @@ from skimage.filters import threshold_otsu
 from skimage.segmentation import clear_border
 from skimage.measure import label, regionprops_table
 from skimage.morphology import closing, square, remove_small_objects
-import imageio
+import imageio.v3 as iio
 import yaml
 import napari
 
@@ -111,7 +111,7 @@ def load_torchscript_model(path):
 classifier_model = load_torchscript_model(classifier_path)
 seg_model = load_torchscript_model(segmenter_path)
 
-image_raw = imageio.imread(data_root / '129/129.tif')
+image_raw = iio.imread(data_root / '129/129.tif')
 image_normalized = (image_raw.astype(np.float32) - 128.) / 128.
 
 
@@ -154,7 +154,7 @@ if not INTERACTIVE:
     viewer = napari.view_image(image_raw, name='image', rgb=False)
     print('Segmenting...')
     if USE_GT:
-        sem_label_image = imageio.imread(data_root / '129/129_encapsulins.tif')
+        sem_label_image = iio.imread(data_root / '129/129_encapsulins.tif')
     else:
         sem_label_image = segment(image_normalized)
 

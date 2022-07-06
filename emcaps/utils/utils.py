@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple
 
-import imageio
+import imageio.v3 as iio
 import numpy as np
 import pandas as pd
 import yaml
@@ -153,7 +153,7 @@ def get_raw_path(img_num: int, sheet_path=None) -> Path:
 @lru_cache(maxsize=1024)
 def get_raw(img_num: int, sheet_path=None) -> np.ndarray:
     img_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
-    img = imageio.imread(img_path)
+    img = iio.imread(img_path)
     return img
 
 
@@ -163,7 +163,7 @@ def read_image(path: Path) -> np.ndarray:
         uppercase_suf_path = path.with_suffix('.TIF')
         if uppercase_suf_path.is_file():
             path = uppercase_suf_path
-    img = imageio.imread(path)
+    img = iio.imread(path)
     return img
 
 
@@ -201,7 +201,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
     metarow = get_meta_row(path_or_num=img_num, sheet_path=sheet_path)
     raw_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
     if raw_path.is_file():
-        raw = imageio.imread(raw_path)
+        raw = iio.imread(raw_path)
     else:
         raw = None
     # with_stem() requires py39 -> use with_name()
@@ -217,7 +217,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
                 break  # Found it, stop searching
     was_inverted = False
     if label_path.is_file():
-        label = imageio.imread(label_path)
+        label = iio.imread(label_path)
         label = label > 0  # Binarize
         label, was_inverted = ensure_not_inverted(label)
     else:

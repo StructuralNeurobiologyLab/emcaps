@@ -8,7 +8,7 @@ built with eclassify_analysis.py.
 
 import matplotlib.pyplot as plt
 import numpy as np
-import imageio
+import imageio.v3 as iio
 import os
 import sys
 from pathlib import Path
@@ -190,7 +190,7 @@ if __name__ == '__main__':
 
     # Collect individual patches and profiles
     for i, p in tqdm.tqdm(enumerate(patch_path.iterdir()), total=len(list(patch_path.glob('*')))):
-        img = imageio.imread(p)
+        img = iio.imread(p)
         if p.name.startswith('mx'):
             enctype = 'MT3-MxEnc'
         elif p.name.startswith('qt'):
@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
         # Load segmentation mask
         mpath = mask_path / p.name.replace('qt_', '').replace('mx_', '').replace('raw', 'mask')
-        mask_img = imageio.imread(mpath) > 0
+        mask_img = iio.imread(mpath) > 0
         masks[enctype].append(mask_img)
 
     # Reduce to average patches, average profiles

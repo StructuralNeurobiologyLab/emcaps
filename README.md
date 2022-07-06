@@ -20,7 +20,7 @@
 
 All scripts should be executed from the current directory using `python3 -m`, for example:
 
-    $ python3 -m emcaps.training.segment
+    $ python3 -m emcaps.inference.segment
 
 
 

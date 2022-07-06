@@ -6,7 +6,7 @@ from os.path import expanduser as eu
 from pathlib import Path
 from typing import Tuple, List
 
-import imageio
+import imageio.v3 as iio
 import numpy as np
 import pandas as pd
 from skimage import measure
@@ -115,9 +115,9 @@ for entry in meta.itertuples():
     trn_raw_path = img_subdir / f'{img_num}_trn.tif'
     val_lab_path = img_subdir / f'{img_num}_val_encapsulins.tif'
     trn_lab_path = img_subdir / f'{img_num}_trn_encapsulins.tif'
-    imageio.imwrite(val_raw_path, val_raw)
-    imageio.imwrite(trn_raw_path, trn_raw)
-    imageio.imwrite(val_lab_path, val_lab)
-    imageio.imwrite(trn_lab_path, trn_lab)
+    iio.imwrite(val_raw_path, val_raw)
+    iio.imwrite(trn_raw_path, trn_raw)
+    iio.imwrite(val_lab_path, val_lab)
+    iio.imwrite(trn_lab_path, trn_lab)
 
 

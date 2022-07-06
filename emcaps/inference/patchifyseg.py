@@ -13,7 +13,7 @@ import shutil
 import logging
 
 import numpy as np
-import imageio
+import imageio.v3 as iio
 import skimage
 import torch
 import tqdm
@@ -276,11 +276,11 @@ for model_path in model_paths:
         if DRO_MODE:
             enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
 
-        inp = np.array(imageio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
+        inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
         if USE_GT:
             label_path = img_path.with_name(f'{img_path.stem}_encapsulins.tif')
-            label = imageio.imread(label_path).astype(np.int64)
+            label = iio.imread(label_path).astype(np.int64)
             mask = label
         else:
             # Use extra model for TmEnc (?)
@@ -397,9 +397,9 @@ for model_path in model_paths:
                 circularity=circularity,
             ))
 
-            imageio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
-            imageio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
-            imageio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
+            iio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
+            iio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
+            iio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
             patch_id += 1
 
 

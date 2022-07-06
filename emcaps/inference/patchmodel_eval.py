@@ -13,7 +13,7 @@ import random
 from typing import Literal
 from pathlib import Path
 
-import imageio
+import imageio.v3 as iio
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
@@ -220,7 +220,7 @@ def evaluate(vmeta, groupkey, split=None):
         for patch_entry in gvmeta.itertuples():
             raw_fname = patch_entry.patch_fname
             nobg_fpath = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
-            patch = imageio.imread(nobg_fpath).astype(np.float32)[None][None]
+            patch = iio.imread(nobg_fpath).astype(np.float32)[None][None]
 
             out = predictor.predict(patch)
             if ENABLE_BINARY_1M:
