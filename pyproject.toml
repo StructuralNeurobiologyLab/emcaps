@@ -1,3 +1,30 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = ["setuptools>=63", "wheel", "setuptools-scm[toml]>=7"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "emcaps"
+description = "Code for the paper Genetically encoded barcodes for correlative volume electron microscopy"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["emcapsulin", "encapsulin"]
+license = {file = "LICENSE"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Image Processing",
+
+]
+dynamic = ["version", "dependencies"]
+
+[project.scripts]
+emcaps-segment = "emcaps.inference.segment:main"
+
+[tool.setuptools]
+packages = ["emcaps"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools_scm]
+write_to = "emcaps/_version.py"
