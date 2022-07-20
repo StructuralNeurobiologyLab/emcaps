@@ -22,7 +22,7 @@ dependencies:
   - scipy >=1.8
   - seaborn >=0.11
   - setuptools >=62
-  - pytorch >=1.12 # [not osx]
+  # - pytorch >=1.12 # [not osx]  # workaround for OMP issues: install pytorch from pip below
   - tqdm >=4.64
   - typing_extensions >=4.2
 

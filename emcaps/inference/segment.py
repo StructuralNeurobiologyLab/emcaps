@@ -35,7 +35,7 @@ from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, c
 # torch.backends.cudnn.benchmark = True
 
 
-def main(srcpath, tta_num=0, enable_tiled_inference=False):
+def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
 
 
     def eul(paths):
@@ -66,8 +66,6 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False):
 
     thresh = 127
     dt_thresh = 0.00
-
-    MINSIZE = 150
 
     img_paths = [srcpath]
     results_root = Path(img_paths[0]).parent
@@ -151,7 +149,7 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False):
 
             # Postprocessing:
             cout = sm.remove_small_holes(cout, 2000)
-            cout = sm.remove_small_objects(cout, MINSIZE)
+            cout = sm.remove_small_objects(cout, minsize)
 
             # cc, n_comps = ndimage.label(cout)
 
@@ -307,11 +305,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('srcpath', help='Path to input file', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
+    parser.add_argument('--minsize', default=150, type=int, help='Minimum size of segmented particles in pixels')
     parser.add_argument('-a', type=int, default=0, choices=[0, 1, 2], help='Number of test-time augmentations to use')
     args = parser.parse_args()
 
     tta_num = args.a
     enable_tiled_inference = args.t
+    minsize = args.minsize
     srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
 
-    main(srcpath, tta_num, enable_tiled_inference)
+    main(srcpath=srcpath, tta_num=tta_num, enable_tiled_inference=enable_tiled_inference, minsize=minsize)
