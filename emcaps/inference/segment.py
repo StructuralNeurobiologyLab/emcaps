@@ -2,6 +2,7 @@
 raw images and a model trained with `segtrain.py`."""
 
 
+import argparse
 import os
 from pathlib import Path
 from os.path import expanduser as eu
@@ -34,7 +35,7 @@ from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, c
 # torch.backends.cudnn.benchmark = True
 
 
-def main():
+def main(srcpath, tta_num=0, enable_tiled_inference=False):
 
 
     def eul(paths):
@@ -56,16 +57,6 @@ def main():
 
     EVAL_ON_DRO = False
 
-
-    import argparse
-    parser = argparse.ArgumentParser(description='Run inference with a trained network.')
-    parser.add_argument('srcpath', help='Path to input file', default=None)
-    parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
-    parser.add_argument('-a', type=int, default=0, choices=[0, 1, 2], help='Number of test-time augmentations to use')
-    args = parser.parse_args()
-
-    tta_num = args.a
-    srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
 
     """
     for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
@@ -104,7 +95,7 @@ def main():
 
     modelname = os.path.basename(os.path.dirname(model_path))
 
-    if args.t:
+    if tiled:
         tile_shape = (448, 448)
         overlap_shape = (32, 32)
         # TODO
@@ -312,4 +303,15 @@ Model info:
 
 
 if __name__ == '__main__':
-    main()
+
+    parser = argparse.ArgumentParser(description='Run inference with a trained network.')
+    parser.add_argument('srcpath', help='Path to input file', default=None)
+    parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
+    parser.add_argument('-a', type=int, default=0, choices=[0, 1, 2], help='Number of test-time augmentations to use')
+    args = parser.parse_args()
+
+    tta_num = args.a
+    enable_tiled_inference = args.t
+    srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
+
+    main(srcpath, tta_num, enable_tiled_inference)
