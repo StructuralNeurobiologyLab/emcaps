@@ -95,7 +95,7 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False):
 
     modelname = os.path.basename(os.path.dirname(model_path))
 
-    if tiled:
+    if enable_tiled_inference:
         tile_shape = (448, 448)
         overlap_shape = (32, 32)
         # TODO
