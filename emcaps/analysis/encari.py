@@ -3,6 +3,12 @@ Experimental interactive visualization tool for Encapsulin classification.
 Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 """
 
+# TODO:
+# - Tiling prediction
+# - TTA
+# - Fix classification
+
+
 from pathlib import Path
 
 import imageio.v3 as iio
@@ -246,8 +252,8 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 10}] = 150,
-    maxsize: Annotated[int, {"min": 1, "max": 1000, "step": 10}] = 500,
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
+    maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
