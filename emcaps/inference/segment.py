@@ -37,6 +37,9 @@ from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, c
 
 def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Running on device: {device}')
+
 
     def eul(paths):
         """Shortcut for expanding all user paths in a list"""
@@ -67,9 +70,15 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
     thresh = 127
     dt_thresh = 0.00
 
-    img_paths = [srcpath]
-    results_root = Path(img_paths[0]).parent
-
+    srcpath = Path(srcpath).expanduser()
+    if srcpath.is_file():
+        img_paths = [srcpath]
+        results_root = Path(img_paths[0]).parent
+    elif srcpath.is_dir():
+        img_paths = list(srcpath.rglob('*'))
+        results_root = srcpath.parent / f'{srcpath.name}_seg'
+    else:
+        raise FileNotFoundError(f'{srcpath} not found')
 
     DESIRED_OUTPUTS = [
         'raw',
@@ -96,8 +105,7 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
     if enable_tiled_inference:
         tile_shape = (448, 448)
         overlap_shape = (32, 32)
-        # TODO
-        out_shape = np.array(iio.imread(img_paths[0])).shape
+        out_shape = np.array(iio.imread(img_paths[0])).shape  # TODO: support changing shapes
         out_shape = (2, *out_shape)
     else:
         tile_shape = None
@@ -107,11 +115,11 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
     apply_softmax = True
     predictor = Predictor(
         model=model_path,
-        device=None,
+        device=device,
         tile_shape=tile_shape,
         overlap_shape=overlap_shape,
         out_shape=out_shape,
-        float16=True,
+        float16='cuda' in str(device),
         transform=pre_predict_transform,
         verbose=True,
         augmentations=tta_num,
@@ -160,15 +168,15 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
             # Make iio.imwrite-able
             cout = cout.astype(np.uint8) * 255
 
-            # out_path = eu(f'{results_path}/{basename}_{modelname}_{kind}.tif')
-            out_path = eu(f'{results_path}/{basename}_{kind}.tif')
+            # out_path = eu(f'{results_path}/{basename}_{modelname}_{kind}.png')
+            out_path = eu(f'{results_path}/{basename}_{kind}.png')
             print(f'Writing inference result to {out_path}')
             if 'thresh' in DESIRED_OUTPUTS:
                 iio.imwrite(out_path, cout)
 
             if 'probmaps' in DESIRED_OUTPUTS:
                 probmap = (out[0, 1] * 255.).astype(np.uint8)
-                probmap_path = eu(f'{results_path}/{basename}_probmap.tif')
+                probmap_path = eu(f'{results_path}/{basename}_probmap.jpg')
                 iio.imwrite(probmap_path, probmap)
 
             raw_img = iio.imread(img_path)
@@ -178,8 +186,8 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
                 lab_img = np.zeros_like(raw_img, dtype=np.uint8)
             else:
                 lab_path = f'{str(img_path)[:-4]}_{label_name}.tif'
-                if not Path(lab_path).exists():
-                    lab_path = f'{img_path[:-4]}_{label_name}.TIF'
+                # if not Path(lab_path).exists():
+                #     lab_path = f'{img_path[:-4]}_{label_name}.TIF'
                 lab_img = np.array(iio.imread(lab_path))
                 lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False)[0].astype(np.int64)
 
@@ -187,9 +195,9 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
                 lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
 
             if 'raw' in DESIRED_OUTPUTS:
-                iio.imwrite(eu(f'{results_path}/{basename}_raw.tif'), raw_img)
+                iio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
             if 'lab' in DESIRED_OUTPUTS:
-                iio.imwrite(eu(f'{results_path}/{basename}_lab.tif'), lab_img)
+                iio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
 
             if 'overlays' in DESIRED_OUTPUTS:
                 # Create overlay images
@@ -204,34 +212,34 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
                 pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
                 if not ZERO_LABELS:
-                    iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.tif'), lab_overlay)
-                iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.tif'), pred_overlay)
+                    iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
+                iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
             if 'error_maps' in DESIRED_OUTPUTS:
                 # Create error image
                 error_img = lab_img != cout
                 error_img = (error_img.astype(np.uint8)) * 255
-                iio.imwrite(eu(f'{results_path}/{basename}_error.tif'), error_img)
+                iio.imwrite(eu(f'{results_path}/{basename}_error.jpg'), error_img)
 
                 # Create false positive (fp) image
                 fp_error_img = (lab_img == 0) & (cout > 0)
                 fp_error_img = (fp_error_img.astype(np.uint8)) * 255
-                iio.imwrite(eu(f'{results_path}/{basename}_fp_error.tif'), fp_error_img)
+                iio.imwrite(eu(f'{results_path}/{basename}_fp_error.jpg'), fp_error_img)
                 # Create false positive (fp) image overlay
                 fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
                 fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
                 fp_overlay = (fp_overlay * 255.).astype(np.uint8)
-                iio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.tif'), fp_overlay)
+                iio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.jpg'), fp_overlay)
 
                 # Create false negative (fn) image
                 fn_error_img = (lab_img > 0) & (cout == 0)
                 fn_error_img = (fn_error_img.astype(np.uint8)) * 255
-                iio.imwrite(eu(f'{results_path}/{basename}_fn_error.tif'), fn_error_img)
+                iio.imwrite(eu(f'{results_path}/{basename}_fn_error.jpg'), fn_error_img)
                 # Create false negative (fn) image overlay
                 fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
                 fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
                 fn_overlay = (fn_overlay * 255.).astype(np.uint8)
-                iio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.tif'), fn_overlay)
+                iio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)
 
 
             m_targets.append((lab_img > 0))#.reshape(-1))
@@ -243,7 +251,7 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
                 pred = np.argmax(out, 1)[0]
                 # plab = skimage.color.label2rgb(pred, bg_label=0)
                 plab = skimage.color.label2rgb(pred, colors=['red', 'green', 'blue', 'purple', 'brown', 'magenta'], bg_label=0)
-                out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.tif')
+                out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.png')
                 iio.imwrite(out_path, plab)
 
     if 'metrics' in DESIRED_OUTPUTS:
@@ -276,15 +284,15 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
         with open(eu(f'{results_root}/info.txt'), 'w') as f:
             f.write(
     f"""Output description:
-- X_raw.tif: raw image (image number X from the shared dataset)
-- X_probmap.tif: raw softmax pseudo-probability outputs (before thresholding).
-- X_thresh.tif: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
-- X_overlay_lab.tif: given GT label annotations, overlayed on raw image
-- X_overlay_pred.tif: prediction by the neural network, overlayed on raw image
-- X_fn_error.tif: map of false negative predictions w.r.t. GT labels
-- X_fp_error.tif: map of false positive predictions w.r.t. GT labels
-- X_fn_error_overlay.tif: map of false negative predictions w.r.t. GT labels, overlayed on raw image
-- X_fp_error_overlay.tif: map of false positive predictions w.r.t. GT labels, overlayed on raw image
+- X_raw.jpg: raw image (image number X from the shared dataset)
+- X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
+- X_thresh.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
+- X_overlay_lab.jpg: given GT label annotations, overlayed on raw image
+- X_overlay_pred.jpg: prediction by the neural network, overlayed on raw image
+- X_fn_error.jpg: map of false negative predictions w.r.t. GT labels
+- X_fp_error.jpg: map of false positive predictions w.r.t. GT labels
+- X_fn_error_overlay.jpg: map of false negative predictions w.r.t. GT labels, overlayed on raw image
+- X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
 
 
 Model info:
@@ -296,7 +304,7 @@ Model info:
 - precision: {precision * 100:.1f}%
 - recall: {recall * 100:.1f}%
 """
-)
+            )
 
 
 
