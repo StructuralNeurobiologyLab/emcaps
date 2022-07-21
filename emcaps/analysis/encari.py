@@ -116,6 +116,7 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 # load the image and segment it
 
 
+# TODO: Path updates
 data_root = Path('~/tum/Single-table_database/').expanduser()
 segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
 classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
@@ -129,6 +130,8 @@ def load_torchscript_model(path):
 
 def normalize(image: np.ndarray) -> np.ndarray:
     normalized = (image.astype(np.float32) - 128.) / 128.
+    assert normalized.min() >= -1.
+    assert normalized.max() <= 1.
     return normalized
 
 
@@ -136,7 +139,7 @@ classifier_model = load_torchscript_model(classifier_path)
 seg_model = load_torchscript_model(segmenter_path)
 
 image_raw = iio.imread(data_root / '129/129.tif')
-image_normalized = normalize(image_raw)
+# image_normalized = normalize(image_raw)
 
 
 def segment(image: np.ndarray, thresh: float) -> np.ndarray:
@@ -172,20 +175,38 @@ def tiled_segment(image: np.ndarray, thresh: float, pbar=None) -> np.ndarray:
     return pred
 
 
+def calculate_padding(current_shape, target_shape):
+    """Calculate optimal padding for np.pad() to do central padding to target shape.
+    
+    If necessary (odd shape difference), pad 1 pixel more before than after."""
+    halfdiff = np.subtract(target_shape, current_shape) / 2  # Half shape difference (float)
+    fd = np.floor(halfdiff).astype(int)
+    cd = np.ceil(halfdiff).astype(int)
+    padding = (
+        (fd[0], cd[0]),
+        (fd[1], cd[1])
+    )
+    return padding
+
+
 # For regionprops extra_properties
 def rp_classify(region_mask, img, patch_shape=(49, 49), dilate_masks_by=5):
-
     # Pad to standardized patch shape
-    padding = np.subtract(patch_shape, img.shape) // 2
-    padding = padding.clip(dilate_masks_by, None)  # Ensure that padding is non-negative and the mask can be dilated
+    padding = calculate_padding(current_shape=img.shape, target_shape=patch_shape)
+    print(padding)
+    # padding = padding.clip(dilate_masks_by, None)  # Ensure that padding is non-negative and the mask can be dilated
     img = np.pad(img, padding)
+    print(img.shape)
     region_mask = np.pad(region_mask, padding)
 
     if dilate_masks_by > 0:
         disk = sm.disk(dilate_masks_by)
         region_mask = sm.binary_dilation(region_mask, selem=disk)
     nobg = img.astype(np.float32)
-    nobg[~region_mask] = 0
+    # nobg[~region_mask] = 0
+    # Image is already normalized, so we have to normalize the 0 masking intensity as well here
+    norm0 = normalize(np.zeros(()))
+    nobg[~region_mask] = norm0
     inp = torch.from_numpy(nobg)[None, None]
     with torch.inference_mode():
         out = classifier_model(inp)
@@ -203,7 +224,8 @@ def compute_rprops(image, labels, minsize, maxsize):
 
     properties = regionprops_table(
         label_image=instance_labels,
-        intensity_image=normalize(image),
+        # intensity_image=normalize(image),
+        intensity_image=image,  # normalized by caller
         properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
         extra_properties=[rp_classify]
     )
@@ -227,14 +249,19 @@ def make_seg_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
     def seg() -> LayerDataTuple:
-        # this is the potentially long-running function
         img_normalized = normalize(image)
+
         pred = segment(img_normalized, thresh=threshold)
         # pred = tiled_segment(img_normalized, thresh=threshold, pbar=pbar)
+
+        # Postprocessing:
+        pred = sm.remove_small_holes(pred, 2000)
+        pred = sm.remove_small_objects(pred, minsize)
 
         meta = dict(
             name='segmentation'
@@ -258,7 +285,9 @@ def make_regions_widget(
 
     @thread_worker(connect={'returned': pbar.hide})
     def regions() -> LayerDataTuple:
-        properties = compute_rprops(image=image, labels=labels, minsize=minsize, maxsize=maxsize)
+        img_normalized = normalize(image)
+
+        properties = compute_rprops(image=img_normalized, labels=labels, minsize=minsize, maxsize=maxsize)
         bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
             # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
