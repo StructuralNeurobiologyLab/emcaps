@@ -128,8 +128,8 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 # classifier_path = Path('./effnet_m_v7_hek_80k.pts')
 
 
-segmenter_path = ub.download('https://github.com/mdraw/model-test/releases/download/v7/unet_v7_all.pts', hash_prefix='b23bd76dc8119667150af21157cc1eff132bb10a4c81733dbfb94ab85b0eccac1174d0315dfffddd5197699471eca5fc52b15c78917ea16840f6ed0b731f524b')
-classifier_path = ub.download('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts', hash_prefix='b8eb59038a844242a9f820354ce02e020ad83fbf373cf31878eb27c740f528d840333b9829bdadef7e3fb188dd81767844aa92d9fc17b6ab3ed39216242f4e4b')
+segmenter_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/unet_v7_all.pts', hash_prefix='b23bd76dc81')
+classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts', hash_prefix='b8eb59038a')
 
 def load_torchscript_model(path):
     model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
