@@ -16,6 +16,7 @@ import napari
 import numpy as np
 import torch
 import yaml
+import ubelt as ub
 from magicgui import magic_factory, widgets
 from napari.qt.threading import FunctionWorker, thread_worker
 from napari.types import ImageData, LabelsData, LayerDataTuple
@@ -117,10 +118,18 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
 # TODO: Path updates
-data_root = Path('~/tum/Single-table_database/').expanduser()
-segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
-classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
+# data_root = Path('~/tum/Single-table_database/').expanduser()
+# segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
+# classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
 
+# repo_root = Path(__file__).parents[2]
+
+# segmenter_path = Path('./unet_v7_all.pts')
+# classifier_path = Path('./effnet_m_v7_hek_80k.pts')
+
+
+segmenter_path = ub.download('https://github.com/mdraw/model-test/releases/download/v7/unet_v7_all.pts')
+classifier_path = ub.download('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts')
 
 def load_torchscript_model(path):
     model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
@@ -138,7 +147,7 @@ def normalize(image: np.ndarray) -> np.ndarray:
 classifier_model = load_torchscript_model(classifier_path)
 seg_model = load_torchscript_model(segmenter_path)
 
-image_raw = iio.imread(data_root / '129/129.tif')
+# image_raw = iio.imread(data_root / '129/129.tif')
 # image_normalized = normalize(image_raw)
 
 
@@ -150,28 +159,6 @@ def segment(image: np.ndarray, thresh: float) -> np.ndarray:
         # pred = torch.argmax(out, dim=1)
         pred = out[0, 1] > thresh
         pred = pred.numpy().astype(np.int64)
-    return pred
-
-
-def tiled_segment(image: np.ndarray, thresh: float, pbar=None) -> np.ndarray:
-    from tiler import Tiler, Merger
-    tiler = Tiler(
-        data_shape=image.shape,
-        tile_shape=(256, 256),
-        overlap=(32, 32),
-        channel_dimension=None,
-    )
-    new_shape, padding = tiler.calculate_padding()
-    tiler.recalculate(data_shape=new_shape)
-    padded_image = np.pad(image, padding, mode='reflect')
-    merger = Merger(tiler=tiler, window='overlap-tile')
-    # pbar.max = len(tiler)
-    for tile_id, tile in tiler(padded_image):
-        # if pbar is not None:
-        #     pbar.increment()
-        merger.add(tile_id, segment(tile, thresh=thresh))
-    pred = merger.merge(unpad=True, extra_padding=padding, dtype=np.int64)
-
     return pred
 
 
@@ -193,10 +180,8 @@ def calculate_padding(current_shape, target_shape):
 def rp_classify(region_mask, img, patch_shape=(49, 49), dilate_masks_by=5):
     # Pad to standardized patch shape
     padding = calculate_padding(current_shape=img.shape, target_shape=patch_shape)
-    print(padding)
     # padding = padding.clip(dilate_masks_by, None)  # Ensure that padding is non-negative and the mask can be dilated
     img = np.pad(img, padding)
-    print(img.shape)
     region_mask = np.pad(region_mask, padding)
 
     if dilate_masks_by > 0:
@@ -321,11 +306,16 @@ def make_regions_widget(
     pbar.show()
     return regions()
 
+def main():
 
-# viewer = napari.Viewer()
-viewer = napari.view_image(image_raw[:600, :600].copy(), name='image')
+    viewer = napari.Viewer()
+    # viewer = napari.view_image(image_raw[:600, :600].copy(), name='image')
 
-viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
-viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
+    viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
+    viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
 
-napari.run()
+    napari.run()
+
+
+if __name__ == '__main__':
+    main()
