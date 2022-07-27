@@ -10,8 +10,6 @@ dependencies:
   - imageio >=2.19
   - ipython >=8
   - matplotlib >=3.4
-#  - magicgui >=0.5
-#  - napari >=0.4.16
   - numpy >=1.22
   - omegaconf >=2.2
   - pandas >=1.4
@@ -25,6 +23,11 @@ dependencies:
   # - pytorch >=1.12 # [not osx]  # workaround for OMP issues: install pytorch from pip below
   - tqdm >=4.64
   - typing_extensions >=4.2
+  ubelt >=1.1
+
+  # For napari
+   - magicgui >=0.5
+   - napari >=0.4.16
 
   - pip
   - pip:

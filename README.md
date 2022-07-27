@@ -5,14 +5,14 @@
 
 - Get the project from GitHub (either clone or download zip and extract), then `cd` to the project root.
 
-- Download the neural network model from https://drive.google.com/file/d/1I7gGaIsYQtlm-_0euD85XRQLghi234AN/view and put it into the project root.
+- Download the neural network models from https://drive.google.com/file/d/1I7gGaIsYQtlm-_0euD85XRQLghi234AN/view and put them into the project root.
 
 - From the project directory execute:
 
     ```
     conda env create -f environment.yml
     conda activate emcaps
-    #pip install --no-deps -e .  # Not yet fully working
+    pip install --no-deps -e .
     ```
 
 

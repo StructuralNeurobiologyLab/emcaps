@@ -19,6 +19,7 @@ dynamic = ["version", "dependencies"]
 
 [project.scripts]
 emcaps-segment = "emcaps.inference.segment:main"
+emcaps-encari = "emcaps.analysis.encari:main"
 
 [tool.setuptools]
 packages = ["emcaps"]
