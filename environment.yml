@@ -23,7 +23,7 @@ dependencies:
   # - pytorch >=1.12 # [not osx]  # workaround for OMP issues: install pytorch from pip below
   - tqdm >=4.64
   - typing_extensions >=4.2
-  ubelt >=1.1
+  - ubelt >=1.1
 
   # For napari
    - magicgui >=0.5
