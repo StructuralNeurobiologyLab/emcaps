@@ -100,8 +100,11 @@ def make_bbox(bbox_extents):
 
     return bbox_rect
 
+repo_root = Path(__file__).parents[2]
+
+
 # Load mapping from class names to class IDs
-class_info_path = './emcaps/class_info.yaml'
+class_info_path = repo_root / 'emcaps/class_info.yaml'
 with open(class_info_path) as f:
     class_info = yaml.load(f, Loader=yaml.FullLoader)
 CLASS_IDS = class_info['class_ids_v5']
@@ -111,13 +114,12 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
 # TODO: Path updates
-data_root = Path('~/tum/Single-table_database/').expanduser()
-image_raw = iio.imread(data_root / '129/129.tif')
+# data_root = Path('~/tum/Single-table_database/').expanduser()
+# image_raw = iio.imread(data_root / '129/129.tif')
 
 # segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
 # classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
 
-# repo_root = Path(__file__).parents[2]
 
 # segmenter_path = Path('./unet_v7_all.pts')
 # classifier_path = Path('./effnet_m_v7_hek_80k.pts')
@@ -190,8 +192,8 @@ def rp_classify(region_mask, img, patch_shape=(49, 49), dilate_masks_by=5):
 
     import string
     import random
-    fn = '/tmp/ei/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
-    iio.imwrite(fn, np.uint8(nobg * 128 + 128))
+    # fn = '/tmp/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
+    # iio.imwrite(fn, np.uint8(nobg * 128 + 128))
 
     inp = torch.from_numpy(nobg)[None, None]
     with torch.inference_mode():
@@ -229,8 +231,8 @@ def classify_patch(patch):
 
     import string
     import random
-    fn = '/tmp/ei/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
-    iio.imwrite(fn, np.uint8(inp * 128 + 128))
+    # fn = '/tmp/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
+    # iio.imwrite(fn, np.uint8(inp * 128 + 128))
 
     inp = torch.from_numpy(inp)[None, None]
     with torch.inference_mode():
@@ -576,10 +578,17 @@ def main():
     # eimg = iio.imread(eip)[600:1200, 600:1200].copy()
     # elab = iio.imread(ilp)[600:1200, 600:1200].copy()
 
+    # TODO: /tmp/ei
+
     if ipaths and len(ipaths) > 0:
-        viewer.add_image(iio.imread(ipaths[0]))
+        img_path = Path(ipaths[0]).expanduser()
+        img = iio.imread(img_path)
+        viewer.add_image(img, name=img_path.name)
+        print(img_path.stem)
     if ipaths and len(ipaths) > 1:
-        viewer.add_labels(iio.imread(ipaths[1]))
+        lab_path = Path(ipaths[1]).expanduser()
+        lab = iio.imread(lab_path)
+        viewer.add_labels(lab, name=lab_path.name)
 
     # viewer.add_image(eimg, name='img')
     # viewer.add_labels(elab, name='lab')
