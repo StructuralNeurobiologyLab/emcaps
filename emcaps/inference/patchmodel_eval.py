@@ -38,14 +38,14 @@ parser.add_argument(
     # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6_notm_nodro/erasemaskbg_notm_dr5_M_ra__EffNetV2__22-05-16_01-56-49/model_step80000.pt'  # best without Tm, for patches_v6_dr5
     # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6e/erasemaskbg_S__EffNetV2__22-05-20_17-02-05/model_step80000.pts'  # best with Tm, for patches_v6e_dr5
 
-    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trdro_evdro_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-15-30/model_final.pts'  # Best for DRO v7
-    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trhek_evhek_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-25-11/model_final.pts'  # Best for HEK v7
+    # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trdro_evdro_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-15-30/model_final.pts'  # Best for DRO v7
+    default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trhek_evhek_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-25-11/model_final.pts'  # Best for HEK v7
 
     # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_tr-hgt_ev-dro_gdr5__gt/erasemaskbg___EffNetV2__22-06-07_12-13-56/model_final.pts'  # Human GT -> DRO
 )
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument(
-    '-n', '--nmaxsamples', type=int, default=1,
+    '-n', '--nmaxsamples', type=int, default=0,
     help='Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).'
 )
 parser.add_argument(
@@ -70,7 +70,7 @@ CM_SHOW_PERCENTAGES = True
 
 out_channels = 8
 
-from utils.utils import CLASS_NAMES, CLASS_IDS
+from emcaps.utils import CLASS_NAMES, CLASS_IDS
 
 
 ENABLE_BINARY_1M = False  # restrict to only binary classification into 1M-Qt vs 1M-Mx
@@ -94,10 +94,10 @@ else:
 # patches_root = path_prefix / 'patches_v6d_generalization_dro_dr5/'
 # patches_root = path_prefix / 'patches_v6_notm_nodro_dr5/'
 # patches_root = path_prefix / 'patches_v6_dr5/'
-# patches_root = path_prefix / 'patches_v6e_dr5/'
+patches_root = path_prefix / 'patches_v6e_dr5/'
 
 # patches_root = path_prefix / 'patches_v7_trhek_evdro_dr5'
-patches_root = path_prefix / 'patches_v7_trdro_evdro_dr5'
+# patches_root = path_prefix / 'patches_v7_trdro_evdro_dr5'
 
 
 dataset_mean = (128.0,)
@@ -134,6 +134,8 @@ predictor = Predictor(
 meta = pd.read_excel(f'{patches_root}/patchmeta_traintest.xlsx', sheet_name='Sheet1', index_col=0)
 
 vmeta = meta.loc[meta.validation == True]
+
+# vmeta = vmeta.loc[vmeta.img_num == 136]  # TEST
 
 # vmeta = vmeta.loc[vmeta.enctype != '1M-Tm']
 
@@ -251,6 +253,12 @@ def evaluate(vmeta, groupkey, split=None):
 
         preds = np.array(preds)
         targets = np.array(targets)
+
+        # print(group_pred_labels)
+        # print(group_target_labels)
+        # print(group_preds)
+        # print(group_targets)
+
 
     group_majority_preds = {}
     group_majority_pred_names = {}
