@@ -11,6 +11,7 @@ Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 
 from pathlib import Path
 
+import argparse
 import logging
 import imageio.v3 as iio
 import napari
@@ -546,8 +547,8 @@ def make_regions_widget(
         meta = dict(
             name='regions',
             # features={'class': properties['pred_classname'], 'majority_class_name': majority_class_name},
-            edge_color='class_name',
-            # edge_color_cycle=['red', 'green', 'blue', 'purple', 'orange', 'magenta', 'cyan', 'yellow'],
+            edge_color='class_id',
+            edge_color_cycle=['magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow'],
             face_color='transparent',
             properties=properties,
             text=text_parameters,
@@ -561,16 +562,27 @@ def make_regions_widget(
 
 def main():
 
-    viewer = napari.Viewer()
+    import argparse
+    parser = argparse.ArgumentParser(description='Napari emcaps')
+    parser.add_argument('paths', nargs='*', help='Path to input file(s)', default=None)
+    args = parser.parse_args()
+    ipaths = args.paths
+
+    viewer = napari.Viewer(title='EMcapsulin demo')
     # viewer.add_image(image_raw[:600, :600].copy(), name='image')
 
-    eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
-    ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
-    eimg = iio.imread(eip)[600:1200, 600:1200].copy()
-    elab = iio.imread(ilp)[600:1200, 600:1200].copy()
+    # eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
+    # ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
+    # eimg = iio.imread(eip)[600:1200, 600:1200].copy()
+    # elab = iio.imread(ilp)[600:1200, 600:1200].copy()
 
-    viewer.add_image(eimg, name='img')
-    viewer.add_labels(elab, name='lab')
+    if ipaths and len(ipaths) > 0:
+        viewer.add_image(iio.imread(ipaths[0]))
+    if ipaths and len(ipaths) > 1:
+        viewer.add_labels(iio.imread(ipaths[1]))
+
+    # viewer.add_image(eimg, name='img')
+    # viewer.add_labels(elab, name='lab')
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
