@@ -35,6 +35,11 @@ from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, c
 # torch.backends.cudnn.benchmark = True
 
 
+def write_tiff(path, img):
+    # Default tiffile backend messes up uint8 single-channel grayscale images, so use Pillow
+    iio.imwrite(uri=path, image=img, plugin='pillow')
+
+
 def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -130,7 +135,6 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
     m_preds = []
     for img_path in img_paths:
         inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
-        # TODO: N=1 ?
         out = predictor.predict(inp)
         out = out.numpy()
         basename = os.path.splitext(os.path.basename(img_path))[0]
@@ -283,7 +287,7 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
         
         with open(eu(f'{results_root}/info.txt'), 'w') as f:
             f.write(
-    f"""Output description:
+f"""Output description:
 - X_raw.jpg: raw image (image number X from the shared dataset)
 - X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
 - X_thresh.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
