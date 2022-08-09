@@ -11,24 +11,38 @@ Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 
 from pathlib import Path
 
+import logging
 import imageio.v3 as iio
 import napari
 import numpy as np
 import torch
+import tqdm
 import yaml
 import ubelt as ub
 from magicgui import magic_factory, widgets
-from napari.qt.threading import FunctionWorker, thread_worker
+from napari.qt.threading import FunctionWorker, thread_worker, GeneratorWorker
 from napari.types import ImageData, LabelsData, LayerDataTuple
 from napari.utils.notifications import show_info
+from napari.utils.progress import progrange, progress
 from scipy import ndimage
 from skimage import data
 from skimage.measure import label, regionprops_table, regionprops
+from skimage.measure._regionprops import _props_to_dict
 from skimage import morphology as sm
 from skimage.segmentation import clear_border
 from typing_extensions import Annotated
 
-# WARNING: This can quickly lead to OOM on systems with < 16 GB RAM
+from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius
+
+# Set up logging
+logger = logging.getLogger('encari')
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler(f'/tmp/encari.log')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
+
+
+# WARNING: This can quickly lead to OOM on systems with <= 8 GB RAM
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -36,30 +50,8 @@ print(f'Running on {device}')
 
 DTYPE = torch.float16 if 'cuda' in str(device) else torch.float32
 
-def cc_label(lab, minsize=20, maxsize=600, noborder=True, min_circularity=0.8):
-    # remove artifacts connected to image border
-    if noborder:
-        lab = clear_border(lab)
-    cleared = sm.remove_small_objects(lab, minsize)
 
-    # label image regions
-    label_image = label(cleared)
-
-    rprops = regionprops(label_image, extra_properties=[circularity])
-    for rp in rprops:
-        if circularity(rp.perimeter, rp.area) < min_circularity:
-            label_image[rp.slice] = 0
-        elif rp.area > maxsize:
-            label_image[rp.slice] = 0
-
-    # TODO: ^ Don't remove complete slice but only the actually covered area
-    # TODO: Relabel?
-
-    return label_image
-
-
-
-def circularity(perimeter, area):
+def calculate_circularity(perimeter, area):
     """Calculate the circularity of the region
 
     Parameters
@@ -118,7 +110,9 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
 # TODO: Path updates
-# data_root = Path('~/tum/Single-table_database/').expanduser()
+data_root = Path('~/tum/Single-table_database/').expanduser()
+image_raw = iio.imread(data_root / '129/129.tif')
+
 # segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
 # classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
 
@@ -128,9 +122,9 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 # classifier_path = Path('./effnet_m_v7_hek_80k.pts')
 
 
-segmenter_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/unet_v7_all.pts', hash_prefix='b23bd76dc81')
+segmenter_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/unet_v7_all.pts')
 # classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts', hash_prefix='b8eb59038a')
-classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_s_v7_hek_80k.pts', hash_prefix='78989aeeb8')
+classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts')
 
 def load_torchscript_model(path):
     model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
@@ -148,7 +142,6 @@ def normalize(image: np.ndarray) -> np.ndarray:
 classifier_model = load_torchscript_model(classifier_path)
 seg_model = load_torchscript_model(segmenter_path)
 
-# image_raw = iio.imread(data_root / '129/129.tif')
 # image_normalized = normalize(image_raw)
 
 
@@ -193,6 +186,12 @@ def rp_classify(region_mask, img, patch_shape=(49, 49), dilate_masks_by=5):
     # Image is already normalized, so we have to normalize the 0 masking intensity as well here
     norm0 = normalize(np.zeros(()))
     nobg[~region_mask] = norm0
+
+    import string
+    import random
+    fn = '/tmp/ei/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
+    iio.imwrite(fn, np.uint8(nobg * 128 + 128))
+
     inp = torch.from_numpy(nobg)[None, None]
     with torch.inference_mode():
         out = classifier_model(inp)
@@ -205,22 +204,180 @@ def assign_class_names(pred_ids):
     return pred_class_names
 
 
-def compute_rprops(image, labels, minsize, maxsize):
-    instance_labels = cc_label(labels, minsize=minsize, maxsize=maxsize)
 
-    properties = regionprops_table(
-        label_image=instance_labels,
-        # intensity_image=normalize(image),
-        intensity_image=image,  # normalized by caller
-        properties=('label', 'bbox', 'perimeter', 'area', 'solidity'),
-        extra_properties=[rp_classify]
+class ImageError(Exception):
+    pass
+
+def check_image(img, normalized=False, shape=None):
+    _min = 0
+    _max = 255
+    if normalized:
+        _min = normalize(np.array(_min))
+        _max = normalize(np.array(_max))
+    if img.min() < _min or img.max() > _max:
+        raise ImageError(f'{img.min()=}, {img.max()=} not within expected range [{_min}, {_max}]')
+    if shape is not None and not np.all(np.array(img.shape) == np.array(shape)):
+        raise ImageError(f'{img.shape=}, but expected {shape}')
+
+
+# TODO: Support invalidation for low-confidence predictions
+def classify_patch(patch):
+
+    inp = normalize(patch)
+    check_image(inp, normalized=True)
+
+    import string
+    import random
+    fn = '/tmp/ei/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
+    iio.imwrite(fn, np.uint8(inp * 128 + 128))
+
+    inp = torch.from_numpy(inp)[None, None]
+    with torch.inference_mode():
+        out = classifier_model(inp)
+        pred = torch.argmax(out, dim=1)[0].item()
+    return pred
+
+
+def compute_rprops(image, lab, minsize=150, maxsize=None, noborder=False, min_circularity=0.8):
+
+    # Code mainly redundant with / copied from patchifyseg. TODO: Refactor into shared function
+
+    DILATE_MASKS_BY = 5
+    EC_REGION_RADIUS = 24
+    # Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
+    EC_REGION_ODD_PLUS1 = 1
+    PATCH_WIDTH = EC_REGION_RADIUS * 2 + EC_REGION_ODD_PLUS1
+    PATCH_SHAPE = (PATCH_WIDTH, PATCH_WIDTH)
+    EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2 if maxsize is None else maxsize
+    EC_MIN_AREA = minsize
+    EC_MAX_AREA = maxsize
+    MIN_CIRCULARITY = min_circularity
+    raw = image
+
+    check_image(raw, normalized=False)
+
+    # remove artifacts connected to image border
+    if noborder:
+        lab = clear_border(lab)
+    cleared = sm.remove_small_objects(lab, minsize)
+
+    # label image regions
+    cc, n_comps = ndimage.label(cleared)
+
+    rprops = regionprops(cc, raw)
+
+    # epropdict = {k: np.full((len(rprops),), np.nan) for k in extra_prop_names}
+
+    epropdict = {
+        'class_id': np.empty((len(rprops),), dtype=np.uint8),
+        'class_name': ['?'] * len(rprops),
+        'circularity': np.empty((len(rprops),), dtype=np.float32),
+        'radius2': np.empty((len(rprops),), dtype=np.float32),
+        'is_invalid': np.empty((len(rprops),), dtype=bool),
+    }
+
+    for i, rp in enumerate(tqdm.tqdm(rprops, position=1, leave=True, desc='Analyzing regions', dynamic_ncols=True)):
+        is_invalid = False
+        centroid = np.round(rp.centroid).astype(np.int64)  # Note: This centroid is in the global coordinate frame
+        if rp.area < EC_MIN_AREA or rp.area > EC_MAX_AREA:
+            logger.info(f'Skipping: area size {rp.area} not within [{EC_MIN_AREA}, {EC_MAX_AREA}]')
+            is_invalid = True
+            continue  # Too small or too big (-> background component?) to be a normal particle
+        circularity = np.nan
+        if MIN_CIRCULARITY > 0:
+            circularity = calculate_circularity(rp.perimeter, rp.area)
+            if circularity < MIN_CIRCULARITY:
+                logger.info(f'Skipping: circularity {circularity} below {MIN_CIRCULARITY}')
+                is_invalid = True
+                continue  # Not circular enough (probably a false merger)
+            circularity = np.round(circularity, 2)  # Round for more readable logging
+
+        lo = centroid - EC_REGION_RADIUS
+        hi = centroid + EC_REGION_RADIUS + EC_REGION_ODD_PLUS1
+        if np.any(lo < 0) or np.any(hi > raw.shape):
+            logger.info(f'Skipping: region touches border')
+            is_invalid = True
+            continue  # Too close to image border
+
+        xslice = slice(lo[0], hi[0])
+        yslice = slice(lo[1], hi[1])
+
+        raw_patch = raw[xslice, yslice]
+        # mask_patch = mask[xslice, yslice]
+        # For some reason mask[xslice, yslice] does not always contain nonzero values, but cc at the same slice does.
+        # So we rebuild the mask at the region slice by comparing cc to 0
+        mask_patch = cc[xslice, yslice] > 0
+
+
+        # Eliminate coinciding masks from other particles that can overlap with this region (this can happen because we slice the mask_patch from the global mask)
+        _mask_patch_cc, _ = ndimage.label(mask_patch)
+        # Assuming convex particles, the center pixel is always on the actual mask region of interest.
+        _local_center = np.round(np.array(mask_patch.shape) / 2).astype(np.int64)
+        _mask_patch_centroid_label = _mask_patch_cc[tuple(_local_center)]
+        # All mask_patch pixels that don't share the same cc label as the centroid pixel are set to 0
+        mask_patch[_mask_patch_cc != _mask_patch_centroid_label] = 0
+
+        if mask_patch.sum() == 0:
+            # No positive pixel in mask -> skip this one
+            logger.info(f'Skipping: no particle mask in region')
+            # TODO: Why does this happen although we're iterating over regionprops from mask?
+            # (Only happens if using `mask_patch = mask[xslice, yslice]`. Workaround: `Use mask_patch = cc[xslice, yslice] > 0`)
+            is_invalid = True
+            continue
+
+        area = int(np.sum(mask_patch))
+        radius2 = np.round(measure_outer_disk_radius(mask_patch, discrete=False), 1)
+
+        # Enlarge masks because we don't want to risk losing perimeter regions
+        if DILATE_MASKS_BY > 0:
+            disk = sm.disk(DILATE_MASKS_BY)
+            # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
+            mask_patch = sm.binary_dilation(mask_patch, footprint=disk)
+
+        # Measure again after mask dilation
+        area_dilated = int(np.sum(mask_patch))
+        radius2_dilated = np.round(measure_outer_disk_radius(mask_patch, discrete=False), 1)
+
+        # Raw patch with background erased via mask
+        nobg_patch = raw_patch.copy()
+        nobg_patch[mask_patch == 0] = 0
+
+        check_image(nobg_patch, normalized=False, shape=PATCH_SHAPE)
+
+        class_id = classify_patch(patch=nobg_patch)
+        class_name = CLASS_NAMES[class_id]
+
+        # # Attribute assignments don't stick for _props_to_dict() for some reason
+        # rp.class_id = class_id
+        # rp.class_name = class_name
+        # rp.circularity = circularity
+        # rp.radius2 = radius2
+
+        epropdict['class_id'][i] = class_id
+        epropdict['class_name'][i] = class_name
+        epropdict['circularity'][i] = circularity
+        epropdict['radius2'][i] = radius2
+        epropdict['is_invalid'][i] = is_invalid
+
+        # iio.imwrite('/tmp/nobg-{i:03d}.png', nobg_patch)
+
+
+    # print(rprops)
+    # print(epropdict)
+    # Can only assign builtin props here
+    propdict = _props_to_dict(
+        rprops, properties=['label', 'bbox', 'perimeter', 'area', 'solidity']
     )
-    properties['pred_classname'] = assign_class_names(properties['rp_classify'])
-    properties['circularity'] = circularity(
-        properties['perimeter'], properties['area']
-    )
-    
-    return properties
+
+    propdict.update(epropdict)
+
+    # TODO: Prune invalid rps
+    is_invalid = propdict['is_invalid']
+    num_invalid = int(np.sum(is_invalid))
+    logger.info(f'Pruning {num_invalid} regions due to filter criteria...')
+    for k in propdict.keys():
+        propdict[k] = np.delete(propdict[k], is_invalid)
+    return propdict
 
 
 def compute_majority_class_name(class_preds):
@@ -260,8 +417,12 @@ def make_seg_widget(
     return seg()
 
 
+def handle_yield(rp):
+    print(rp)
+
+
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
-def make_regions_widget(
+def make_regions_widget_generator_experimental(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
@@ -269,23 +430,58 @@ def make_regions_widget(
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
 ) -> FunctionWorker[LayerDataTuple]:
 
-    @thread_worker(connect={'returned': pbar.hide})
-    def regions() -> LayerDataTuple:
+    @thread_worker(connect={'returned': pbar.hide, 'yielded': handle_yield}, progress={'total': 50})
+    def gen_rprops():
         img_normalized = normalize(image)
+        instance_labels = cc_label(labels, minsize=minsize, maxsize=maxsize)
 
-        properties = compute_rprops(image=img_normalized, labels=labels, minsize=minsize, maxsize=maxsize)
+        props = regionprops(
+            label_image=instance_labels,
+            intensity_image=img_normalized,
+            extra_properties=[rp_classify]
+        )
+
+        for rp in props:
+            _ = rp.rp_classify
+            # Can't update from here, need yield
+            yield rp
+
+    def regions() -> LayerDataTuple:
+        # img_normalized = normalize(image)
+
+        props = []
+        # for rp in gen_rprops():
+        #     props.append(rp)
+
+        properties = _props_to_dict(props, properties=['label', 'bbox', 'perimeter', 'area', 'solidity', 'rp_classify'])
+
+        # for rp in props:
+        #     for k in properties.keys():
+        #         properties[k].append(rp[k])
+        # for k in properties.keys():
+        #     properties[k] = np.array(properties[k])
+
+        properties['pred_classname'] = assign_class_names(properties['rp_classify'])
+        properties['circularity'] = circularity(
+            properties['perimeter'], properties['area']
+        )
+
+        # iio.imwrite('/tmp/image.png', np.uint8(image * 128 + 128))
+        print(properties)
+
+
         bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
             # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
             # 'text': 'id: {label:03d}\nclass: {pred_classname}',
-            'text': '{pred_classname}',
+            'text': '{rp_classify}',# '{pred_classname}',
             'size': 14,
             'color': 'blue',
             'anchor': 'upper_left',
             'translation': [-3, 0],
         }
 
-        majority_class_name = compute_majority_class_name(class_preds=properties['rp_classify'])
+        majority_class_name = compute_majority_class_name(class_preds=properties['class_id'])
 
         text_display =  f'Majority vote: {majority_class_name}'
         print(f'\n{text_display}')
@@ -307,10 +503,74 @@ def make_regions_widget(
     pbar.show()
     return regions()
 
+# TODO: Actual progress indicator
+
+@magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
+def make_regions_widget(
+    pbar: widgets.ProgressBar,
+    image: ImageData,
+    labels: LabelsData,
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
+    maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
+    mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
+) -> FunctionWorker[LayerDataTuple]:
+
+    @thread_worker(connect={'returned': pbar.hide})
+    def regions() -> LayerDataTuple:
+        # img_normalized = normalize(image)
+
+        properties = compute_rprops(
+            image=image,
+            lab=labels,
+            minsize=minsize,
+            maxsize=maxsize,
+            min_circularity=mincircularity,
+        )
+        bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
+        text_parameters = {
+            # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
+            # 'text': 'id: {label:03d}\nclass: {pred_classname}',
+            'text': '{class_name}',
+            'size': 14,
+            'color': 'blue',
+            'anchor': 'upper_left',
+            'translation': [-3, 0],
+        }
+
+        majority_class_name = compute_majority_class_name(class_preds=properties['class_id'])
+
+        text_display =  f'Majority vote: {majority_class_name}'
+        print(f'\n{text_display}')
+        show_info(text_display)
+
+        meta = dict(
+            name='regions',
+            # features={'class': properties['pred_classname'], 'majority_class_name': majority_class_name},
+            edge_color='class_name',
+            # edge_color_cycle=['red', 'green', 'blue', 'purple', 'orange', 'magenta', 'cyan', 'yellow'],
+            face_color='transparent',
+            properties=properties,
+            text=text_parameters,
+            metadata={'majority_class_name': majority_class_name},
+        )
+
+        return (bbox_rects, meta, 'shapes')
+
+    pbar.show()
+    return regions()
+
 def main():
 
     viewer = napari.Viewer()
-    # viewer = napari.view_image(image_raw[:600, :600].copy(), name='image')
+    # viewer.add_image(image_raw[:600, :600].copy(), name='image')
+
+    eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
+    ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
+    eimg = iio.imread(eip)[600:1200, 600:1200].copy()
+    elab = iio.imread(ilp)[600:1200, 600:1200].copy()
+
+    viewer.add_image(eimg, name='img')
+    viewer.add_labels(elab, name='lab')
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
