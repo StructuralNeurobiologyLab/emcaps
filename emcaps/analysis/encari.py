@@ -590,6 +590,9 @@ def make_regions_widget(
 
         return (bbox_rects, meta, 'shapes')
 
+    if labels is None:
+        raise ValueError('Please select segmentation labels for region analysis')
+
     pbar.show()
     return regions()
 
