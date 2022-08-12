@@ -122,7 +122,7 @@ classifier_urls = {
     'effnet_m_hek': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts',
     'effnet_s_hek': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_s_v7_hek_80k.pts',
     'effnet_m_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_dro_80k.pts',
-    'effnet_s_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_dro_80k.pts',
+    'effnet_s_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_s_v7_dro_80k.pts',
 }
 model_urls = {**segmenter_urls, **classifier_urls}
 
