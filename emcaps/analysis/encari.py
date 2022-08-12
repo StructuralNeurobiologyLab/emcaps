@@ -112,6 +112,21 @@ with open(class_info_path) as f:
 CLASS_IDS = class_info['class_ids_v5']
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
+color_dict = {
+    1: 'magenta',
+    2: 'cyan',
+    3: 'blue',
+    4: 'purple',
+    5: 'orange',
+    6: 'green',
+    7: 'red',
+    8: 'yellow',
+}
+color_cycle = ['grey', 'magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow']
+# TODO. Seg label 0 means background... How do we unify with class predictions?
+# color_dict = {k: v for k, v in enumerate(color_cycle)}
+# color_dict[0] = 'transparent'
+
 
 segmenter_urls = {
     'unet_all': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_all_160k.pts',
@@ -217,7 +232,7 @@ def classify_patch(patch, classifier_variant):
     return pred
 
 
-def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, noborder=False, min_circularity=0.8):
+def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, noborder=False, min_circularity=0.8, inplace_relabel=False):
 
     # Code mainly redundant with / copied from patchifyseg. TODO: Refactor into shared function
 
@@ -326,6 +341,11 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
         class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant)
         class_name = CLASS_NAMES[class_id]
 
+        if inplace_relabel:
+            # This feels (morally) wrong but it seems to work.
+            # Overwrite lab argument from caller by writing back into original memory
+            lab[tuple(rp.coords.T)] = class_id
+
         # # Attribute assignments don't stick for _props_to_dict() for some reason
         # rp.class_id = class_id
         # rp.class_name = class_name
@@ -373,7 +393,7 @@ def make_seg_widget(
     segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
-    unique_instance_colors: bool = False,
+    assign_unique_instance_ids: bool = False,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
@@ -381,17 +401,18 @@ def make_seg_widget(
         img_normalized = normalize(image)
 
         pred = segment(img_normalized, thresh=threshold, segmenter_variant=segmenter_variant)
-        # pred = tiled_segment(img_normalized, thresh=threshold, pbar=pbar)
 
         # Postprocessing:
         pred = sm.remove_small_holes(pred, 2000)
         pred = sm.remove_small_objects(pred, minsize)
 
-        if unique_instance_colors:
+        if assign_unique_instance_ids:
             pred, _ = ndimage.label(pred)
 
         meta = dict(
-            name='segmentation'
+            name='segmentation',
+            color=color_dict,
+            seed=0,
         )
         # return a "LayerDataTuple"
         return (pred, meta, 'labels')
@@ -411,6 +432,8 @@ def make_regions_widget(
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
+    shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
+    inplace_relabel: bool = True,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
@@ -424,7 +447,19 @@ def make_regions_widget(
             minsize=minsize,
             maxsize=maxsize,
             min_circularity=mincircularity,
+            inplace_relabel=inplace_relabel,
         )
+        # If inplace_relabel is true, this has modified the labels from the
+        # caller in place without napari suspecting anything, so we'll refresh manually
+        if inplace_relabel:
+            for layer in napari.current_viewer().layers:
+                layer.refresh()
+
+        if shape_type == 'none':
+            # Return early, don't construct a shape layer
+            return
+
+
         bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
             # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
@@ -444,14 +479,35 @@ def make_regions_widget(
 
         meta = dict(
             name='regions',
-            # features={'class': properties['pred_classname'], 'majority_class_name': majority_class_name},
-            edge_color='class_id',
-            edge_color_cycle=['magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow'],
-            face_color='transparent',
+            shape_type=shape_type,
+            edge_color_cycle=color_cycle,
+            face_color_cycle=color_cycle,
+            opacity=0.35,
             properties=properties,
             text=text_parameters,
             metadata={'majority_class_name': majority_class_name},
+            features=properties['class_id'],
         )
+
+        if shape_type == 'ellipse':
+            meta.update(dict(
+                edge_color='transparent',
+                face_color='class_id',
+            ))
+        
+        match shape_type:
+            case 'ellipse':
+                meta.update({
+                    'edge_color': 'transparent',
+                    'face_color': 'class_id',
+                })
+            case 'rectangle':
+                meta.update({
+                    'edge_color': 'class_id',
+                    'face_color': 'transparent',
+                })
+            case _:
+                raise ValueError(f'Unsupported shape_type {shape_type}')
 
         return (bbox_rects, meta, 'shapes')
 
@@ -477,9 +533,9 @@ def main():
         eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
         ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
         eimg = iio.imread(eip)[600:1200, 600:1200].copy()
-        elab = iio.imread(ilp)[600:1200, 600:1200].copy()
+        elab = iio.imread(ilp)[600:1200, 600:1200].copy() > 0
         viewer.add_image(eimg, name='img')
-        viewer.add_labels(elab, name='lab')
+        viewer.add_labels(elab, name='lab', seed=0, color=color_dict)
         ipaths = []
 
     if ipaths and len(ipaths) > 0:
@@ -490,7 +546,7 @@ def main():
     if ipaths and len(ipaths) > 1:
         lab_path = Path(ipaths[1]).expanduser()
         lab = iio.imread(lab_path)
-        viewer.add_labels(lab, name=lab_path.name)
+        viewer.add_labels(lab, name=lab_path.name, seed=0, color=color_dict)
 
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
