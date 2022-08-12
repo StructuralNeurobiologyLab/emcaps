@@ -6,10 +6,11 @@ Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 # TODO:
 # - Tiling prediction
 # - TTA
-# - Fix classification
 
 
+from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import argparse
 import logging
@@ -129,7 +130,31 @@ segmenter_path = ub.grabdata('https://github.com/mdraw/model-test/releases/downl
 # classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts', hash_prefix='b8eb59038a')
 classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts')
 
-def load_torchscript_model(path):
+
+segmenter_urls = {
+    'unet_all': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_all_160k.pts',
+    'unet_hek': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_hek_160k.pts',
+    'unet_dro': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_dro_160k.pts',
+}
+classifier_urls = {
+    'effnet_m_hek': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts',
+    'effnet_s_hek': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_s_v7_hek_80k.pts',
+    'effnet_m_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_dro_80k.pts',
+    'effnet_s_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_dro_80k.pts',
+}
+model_urls = {**segmenter_urls, **classifier_urls}
+
+
+def get_model(variant: str) -> torch.jit.ScriptModule:
+    if variant not in model_urls.keys():
+        raise ValueError(f'Model variant {variant} not found. Valid choices are: {list(model_urls.keys())}')
+    url = model_urls[variant]
+    local_path = ub.grabdata(url, appname='emcaps')
+    model = load_torchscript_model(local_path)
+    return model
+
+
+def load_torchscript_model(path: str) -> torch.jit.ScriptModule:
     model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
     model = torch.jit.optimize_for_inference(model)
     return model
@@ -142,14 +167,15 @@ def normalize(image: np.ndarray) -> np.ndarray:
     return normalized
 
 
-classifier_model = load_torchscript_model(classifier_path)
-seg_model = load_torchscript_model(segmenter_path)
+# classifier_model = load_torchscript_model(classifier_path)
+# seg_model = load_torchscript_model(segmenter_path)
 
 # image_normalized = normalize(image_raw)
 
 
-def segment(image: np.ndarray, thresh: float) -> np.ndarray:
+def segment(image: np.ndarray, thresh: float, segmenter_variant: str) -> np.ndarray:
     # return image > 0.9
+    seg_model = get_model(segmenter_variant)
     img = torch.from_numpy(image)[None, None].to(DTYPE)
     with torch.inference_mode():
         out = seg_model(img)
@@ -224,10 +250,12 @@ def check_image(img, normalized=False, shape=None):
 
 
 # TODO: Support invalidation for low-confidence predictions
-def classify_patch(patch):
+def classify_patch(patch, classifier_variant):
 
     inp = normalize(patch)
     check_image(inp, normalized=True)
+
+    classifier_model = get_model(classifier_variant)
 
     import string
     import random
@@ -241,7 +269,7 @@ def classify_patch(patch):
     return pred
 
 
-def compute_rprops(image, lab, minsize=150, maxsize=None, noborder=False, min_circularity=0.8):
+def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, noborder=False, min_circularity=0.8):
 
     # Code mainly redundant with / copied from patchifyseg. TODO: Refactor into shared function
 
@@ -347,7 +375,7 @@ def compute_rprops(image, lab, minsize=150, maxsize=None, noborder=False, min_ci
 
         check_image(nobg_patch, normalized=False, shape=PATCH_SHAPE)
 
-        class_id = classify_patch(patch=nobg_patch)
+        class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant)
         class_name = CLASS_NAMES[class_id]
 
         # # Attribute assignments don't stick for _props_to_dict() for some reason
@@ -394,6 +422,7 @@ def compute_majority_class_name(class_preds):
 def make_seg_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
+    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
 ) -> FunctionWorker[LayerDataTuple]:
@@ -402,7 +431,7 @@ def make_seg_widget(
     def seg() -> LayerDataTuple:
         img_normalized = normalize(image)
 
-        pred = segment(img_normalized, thresh=threshold)
+        pred = segment(img_normalized, thresh=threshold, segmenter_variant=segmenter_variant)
         # pred = tiled_segment(img_normalized, thresh=threshold, pbar=pbar)
 
         # Postprocessing:
@@ -513,6 +542,7 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
+    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_s_hek',
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
@@ -525,6 +555,7 @@ def make_regions_widget(
         properties = compute_rprops(
             image=image,
             lab=labels,
+            classifier_variant=classifier_variant,
             minsize=minsize,
             maxsize=maxsize,
             min_circularity=mincircularity,
@@ -573,12 +604,13 @@ def main():
     viewer = napari.Viewer(title='EMcapsulin demo')
     # viewer.add_image(image_raw[:600, :600].copy(), name='image')
 
-    # eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
-    # ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
-    # eimg = iio.imread(eip)[600:1200, 600:1200].copy()
-    # elab = iio.imread(ilp)[600:1200, 600:1200].copy()
-
-    # TODO: /tmp/ei
+    if ipaths and len(ipaths) == 1 and ipaths == 'test136'
+        eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
+        ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
+        eimg = iio.imread(eip)[600:1200, 600:1200].copy()
+        elab = iio.imread(ilp)[600:1200, 600:1200].copy()
+        viewer.add_image(eimg, name='img')
+        viewer.add_labels(elab, name='lab')
 
     if ipaths and len(ipaths) > 0:
         img_path = Path(ipaths[0]).expanduser()
@@ -590,8 +622,6 @@ def main():
         lab = iio.imread(lab_path)
         viewer.add_labels(lab, name=lab_path.name)
 
-    # viewer.add_image(eimg, name='img')
-    # viewer.add_labels(elab, name='lab')
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
