@@ -7,19 +7,20 @@ Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
 # - Tiling prediction
 # - TTA
 
-
+import argparse
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-import argparse
-import logging
+
 import imageio.v3 as iio
 import napari
 import numpy as np
 import torch
 import tqdm
 import yaml
+import pandas as pd
 import ubelt as ub
 from magicgui import magic_factory, widgets
 from napari.qt.threading import FunctionWorker, thread_worker, GeneratorWorker
@@ -372,6 +373,7 @@ def make_seg_widget(
     segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
+    unique_instance_colors: bool = False,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
@@ -384,6 +386,9 @@ def make_seg_widget(
         # Postprocessing:
         pred = sm.remove_small_holes(pred, 2000)
         pred = sm.remove_small_objects(pred, minsize)
+
+        if unique_instance_colors:
+            pred, _ = ndimage.label(pred)
 
         meta = dict(
             name='segmentation'
@@ -455,6 +460,8 @@ def make_regions_widget(
 
     pbar.show()
     return regions()
+
+
 
 def main():
 
