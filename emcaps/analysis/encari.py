@@ -111,25 +111,6 @@ with open(class_info_path) as f:
 CLASS_IDS = class_info['class_ids_v5']
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
-# load the image and segment it
-
-
-# TODO: Path updates
-# data_root = Path('~/tum/Single-table_database/').expanduser()
-# image_raw = iio.imread(data_root / '129/129.tif')
-
-# segmenter_path = Path('~/tum/ptsmodels/unet_gdl_v7_hek_160k.pts').expanduser()
-# classifier_path = Path('~/tum/ptsmodels/effnet_m_v7_hek_80k.pts').expanduser()
-
-
-# segmenter_path = Path('./unet_v7_all.pts')
-# classifier_path = Path('./effnet_m_v7_hek_80k.pts')
-
-
-segmenter_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/unet_v7_all.pts')
-# classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts', hash_prefix='b8eb59038a')
-classifier_path = ub.grabdata('https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts')
-
 
 segmenter_urls = {
     'unet_all': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_all_160k.pts',
@@ -145,6 +126,12 @@ classifier_urls = {
 model_urls = {**segmenter_urls, **classifier_urls}
 
 
+def load_torchscript_model(path: str) -> torch.jit.ScriptModule:
+    model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
+    model = torch.jit.optimize_for_inference(model)
+    return model
+
+
 def get_model(variant: str) -> torch.jit.ScriptModule:
     if variant not in model_urls.keys():
         raise ValueError(f'Model variant {variant} not found. Valid choices are: {list(model_urls.keys())}')
@@ -154,23 +141,11 @@ def get_model(variant: str) -> torch.jit.ScriptModule:
     return model
 
 
-def load_torchscript_model(path: str) -> torch.jit.ScriptModule:
-    model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
-    model = torch.jit.optimize_for_inference(model)
-    return model
-
-
 def normalize(image: np.ndarray) -> np.ndarray:
     normalized = (image.astype(np.float32) - 128.) / 128.
     assert normalized.min() >= -1.
     assert normalized.max() <= 1.
     return normalized
-
-
-# classifier_model = load_torchscript_model(classifier_path)
-# seg_model = load_torchscript_model(segmenter_path)
-
-# image_normalized = normalize(image_raw)
 
 
 def segment(image: np.ndarray, thresh: float, segmenter_variant: str) -> np.ndarray:
@@ -198,34 +173,6 @@ def calculate_padding(current_shape, target_shape):
     )
     return padding
 
-
-# For regionprops extra_properties
-def rp_classify(region_mask, img, patch_shape=(49, 49), dilate_masks_by=5):
-    # Pad to standardized patch shape
-    padding = calculate_padding(current_shape=img.shape, target_shape=patch_shape)
-    # padding = padding.clip(dilate_masks_by, None)  # Ensure that padding is non-negative and the mask can be dilated
-    img = np.pad(img, padding)
-    region_mask = np.pad(region_mask, padding)
-
-    if dilate_masks_by > 0:
-        disk = sm.disk(dilate_masks_by)
-        region_mask = sm.binary_dilation(region_mask, selem=disk)
-    nobg = img.astype(np.float32)
-    # nobg[~region_mask] = 0
-    # Image is already normalized, so we have to normalize the 0 masking intensity as well here
-    norm0 = normalize(np.zeros(()))
-    nobg[~region_mask] = norm0
-
-    import string
-    import random
-    # fn = '/tmp/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
-    # iio.imwrite(fn, np.uint8(nobg * 128 + 128))
-
-    inp = torch.from_numpy(nobg)[None, None]
-    with torch.inference_mode():
-        out = classifier_model(inp)
-        pred = torch.argmax(out, dim=1)[0].item()
-    return pred
 
 
 def assign_class_names(pred_ids):
@@ -449,94 +396,7 @@ def make_seg_widget(
     return seg()
 
 
-def handle_yield(rp):
-    print(rp)
-
-
-@magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
-def make_regions_widget_generator_experimental(
-    pbar: widgets.ProgressBar,
-    image: ImageData,
-    labels: LabelsData,
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
-    maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
-) -> FunctionWorker[LayerDataTuple]:
-
-    @thread_worker(connect={'returned': pbar.hide, 'yielded': handle_yield}, progress={'total': 50})
-    def gen_rprops():
-        img_normalized = normalize(image)
-        instance_labels = cc_label(labels, minsize=minsize, maxsize=maxsize)
-
-        props = regionprops(
-            label_image=instance_labels,
-            intensity_image=img_normalized,
-            extra_properties=[rp_classify]
-        )
-
-        for rp in props:
-            _ = rp.rp_classify
-            # Can't update from here, need yield
-            yield rp
-
-    def regions() -> LayerDataTuple:
-        # img_normalized = normalize(image)
-
-        props = []
-        # for rp in gen_rprops():
-        #     props.append(rp)
-
-        properties = _props_to_dict(props, properties=['label', 'bbox', 'perimeter', 'area', 'solidity', 'rp_classify'])
-
-        # for rp in props:
-        #     for k in properties.keys():
-        #         properties[k].append(rp[k])
-        # for k in properties.keys():
-        #     properties[k] = np.array(properties[k])
-
-        properties['pred_classname'] = assign_class_names(properties['rp_classify'])
-        properties['circularity'] = circularity(
-            properties['perimeter'], properties['area']
-        )
-
-        # iio.imwrite('/tmp/image.png', np.uint8(image * 128 + 128))
-        print(properties)
-
-
-        bbox_rects = make_bbox([properties[f'bbox-{i}'] for i in range(4)])
-        text_parameters = {
-            # 'text': 'id: {label:03d}, circularity: {circularity:.2f}\nclass: {pred_classname}',
-            # 'text': 'id: {label:03d}\nclass: {pred_classname}',
-            'text': '{rp_classify}',# '{pred_classname}',
-            'size': 14,
-            'color': 'blue',
-            'anchor': 'upper_left',
-            'translation': [-3, 0],
-        }
-
-        majority_class_name = compute_majority_class_name(class_preds=properties['class_id'])
-
-        text_display =  f'Majority vote: {majority_class_name}'
-        print(f'\n{text_display}')
-        show_info(text_display)
-
-        meta = dict(
-            name='regions',
-            # features={'class': properties['pred_classname'], 'majority_class_name': majority_class_name},
-            edge_color='pred_classname',
-            edge_color_cycle=['red', 'green', 'blue', 'purple', 'orange', 'magenta', 'cyan', 'yellow'],
-            face_color='transparent',
-            properties=properties,
-            text=text_parameters,
-            metadata={'majority_class_name': majority_class_name},
-        )
-
-        return (bbox_rects, meta, 'shapes')
-
-    pbar.show()
-    return regions()
-
-# TODO: Actual progress indicator
-
+# TODO: GUI progress indicator
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
 def make_regions_widget(
     pbar: widgets.ProgressBar,
@@ -605,15 +465,15 @@ def main():
     ipaths = args.paths
 
     viewer = napari.Viewer(title='EMcapsulin demo')
-    # viewer.add_image(image_raw[:600, :600].copy(), name='image')
 
-    if ipaths and len(ipaths) == 1 and ipaths == 'test136'
+    if ipaths == ['test136']:
         eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
         ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
         eimg = iio.imread(eip)[600:1200, 600:1200].copy()
         elab = iio.imread(ilp)[600:1200, 600:1200].copy()
         viewer.add_image(eimg, name='img')
         viewer.add_labels(elab, name='lab')
+        ipaths = []
 
     if ipaths and len(ipaths) > 0:
         img_path = Path(ipaths[0]).expanduser()
