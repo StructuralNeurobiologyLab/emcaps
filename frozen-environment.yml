@@ -25,6 +25,8 @@ dependencies:
   - pytorch=1.12.1
   - tqdm=4.64.*
   - typing_extensions=4.2.*
+  - openpyxl =3.0.*  # for pandas xlsx support
+
 
   - pip
   - pip:

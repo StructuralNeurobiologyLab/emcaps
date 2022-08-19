@@ -24,6 +24,7 @@ dependencies:
   - tqdm >=4.64
   - typing_extensions >=4.2
   - ubelt >=1.1
+  - openpyxl >=3.0  # for pandas xlsx support
 
   # For napari
    - magicgui >=0.5
