@@ -394,7 +394,7 @@ def make_seg_widget(
     image: ImageData,
     segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all_v7',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     assign_unique_instance_ids: bool = False,
 ) -> FunctionWorker[LayerDataTuple]:
 
@@ -431,7 +431,7 @@ def make_regions_widget(
     image: ImageData,
     labels: LabelsData,
     classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_s_hek_v7',
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 70,
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
