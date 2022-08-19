@@ -129,15 +129,17 @@ color_cycle = ['grey', 'magenta', 'cyan', 'blue', 'purple', 'orange', 'green', '
 
 
 segmenter_urls = {
-    'unet_all': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_all_160k.pts',
-    'unet_hek': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_hek_160k.pts',
-    'unet_dro': 'https://github.com/mdraw/model-test/releases/download/v7/unet_gdl_v7_dro_160k.pts',
+    'unet_hek_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_hek_160k.pts',
+    'unet_qttm_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_qttmpatterns_160k.pts',
+    'unet_all_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_all_160k.pts',
+    'unet_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_hek_160k.pts',
+    'unet_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_dro_160k.pts',
 }
 classifier_urls = {
-    'effnet_m_hek': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_hek_80k.pts',
-    'effnet_s_hek': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_s_v7_hek_80k.pts',
-    'effnet_m_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_m_v7_dro_80k.pts',
-    'effnet_s_dro': 'https://github.com/mdraw/model-test/releases/download/v7/effnet_s_v7_dro_80k.pts',
+    'effnet_m_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_hek_80k.pts',
+    'effnet_s_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_hek_80k.pts',
+    'effnet_m_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_dro_80k.pts',
+    'effnet_s_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_dro_80k.pts',
 }
 model_urls = {**segmenter_urls, **classifier_urls}
 
@@ -390,7 +392,7 @@ def compute_majority_class_name(class_preds):
 def make_seg_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
-    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all',
+    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all_v7',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
     assign_unique_instance_ids: bool = False,
@@ -428,8 +430,8 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
-    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_s_hek',
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 150,
+    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_s_hek_v7',
+    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 70,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
