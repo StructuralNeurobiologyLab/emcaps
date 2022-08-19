@@ -6,6 +6,7 @@ from os.path import expanduser as eu
 from pathlib import Path
 from typing import Tuple, List
 
+import tqdm
 import imageio.v3 as iio
 import numpy as np
 import pandas as pd
@@ -19,7 +20,7 @@ from emcaps.utils import get_meta, get_path_prefix, get_image_resources
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v7'
+isplit_data_root = data_root / 'isplitdata_v8'
 sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 
@@ -82,42 +83,45 @@ def is_excluded(resmeta: pd.Series) -> bool:
     return (not resmeta.Validation) and (not resmeta.Training)
 
 
-for entry in meta.itertuples():
-    img_num = int(entry.num)
-    # Load original images and resources
-    res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True)
-    logger.info(f'Using label source {res.labelpath}{" (curated)" if res.curated else ""}')
-    if res.was_inverted:
-        logger.info(f'Image {img_num} was re-inverted.')
-    if is_excluded(res.metarow):
-        logger.info(f'Skipping image {img_num} because it is excluded from ML usage via meta spreadsheet.')
-        continue
-    if res.label is None:
-        logger.info(f'Skipping image {img_num} because no label was found.')
-        continue
-    if res.raw is None:
-        logger.info(f'Skipping image {img_num} because no raw image was found.')
-        continue
+def main():
+    for entry in tqdm.tqdm(meta.itertuples(), total=len(meta)):
+        img_num = int(entry.num)
+        # Load original images and resources
+        res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True)
+        logger.info(f'Using label source {res.labelpath}{" (curated)" if res.curated else ""}')
+        if res.was_inverted:
+            logger.info(f'Image {img_num} was re-inverted.')
+        if is_excluded(res.metarow):
+            logger.info(f'Skipping image {img_num} because it is excluded from ML usage via meta spreadsheet.')
+            continue
+        if res.label is None:
+            logger.info(f'Skipping image {img_num} because no label was found.')
+            continue
+        if res.raw is None:
+            logger.info(f'Skipping image {img_num} because no raw image was found.')
+            continue
 
-    # Split images
-    split_slices = get_best_split_slices(res.label)
-    val_raw, trn_raw = split_by_slices(res.raw, split_slices)
-    val_lab, trn_lab = split_by_slices(res.label, split_slices)
+        # Split images
+        split_slices = get_best_split_slices(res.label)
+        val_raw, trn_raw = split_by_slices(res.raw, split_slices)
+        val_lab, trn_lab = split_by_slices(res.label, split_slices)
 
-    # Scale for image viewer compat
-    val_lab = val_lab.astype(np.uint8) * 255
-    trn_lab = trn_lab.astype(np.uint8) * 255
+        # Scale for image viewer compat
+        val_lab = val_lab.astype(np.uint8) * 255
+        trn_lab = trn_lab.astype(np.uint8) * 255
 
-    # Save newly split images
-    img_subdir = isplit_data_root / str(img_num)
-    img_subdir.mkdir(exist_ok=True)
-    val_raw_path = img_subdir / f'{img_num}_val.tif'
-    trn_raw_path = img_subdir / f'{img_num}_trn.tif'
-    val_lab_path = img_subdir / f'{img_num}_val_encapsulins.tif'
-    trn_lab_path = img_subdir / f'{img_num}_trn_encapsulins.tif'
-    iio.imwrite(val_raw_path, val_raw)
-    iio.imwrite(trn_raw_path, trn_raw)
-    iio.imwrite(val_lab_path, val_lab)
-    iio.imwrite(trn_lab_path, trn_lab)
+        # Save newly split images
+        img_subdir = isplit_data_root / str(img_num)
+        img_subdir.mkdir(exist_ok=True)
+        val_raw_path = img_subdir / f'{img_num}_val.png'
+        trn_raw_path = img_subdir / f'{img_num}_trn.png'
+        val_lab_path = img_subdir / f'{img_num}_val_encapsulins.png'
+        trn_lab_path = img_subdir / f'{img_num}_trn_encapsulins.png'
+        iio.imwrite(val_raw_path, val_raw)
+        iio.imwrite(trn_raw_path, trn_raw)
+        iio.imwrite(val_lab_path, val_lab)
+        iio.imwrite(trn_lab_path, trn_lab)
 
 
+if __name__ == '__main__':
+    main()
