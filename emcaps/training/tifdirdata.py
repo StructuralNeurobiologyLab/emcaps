@@ -144,7 +144,7 @@ class EncSegData(data.Dataset):
             label_names: Sequence[str],
             valid_nums: Optional[Sequence[int]] = None,
             descr_sheet=(os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
-            data_subdirname: str = 'isplitdata_v7',
+            data_subdirname: str = 'isplitdata_v8',
             meta_filter = lambda x: x,
             train: bool = True,
             transform=transforms.Identity(),
@@ -228,9 +228,9 @@ class EncSegData(data.Dataset):
         subdir_path = self.root_path / f'{img_num}'
 
         if self.train:
-            inp_path = subdir_path / f'{img_num}_trn.tif'
+            inp_path = subdir_path / f'{img_num}_trn.png'
         else:
-            inp_path = subdir_path / f'{img_num}_val.tif'
+            inp_path = subdir_path / f'{img_num}_val.png'
 
         inp = mimread(inp_path).astype(self.inp_dtype)
         if inp.ndim == 2:  # (H, W)
@@ -239,9 +239,9 @@ class EncSegData(data.Dataset):
         labels = []
         for label_name in self.label_names:
             if self.train:
-                label_path = subdir_path / f'{img_num}_trn_{label_name}.tif'
+                label_path = subdir_path / f'{img_num}_trn_{label_name}.png'
             else:
-                label_path = subdir_path / f'{img_num}_val_{label_name}.tif'
+                label_path = subdir_path / f'{img_num}_val_{label_name}.png'
             if label_path.exists():
                 label = mimread(label_path).astype(np.int64)
                 if self.invert_labels:
@@ -268,15 +268,15 @@ class EncSegData(data.Dataset):
             for c in range(inp.shape[0]):
                 inp[c][target == 0] = 0
 
-        if target.mean().item() > 0.2:
+        if target.mean().item() > 0.4:
             print('Unusually high target mean in image number', img_num)
 
         if self.dilate_targets_by > 0:
-            target = sm.binary_dilation(target, selem=self.td_disk).astype(target.dtype)
+            target = sm.binary_dilation(target, footprint=self.td_disk).astype(target.dtype)
 
         # Mark regions to be ignored
         if self.ignore_far_background_distance > 0 and mrow['scond'] == 'HEK-1xTmEnc-BC2-Tag':
-            dilated_foreground = sm.binary_dilation(target, selem=self.ifbd_disk)
+            dilated_foreground = sm.binary_dilation(target, footprint=self.ifbd_disk)
             far_background = ~dilated_foreground
             target[far_background] = -1
 

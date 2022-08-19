@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Sequence
 
 import imageio.v3 as iio
 import numpy as np
@@ -195,17 +195,17 @@ class ImageResources:
     labelpath: Optional[Path] = None
     curated: bool = False
     was_inverted: bool = False
+    enctypes_present: Optional[Sequence[str]] = None
 
 
-def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True):
+def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True):
     metarow = get_meta_row(path_or_num=img_num, sheet_path=sheet_path)
     raw_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
     if raw_path.is_file():
         raw = iio.imread(raw_path)
     else:
         raw = None
-    # with_stem() requires py39 -> use with_name()
-    label_path = raw_path.with_name(f'{raw_path.stem}_{LABEL_NAME}{raw_path.suffix}')
+    label_path = raw_path.with_stem(f'{raw_path.stem}_{LABEL_NAME}')
     # Look for improved labels in "curated" subdir. If nothing is found, use regular label file.
     is_curated = False
     if use_curated_if_available:
@@ -216,12 +216,29 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
                 is_curated = True
                 break  # Found it, stop searching
     was_inverted = False
+    enctypes_present = []
+    label = None
     if label_path.is_file():
         label = iio.imread(label_path)
         label = label > 0  # Binarize
         label, was_inverted = ensure_not_inverted(label)
-    else:
-        label = None
+
+        enctypes_present.append(metarow.scond)
+
+    # Handle multiple label files (multiple classes in one source image)
+    if merge_multilabel and label is None:
+        # Label wasn't found yet, so we'll look for multiple label files, which have a different naming pattern.
+        # Filter the list of potential label file name candidates by their existence as a file.
+        for scond in CLASS_NAMES.values():
+            if (m_path := raw_path.with_stem(f'{raw_path.stem}_{scond}')).is_file():
+                m_label = iio.imread(m_path) > 0
+                m_label, m_was_inverted = ensure_not_inverted(m_label)
+                was_inverted = was_inverted or m_was_inverted
+                enctypes_present.append(scond)
+                if label is None:
+                    label = m_label
+                else:
+                    label = np.bitwise_or(label, m_label)  # If at least on label is foreground at some location, define that as foreground
 
     roimask = None  # TODO. Not implemented yet 
 
@@ -234,6 +251,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True)
         labelpath=label_path,
         curated=is_curated,
         was_inverted=was_inverted,
+        enctypes_present=enctypes_present,
     )
 
     return imgres

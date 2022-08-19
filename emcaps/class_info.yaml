@@ -10,6 +10,12 @@ class_ids_v5:
   3M-Qt: 6
   1M-Tm: 7
 
+  1M-Qt_4G_1M-Tm: 8
+  1M-Qt_6G_1M-Tm: 9
+  1M-Qt_8G_1M-Tm: 10
+  1M-Qt_10G_1M-Tm: 11
+
+
 label_name: encapsulins
 
 
@@ -34,3 +40,7 @@ _oldnames_to_v5names:
   HEK-2xMT3-QtEnc-Flag:     2M-Qt
   HEK-3xMT3-QtEnc-Flag:     3M-Qt
   HEK-1xTmEnc-BC2-Tag:      1M-Tm
+  1M-Qt_4G_1M-Tm:           1M-Qt_4G_1M-Tm
+  1M-Qt_6G_1M-Tm:           1M-Qt_6G_1M-Tm
+  1M-Qt_8G_1M-Tm:           1M-Qt_8G_1M-Tm
+  1M-Qt_10G_1M-Tm:          1M-Qt_10G_1M-Tm

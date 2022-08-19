@@ -32,9 +32,9 @@ import elektronn3
 from torch.nn.modules.loss import CrossEntropyLoss, MSELoss
 from torch.utils import data
 
-import hydra
-from omegaconf import OmegaConf, DictConfig
-from hydra.core.config_store import ConfigStore
+# import hydra
+# from omegaconf import OmegaConf, DictConfig
+# from hydra.core.config_store import ConfigStore
 
 
 elektronn3.select_mpl_backend('Agg')
@@ -52,7 +52,7 @@ import albumentations
 from tqdm import tqdm
 
 from emcaps.training.tifdirdata import EncSegData
-from emcaps.utils import V5NAMES_TO_OLDNAMES
+from emcaps import utils
 
 
 # @dataclass
@@ -135,6 +135,7 @@ print(f'Running on device: {device}')
 
 SHEET_NAME = 'all_metadata'
 
+ONLY_QTTM = False
 
 if args.constraintype is None:
     DATA_SELECTION_V5NAMES = [
@@ -147,6 +148,14 @@ if args.constraintype is None:
         # 'DRO-1M-Mx',
         # 'DRO-1M-Qt',
     ]
+    # New multi types:
+    # E.g. 1M-Qt_10G_1M-Tm
+    multi_names = [f'1M-Qt_{ng}G_1M-Tm' for ng in [4, 6, 8, 10]]
+    # multi_names = ['1M-Qt_1M-Tm']
+    if ONLY_QTTM:
+        DATA_SELECTION_V5NAMES = multi_names
+    else:
+        DATA_SELECTION_V5NAMES.extend(multi_names)
 else:
     DATA_SELECTION_V5NAMES = [args.constraintype]
 
@@ -159,11 +168,6 @@ IGNORE_INDEX = -1
 IGNORE_FAR_BACKGROUND_DISTANCE = 0
 
 BG_WEIGHT = 0.2
-
-
-# TODO: WARNING: This inverts some of the labels depending on image origin. Don't forget to turn this off when it's not necessary (on other images)
-ENABLE_PARTIAL_INVERSION_HACK = False
-
 
 INPUTMASK = False
 
@@ -194,7 +198,9 @@ model = UNet(
 
 # USER PATHS
 sr_suffix = ''
-save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7{sr_suffix}').expanduser()
+if ONLY_QTTM:
+    sr_suffix = f'{sr_suffix}_onlyqttm'
+save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v8{sr_suffix}').expanduser()
 
 
 max_steps = conf.max_steps
@@ -253,14 +259,12 @@ train_dataset = EncSegData(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=True,
-    data_subdirname='isplitdata_v7',
+    data_subdirname='isplitdata_v8',
     label_names=label_names,
     transform=train_transform,
     target_dtype=target_dtype,
     invert_labels=INVERT_LABELS,
     enable_inputmask=INPUTMASK,
-    enable_binary_seg=BINARY_SEG,
-    enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     dilate_targets_by=DILATE_TARGETS_BY,
     epoch_multiplier=100,
@@ -271,14 +275,12 @@ valid_dataset = EncSegData(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=False,
-    data_subdirname='isplitdata_v7',
+    data_subdirname='isplitdata_v8',
     label_names=label_names,
     transform=valid_transform,
     target_dtype=target_dtype,
     invert_labels=INVERT_LABELS,
     enable_inputmask=INPUTMASK,
-    enable_binary_seg=BINARY_SEG,
-    enable_partial_inversion_hack=ENABLE_PARTIAL_INVERSION_HACK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     dilate_targets_by=DILATE_TARGETS_BY,
     epoch_multiplier=20,
@@ -298,11 +300,10 @@ lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # Validation metrics
 
 valid_metrics = {}
-if not DT and not MULTILABEL:
-    for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall, metrics.DSC, metrics.IoU]:
-        valid_metrics[f'val_{evaluator.name}_mean'] = evaluator()  # Mean metrics
-        for c in range(out_channels):
-            valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
+for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall, metrics.DSC, metrics.IoU]:
+    valid_metrics[f'val_{evaluator.name}_mean'] = evaluator()  # Mean metrics
+    for c in range(out_channels):
+        valid_metrics[f'val_{evaluator.name}_c{c}'] = evaluator(c)
 
 
 class_weights = torch.tensor([BG_WEIGHT, 1.0]).to(device)
