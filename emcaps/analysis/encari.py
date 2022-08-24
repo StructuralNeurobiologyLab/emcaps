@@ -367,7 +367,7 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
     # print(epropdict)
     # Can only assign builtin props here
     propdict = _props_to_dict(
-        rprops, properties=['label', 'bbox', 'perimeter', 'area', 'solidity']
+        rprops, properties=['label', 'bbox', 'perimeter', 'area', 'solidity', 'centroid']
     )
 
     propdict.update(epropdict)
@@ -385,6 +385,23 @@ def compute_majority_class_name(class_preds):
     majority_class = np.argmax(np.bincount(class_preds))
     majority_class_name = assign_class_names([majority_class])[0]
     return majority_class_name
+
+
+def save_properties_to_xlsx(properties: dict, xlsx_output_path: str) -> None:
+    xlsx_output_path = str(Path(xlsx_output_path).expanduser())
+    # Create a dataframe from properties for saving to an .xlsx file
+    propframe = pd.DataFrame(properties)
+    propframe = propframe.round(2)  # Round every float entry to 2 decimal places
+    propframe.rename(columns={'label': 'region_id'}, inplace=True)  # Rename misleading column for conn. comp. id
+    # Select and reorder columns of interest
+    selected_columns = ['region_id'] +\
+                       ['class_id', 'class_name'] +\
+                       ['area', 'radius2'] +\
+                       [f'centroid-{i}' for i in range(2)] +\
+                       [f'bbox-{i}' for i in range(4)]
+    propframe = propframe[selected_columns]
+    # Save to spreadsheet
+    propframe.to_excel(xlsx_output_path, sheet_name='emcaps-regions', index=False)
 
 
 # TODO: Make tiling optional
@@ -436,6 +453,7 @@ def make_regions_widget(
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
     inplace_relabel: bool = True,
+    xlsx_output_path: str = '/tmp/ec-out.xlsx'
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
@@ -451,6 +469,10 @@ def make_regions_widget(
             min_circularity=mincircularity,
             inplace_relabel=inplace_relabel,
         )
+
+        # Save region info to .xlsx file
+        save_properties_to_xlsx(properties=properties, xlsx_output_path=xlsx_output_path)
+
         # If inplace_relabel is true, this has modified the labels from the
         # caller in place without napari suspecting anything, so we'll refresh manually
         if inplace_relabel:
@@ -534,8 +556,8 @@ def main():
     if ipaths == ['test136']:
         eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
         ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
-        eimg = iio.imread(eip)[600:1200, 600:1200].copy()
-        elab = iio.imread(ilp)[600:1200, 600:1200].copy() > 0
+        eimg = iio.imread(eip)[600:900, 600:900].copy()
+        elab = iio.imread(ilp)[600:900, 600:900].copy() > 0
         viewer.add_image(eimg, name='img')
         viewer.add_labels(elab, name='lab', seed=0, color=color_dict)
         ipaths = []
