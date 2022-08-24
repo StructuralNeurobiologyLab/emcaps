@@ -387,6 +387,11 @@ def compute_majority_class_name(class_preds):
     return majority_class_name
 
 
+def get_default_xlsx_output_path() -> str:
+    default_path = '/tmp/ec-out.xlsx'
+    return default_path
+
+
 def save_properties_to_xlsx(properties: dict, xlsx_output_path: Path) -> None:
     xlsx_output_path = xlsx_output_path.expanduser()
     # Create a dataframe from properties for saving to an .xlsx file
@@ -400,6 +405,7 @@ def save_properties_to_xlsx(properties: dict, xlsx_output_path: Path) -> None:
                        [f'centroid-{i}' for i in range(2)] +\
                        [f'bbox-{i}' for i in range(4)]
     propframe = propframe[selected_columns]
+    logger.info(f'Writing output to {xlsx_output_path}')
     # Save to spreadsheet
     propframe.to_excel(xlsx_output_path, sheet_name='emcaps-regions', index=False)
 
@@ -453,8 +459,8 @@ def make_regions_widget(
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
     inplace_relabel: bool = True,
-    # xlsx_output_path: Path = Path('/tmp/ec-out.xlsx'),  # Path picker always expects existing files, so use str instead:
-    xlsx_output_path: str = '/tmp/ec-out.xlsx',
+    # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
+    xlsx_output_path: str = get_default_xlsx_output_path(),
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
