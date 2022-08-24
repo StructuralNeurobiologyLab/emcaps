@@ -387,8 +387,8 @@ def compute_majority_class_name(class_preds):
     return majority_class_name
 
 
-def save_properties_to_xlsx(properties: dict, xlsx_output_path: str) -> None:
-    xlsx_output_path = str(Path(xlsx_output_path).expanduser())
+def save_properties_to_xlsx(properties: dict, xlsx_output_path: Path) -> None:
+    xlsx_output_path = xlsx_output_path.expanduser()
     # Create a dataframe from properties for saving to an .xlsx file
     propframe = pd.DataFrame(properties)
     propframe = propframe.round(2)  # Round every float entry to 2 decimal places
@@ -453,7 +453,8 @@ def make_regions_widget(
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
     inplace_relabel: bool = True,
-    xlsx_output_path: str = '/tmp/ec-out.xlsx'
+    # xlsx_output_path: Path = Path('/tmp/ec-out.xlsx'),  # Path picker always expects existing files, so use str instead:
+    xlsx_output_path: str = '/tmp/ec-out.xlsx',
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
@@ -471,6 +472,8 @@ def make_regions_widget(
         )
 
         # Save region info to .xlsx file
+        if not isinstance(xlsx_output_path, Path):
+            xlsx_output_path = Path(xlsx_output_path)
         save_properties_to_xlsx(properties=properties, xlsx_output_path=xlsx_output_path)
 
         # If inplace_relabel is true, this has modified the labels from the
