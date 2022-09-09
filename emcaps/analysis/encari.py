@@ -522,12 +522,6 @@ def make_regions_widget(
             features=properties['class_id'],
         )
 
-        if shape_type == 'ellipse':
-            meta.update(dict(
-                edge_color='transparent',
-                face_color='class_id',
-            ))
-        
         match shape_type:
             case 'ellipse':
                 meta.update({
