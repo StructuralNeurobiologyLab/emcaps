@@ -11,7 +11,7 @@ import argparse
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 
 import imageio.v3 as iio
@@ -392,8 +392,8 @@ def get_default_xlsx_output_path() -> str:
     return default_path
 
 
-def save_properties_to_xlsx(properties: dict, xlsx_output_path: Path) -> None:
-    xlsx_output_path = xlsx_output_path.expanduser()
+def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
+    xlsx_out_path = xlsx_out_path.expanduser()
     # Create a dataframe from properties for saving to an .xlsx file
     propframe = pd.DataFrame(properties)
     propframe = propframe.round(2)  # Round every float entry to 2 decimal places
@@ -405,9 +405,9 @@ def save_properties_to_xlsx(properties: dict, xlsx_output_path: Path) -> None:
                        [f'centroid-{i}' for i in range(2)] +\
                        [f'bbox-{i}' for i in range(4)]
     propframe = propframe[selected_columns]
-    logger.info(f'Writing output to {xlsx_output_path}')
+    logger.info(f'Writing output to {xlsx_out_path}')
     # Save to spreadsheet
-    propframe.to_excel(xlsx_output_path, sheet_name='emcaps-regions', index=False)
+    propframe.to_excel(xlsx_out_path, sheet_name='emcaps-regions', index=False)
 
 
 # TODO: Make tiling optional
@@ -459,9 +459,11 @@ def make_regions_widget(
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
     inplace_relabel: bool = True,
-    # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
     xlsx_output_path: str = get_default_xlsx_output_path(),
+    # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
 ) -> FunctionWorker[LayerDataTuple]:
+
+    xlp = xlsx_output_path
 
     @thread_worker(connect={'returned': pbar.hide})
     def regions() -> LayerDataTuple:
@@ -477,10 +479,11 @@ def make_regions_widget(
             inplace_relabel=inplace_relabel,
         )
 
+        nonlocal xlp
         # Save region info to .xlsx file
-        if not isinstance(xlsx_output_path, Path):
-            xlsx_output_path = Path(xlsx_output_path)
-        save_properties_to_xlsx(properties=properties, xlsx_output_path=xlsx_output_path)
+        if not isinstance(xlp, Path):
+            xlp = Path(xlp)
+        save_properties_to_xlsx(properties=properties, xlsx_out_path=xlp)
 
         # If inplace_relabel is true, this has modified the labels from the
         # caller in place without napari suspecting anything, so we'll refresh manually
@@ -533,6 +536,7 @@ def make_regions_widget(
                     'edge_color': 'class_id',
                     'face_color': 'transparent',
                 })
+            # case 'none' is already handled by the early return above
             case _:
                 raise ValueError(f'Unsupported shape_type {shape_type}')
 
