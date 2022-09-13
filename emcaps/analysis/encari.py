@@ -12,6 +12,8 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
+import platform
+import tempfile
 
 
 import imageio.v3 as iio
@@ -37,10 +39,14 @@ from typing_extensions import Annotated
 
 from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius
 
+
+TMPPATH = '/tmp' if platform.system() == 'Darwin' else tempfile.gettempdir()
+
+
 # Set up logging
 logger = logging.getLogger('encari')
 logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler(f'/tmp/encari.log')
+fh = logging.FileHandler(f'{TMPPATH}/encari.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
@@ -111,6 +117,7 @@ with open(class_info_path) as f:
     class_info = yaml.load(f, Loader=yaml.FullLoader)
 CLASS_IDS = class_info['class_ids_v5']
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
+
 
 color_dict = {
     1: 'magenta',
@@ -388,7 +395,7 @@ def compute_majority_class_name(class_preds):
 
 
 def get_default_xlsx_output_path() -> str:
-    default_path = '/tmp/ec-out.xlsx'
+    default_path = f'{TMPPATH}/ec-out.xlsx'
     return default_path
 
 

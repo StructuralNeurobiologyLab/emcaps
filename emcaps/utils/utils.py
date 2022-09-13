@@ -5,6 +5,8 @@ Utility functions and resources.
 # TODO: Eliminate duplicated code elsewhere by importing from here.
 
 import os
+import platform
+import tempfile
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -15,6 +17,9 @@ import numpy as np
 import pandas as pd
 import yaml
 from PIL import Image, ImageDraw
+
+
+TMPPATH = '/tmp' if platform.system() == 'Darwin' else tempfile.gettempdir()
 
 
 def eul(paths):

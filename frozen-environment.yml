@@ -4,19 +4,17 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python =3.10.*
+  - python=3.10.*
   - albumentations=1.0.*
   - hydra-core=1.1.*
   - imageio=2.19.*
   - ipython=8.4.*
-  - magicgui=0.5.*
-  - napari=0.4.16.*
   - matplotlib=3.5.*
   - numpy=1.22.*
   - omegaconf=2.2.*
   - pandas=1.4.*
   - Pillow=9.1.*
-  - PyYAML=6.0.*
+  - pyyaml=6.0.*
   - scikit-image=0.19.*
   - scikit-learn=1.1.*
   - scipy=1.8.*
@@ -25,9 +23,13 @@ dependencies:
   - pytorch=1.12.1
   - tqdm=4.64.*
   - typing_extensions=4.2.*
-  - openpyxl =3.0.*  # for pandas xlsx support
+  - ubelt=1.2.*
+  - openpyxl=3.0.*  # for pandas xlsx support
 
+  # For napari
+  - magicgui=0.5.*
+  - napari=0.4.16
 
   - pip
   - pip:
-    - git+https://github.com/ELEKTRONN/elektronn3.git@master#egg=elektronn3
+    - git+https://github.com/ELEKTRONN/elektronn3.git@emcaps#egg=elektronn3

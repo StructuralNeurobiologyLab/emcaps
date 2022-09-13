@@ -23,12 +23,12 @@ dependencies:
   - pytorch >=1.12.1
   - tqdm >=4.64
   - typing_extensions >=4.2
-  - ubelt >=1.1
+  - ubelt >=1.2
   - openpyxl >=3.0  # for pandas xlsx support
 
   # For napari
-   - magicgui >=0.5
-   - napari >=0.4.16
+  - magicgui >=0.5
+  - napari >=0.4.16
 
   - pip
   - pip:
