@@ -66,7 +66,7 @@ V5NAMES_TO_OLDNAMES = {v: k for k, v in OLDNAMES_TO_V5NAMES.items()}
 
 
 def get_path_prefix() -> Path:
-    if os.getenv('CLUSTER') == 'WHOLEBRAIN':
+    if os.getenv('CLUSTER') in ['WHOLEBRAIN', 'CAJAL']:
         path_prefix = Path('/wholebrain/scratch/mdraw/tum/').expanduser()
     else:
         path_prefix = Path('~/tum/').expanduser()
