@@ -144,7 +144,7 @@ class EncSegData(data.Dataset):
             label_names: Sequence[str],
             valid_nums: Optional[Sequence[int]] = None,
             descr_sheet=(os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
-            data_subdirname: str = 'isplitdata_v8',
+            data_subdirname: str = 'isplitdata_v9',
             meta_filter = lambda x: x,
             train: bool = True,
             transform=transforms.Identity(),

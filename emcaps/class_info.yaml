@@ -1,19 +1,28 @@
-_version: 6
+_version: 9
 
 class_ids_v5:
   DRO-1M-Mx: 0
   DRO-1M-Qt: 1
-  1M-Mx: 2
-  1M-Qt: 3
-  2M-Mx: 4
-  2M-Qt: 5
-  3M-Qt: 6
-  1M-Tm: 7
+  1M-Mx:     2
+  1M-Qt:     3
+  2M-Mx:     4
+  2M-Qt:     5
+  3M-Qt:     6
+  1M-Tm:     7
 
-  1M-Qt_4G_1M-Tm: 8
-  1M-Qt_6G_1M-Tm: 9
-  1M-Qt_8G_1M-Tm: 10
+  1M-Qt_4G_1M-Tm:   8
+  1M-Qt_6G_1M-Tm:   9
+  1M-Qt_8G_1M-Tm:  10
   1M-Qt_10G_1M-Tm: 11
+  1M-Qt_2G_1M-Tm:  12
+
+  1M-Qt_and_2M-Q:      13
+  1M-Qt_and_3M-Qt:     14
+  1M-Qt_and_1M-Mx:     15
+  1M-Qt_and_2M-Mx:     16
+  1M-Qt_and_1M-Tm:     17
+  3M-Qt_and_1M-Tm:     18
+  MICE_2M-Qt:          19
 
 
 
@@ -41,7 +50,46 @@ _oldnames_to_v5names:
   HEK-2xMT3-QtEnc-Flag:     2M-Qt
   HEK-3xMT3-QtEnc-Flag:     3M-Qt
   HEK-1xTmEnc-BC2-Tag:      1M-Tm
+
   1M-Qt_4G_1M-Tm:           1M-Qt_4G_1M-Tm
   1M-Qt_6G_1M-Tm:           1M-Qt_6G_1M-Tm
   1M-Qt_8G_1M-Tm:           1M-Qt_8G_1M-Tm
   1M-Qt_10G_1M-Tm:          1M-Qt_10G_1M-Tm
+  1M-Qt_2G_1M-Tm:           1M-Qt_2G_1M-Tm
+
+  'HEK_1M-Qt_&_2M-Qt':      1M-Qt_and_2M-Qt
+  'HEK_1M-Qt_&_3M-Qt':      1M-Qt_and_3M-Qt
+  'HEK_1M-Qt_&_1M-Mx':      1M-Qt_and_1M-Mx
+  'HEK_1M-Qt_&_2M-Mx':      1M-Qt_and_2M-Mx
+  'HEK_1M-Qt_&_1M-Tm':      1M-Qt_and_1M-Tm
+  'HEK_3M-Qt_&_1M-Tm':      3M-Qt_and_1M-Tm
+
+  MICE_2M-Qt:               MICE_2M-Qt
+
+
+class_groups:
+  simple_hek:
+    - 1M-Mx
+    - 1M-Qt
+    - 2M-Mx
+    - 2M-Qt
+    - 3M-Qt
+    - 1M-Tm
+  dro:
+    - DRO-1M-Mx
+    - DRO-1M-Qt
+  mice:
+    - MICE_2M-Qt
+  qttm:
+    - 1M-Qt_4G_1M-Tm
+    - 1M-Qt_6G_1M-Tm
+    - 1M-Qt_8G_1M-Tm
+    - 1M-Qt_10G_1M-Tm
+    - 1M-Qt_2G_1M-Tm
+  multi:
+    - 1M-Qt_and_2M-Qt
+    - 1M-Qt_and_3M-Qt
+    - 1M-Qt_and_1M-Mx
+    - 1M-Qt_and_2M-Mx
+    - 1M-Qt_and_1M-Tm
+    - 3M-Qt_and_1M-Tm

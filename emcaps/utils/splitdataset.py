@@ -20,7 +20,7 @@ from emcaps.utils import get_meta, get_path_prefix, get_image_resources
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v8'
+isplit_data_root = data_root / 'isplitdata_v9'
 sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 

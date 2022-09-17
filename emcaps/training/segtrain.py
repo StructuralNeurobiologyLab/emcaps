@@ -93,7 +93,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=160_001,
+    '-m', '--max-steps', type=int, default=200_001,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -135,27 +135,46 @@ print(f'Running on device: {device}')
 
 SHEET_NAME = 'all_metadata'
 
-ONLY_QTTM = False
+INCLUDE_SIMPLE_HEK = True
+INCLUDE_DRO = True
+INCLUDE_QTTM = True
+INCLUDE_MULTI = True
+INCLUDE_MICE = True
 
 if args.constraintype is None:
-    DATA_SELECTION_V5NAMES = [
-        '1M-Mx',
-        '1M-Qt',
-        '2M-Mx',
-        '2M-Qt',
-        '3M-Qt',
-        '1M-Tm',
-        # 'DRO-1M-Mx',
-        # 'DRO-1M-Qt',
-    ]
-    # New multi types:
-    # E.g. 1M-Qt_10G_1M-Tm
-    multi_names = [f'1M-Qt_{ng}G_1M-Tm' for ng in [4, 6, 8, 10]]
-    # multi_names = ['1M-Qt_1M-Tm']
-    if ONLY_QTTM:
-        DATA_SELECTION_V5NAMES = multi_names
-    else:
-        DATA_SELECTION_V5NAMES.extend(multi_names)
+    included = []
+    if INCLUDE_SIMPLE_HEK:
+        included = [
+            '1M-Mx',
+            '1M-Qt',
+            '2M-Mx',
+            '2M-Qt',
+            '3M-Qt',
+            '1M-Tm',
+        ]
+
+    if INCLUDE_DRO:
+        included.extend([
+            'DRO-1M-Mx',
+            'DRO-1M-Qt',
+        ])
+    if INCLUDE_MULTI:
+        # New multi types:
+        # E.g. 1M-Qt_10G_1M-Tm
+        included.extend([  # Additional classes (September)
+            '1M-Qt_and_2M-Q',
+            '1M-Qt_and_3M-Qt',
+            '1M-Qt_and_1M-Mx',
+            '1M-Qt_and_2M-Mx',
+            '1M-Qt_and_1M-Tm',
+            '3M-Qt_and_1M-Tm',
+        ])
+    if INCLUDE_QTTM:
+        included.extend([f'1M-Qt_{ng}G_1M-Tm' for ng in [2, 4, 6, 8, 10]])
+    if INCLUDE_MICE:
+        included.extend(['MICE_2M-Qt'])
+
+    DATA_SELECTION_V5NAMES = included
 else:
     DATA_SELECTION_V5NAMES = [args.constraintype]
 
@@ -198,9 +217,9 @@ model = UNet(
 
 # USER PATHS
 sr_suffix = ''
-if ONLY_QTTM:
-    sr_suffix = f'{sr_suffix}_onlyqttm'
-save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v8{sr_suffix}').expanduser()
+# if ONLY_QTTM:
+#     sr_suffix = f'{sr_suffix}_onlyqttm'
+save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9{sr_suffix}').expanduser()
 
 
 max_steps = conf.max_steps
@@ -236,9 +255,9 @@ train_transform = common_transforms + [
 ]
 if USE_GRAY_AUG:
     train_transform.extend([
-        transforms.AdditiveGaussianNoise(prob=0.4, sigma=0.1),
-        transforms.RandomGammaCorrection(prob=0.4, gamma_std=0.1),
-        transforms.RandomBrightnessContrast(prob=0.4, brightness_std=0.1, contrast_std=0.1),
+        transforms.AdditiveGaussianNoise(prob=0.3, sigma=0.1),
+        transforms.RandomGammaCorrection(prob=0.3, gamma_std=0.1),
+        transforms.RandomBrightnessContrast(prob=0.3, brightness_std=0.1, contrast_std=0.1),
     ])
 
 valid_transform = common_transforms + []
@@ -259,7 +278,7 @@ train_dataset = EncSegData(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=True,
-    data_subdirname='isplitdata_v8',
+    data_subdirname='isplitdata_v9',
     label_names=label_names,
     transform=train_transform,
     target_dtype=target_dtype,
@@ -267,7 +286,7 @@ train_dataset = EncSegData(
     enable_inputmask=INPUTMASK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     dilate_targets_by=DILATE_TARGETS_BY,
-    epoch_multiplier=100,
+    epoch_multiplier=200,
 )
 
 valid_dataset = EncSegData(
@@ -275,7 +294,7 @@ valid_dataset = EncSegData(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=False,
-    data_subdirname='isplitdata_v8',
+    data_subdirname='isplitdata_v9',
     label_names=label_names,
     transform=valid_transform,
     target_dtype=target_dtype,
@@ -283,7 +302,7 @@ valid_dataset = EncSegData(
     enable_inputmask=INPUTMASK,
     ignore_far_background_distance=IGNORE_FAR_BACKGROUND_DISTANCE,
     dilate_targets_by=DILATE_TARGETS_BY,
-    epoch_multiplier=20,
+    epoch_multiplier=40,
 )
 
 
@@ -294,6 +313,7 @@ optimizer = optim.Adam(
     lr=lr,
     amsgrad=True
 )
+optimizer = SWA(optimizer)
 lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
 
@@ -341,7 +361,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=8,  # TODO
+    num_workers=16,
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,

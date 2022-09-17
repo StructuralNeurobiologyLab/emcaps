@@ -57,6 +57,7 @@ with open(class_info_path) as f:
 CLASS_IDS = class_info['class_ids_v5']  # Use v5 class names
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 LABEL_NAME = class_info['label_name']
+CLASS_GROUPS = class_info['class_groups']
 
 OLD_CLASS_IDS = class_info['class_ids']  # Use v5 class names
 OLD_CLASS_NAMES = {v: k for k, v in OLD_CLASS_IDS.items()}
@@ -235,15 +236,16 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
         # Label wasn't found yet, so we'll look for multiple label files, which have a different naming pattern.
         # Filter the list of potential label file name candidates by their existence as a file.
         for scond in CLASS_NAMES.values():
-            if (m_path := raw_path.with_stem(f'{raw_path.stem}_{scond}')).is_file():
-                m_label = iio.imread(m_path) > 0
-                m_label, m_was_inverted = ensure_not_inverted(m_label)
-                was_inverted = was_inverted or m_was_inverted
-                enctypes_present.append(scond)
-                if label is None:
-                    label = m_label
-                else:
-                    label = np.bitwise_or(label, m_label)  # If at least on label is foreground at some location, define that as foreground
+            for stem_pattern in [f'{raw_path.stem}_{scond}', f'{raw_path.stem}_label_enc_{scond}']:
+                if (m_path := raw_path.with_stem(stem_pattern)).is_file():
+                    m_label = iio.imread(m_path) > 0
+                    m_label, m_was_inverted = ensure_not_inverted(m_label)
+                    was_inverted = was_inverted or m_was_inverted
+                    enctypes_present.append(scond)
+                    if label is None:
+                        label = m_label
+                    else:
+                        label = np.bitwise_or(label, m_label)  # If at least on label is foreground at some location, define that as foreground
 
     roimask = None  # TODO. Not implemented yet 
 
