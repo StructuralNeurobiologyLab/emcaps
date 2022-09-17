@@ -135,45 +135,18 @@ print(f'Running on device: {device}')
 
 SHEET_NAME = 'all_metadata'
 
-INCLUDE_SIMPLE_HEK = True
-INCLUDE_DRO = True
-INCLUDE_QTTM = True
-INCLUDE_MULTI = True
-INCLUDE_MICE = True
+class_groups_to_include = [
+    'simple_hek',
+    'dro',
+    'mice',
+    'qttm',
+    'multi',
+]
 
 if args.constraintype is None:
     included = []
-    if INCLUDE_SIMPLE_HEK:
-        included = [
-            '1M-Mx',
-            '1M-Qt',
-            '2M-Mx',
-            '2M-Qt',
-            '3M-Qt',
-            '1M-Tm',
-        ]
-
-    if INCLUDE_DRO:
-        included.extend([
-            'DRO-1M-Mx',
-            'DRO-1M-Qt',
-        ])
-    if INCLUDE_MULTI:
-        # New multi types:
-        # E.g. 1M-Qt_10G_1M-Tm
-        included.extend([  # Additional classes (September)
-            '1M-Qt_and_2M-Q',
-            '1M-Qt_and_3M-Qt',
-            '1M-Qt_and_1M-Mx',
-            '1M-Qt_and_2M-Mx',
-            '1M-Qt_and_1M-Tm',
-            '3M-Qt_and_1M-Tm',
-        ])
-    if INCLUDE_QTTM:
-        included.extend([f'1M-Qt_{ng}G_1M-Tm' for ng in [2, 4, 6, 8, 10]])
-    if INCLUDE_MICE:
-        included.extend(['MICE_2M-Qt'])
-
+    for cgrp in class_groups_to_include:
+        included.extend(cgrp)
     DATA_SELECTION_V5NAMES = included
 else:
     DATA_SELECTION_V5NAMES = [args.constraintype]
