@@ -13,6 +13,7 @@ import imageio.v3 as iio
 import skimage
 import torch
 import yaml
+import pandas as pd
 
 from skimage import morphology as sm
 from skimage.color import label2rgb
@@ -27,11 +28,67 @@ import matplotlib.pyplot as plt
 from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 
-
+from emcaps import utils
 from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
 
 
 # torch.backends.cudnn.benchmark = True
+
+
+def produce_metrics(thresh, results_root, model_path, data_selection, m_targets, m_preds, m_probs):
+    # Calculate pixelwise precision and recall
+    # if m_targets.max() < 1:
+    #     import IPython ; IPython.embed(); raise SystemExit
+    m_targets = np.concatenate(m_targets, axis=None)
+    m_probs = np.concatenate(m_probs, axis=None)
+    m_preds = np.concatenate(m_preds, axis=None)
+    iou = sme.jaccard_score(m_targets, m_preds)  # iou == jaccard score
+    dsc = sme.f1_score(m_targets, m_preds)  # dsc == f1 score
+    precision = sme.precision_score(m_targets, m_preds)
+    recall = sme.recall_score(m_targets, m_preds)
+            # Plot pixelwise PR curve
+    p, r, t = sme.precision_recall_curve(m_targets, m_probs)
+    plt.figure(figsize=(3, 3))
+    # np.savez_compressed('prdata.npy', p,r,t)
+    plt.plot(r, p)
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.minorticks_on()
+    plt.grid(True, 'both')
+
+            # Get index of pr-curve's threshold that's nearest to the one used in practice for this segmentation
+    _i = np.abs(t - thresh/255).argmin()
+    plt.scatter(r[_i], p[_i])
+            # plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
+
+    plt.tight_layout()
+    plt.savefig(eu(f'{results_root}/prcurve.pdf'), dpi=300)
+    plt.close()
+
+    with open(eu(f'{results_root}/info.txt'), 'w') as f:
+        f.write(
+        f"""Output description:
+- X_raw.jpg: raw image (image number X from the shared dataset)
+- X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
+- X_thresh.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
+- X_overlay_lab.jpg: given GT label annotations, overlayed on raw image
+- X_overlay_pred.jpg: prediction by the neural network, overlayed on raw image
+- X_fn_error.png: map of false negative predictions w.r.t. GT labels
+- X_fp_error.png: map of false positive predictions w.r.t. GT labels
+- X_fn_error_overlay.jpg: map of false negative predictions w.r.t. GT labels, overlayed on raw image
+- X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
+Info:
+- data: {data_selection}
+- model: {model_path}
+- thresh: {thresh}
+- IoU: {iou * 100:.1f}%
+- DSC: {dsc * 100:.1f}%
+- precision: {precision * 100:.1f}%
+- recall: {recall * 100:.1f}%
+"""
+    )
+    metrics_dict = {'dsc': dsc, 'iou': iou, 'precision': precision, 'recall': recall}
+    return metrics_dict
 
 
 def main():
@@ -51,25 +108,24 @@ def main():
         transforms.Normalize(mean=dataset_mean, std=dataset_std)
     ])
 
-    ENABLE_ENCTYPE_SUBDIRS = False
-    ZERO_LABELS = True
-
-    EVAL_ON_DRO = False
+    ENABLE_ENCTYPE_SUBDIRS = True
+    ZERO_LABELS = False
 
 
     import argparse
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('--srcpath', help='Path to input file', default=None)
+    parser.add_argument('--model', help='Path to model file', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
     parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
-    parser.add_argument('-a', type=int, default=0, choices=[0, 1, 2], help='Number of test-time augmentations to use')
+    parser.add_argument('-a', type=int, default=2, choices=[0, 1, 2], help='Number of test-time augmentations to use')
     args = parser.parse_args()
 
     selected_enctype = args.constraintype
     use_expert = args.use_expert
     tta_num = args.a
-    srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
+    srcpath = None
 
     """
     for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
@@ -80,72 +136,54 @@ def main():
     thresh = 127
     dt_thresh = 0.00
 
+    tr_setting = 'all'
+
     if srcpath is None:
-        results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v7_')
-        results_root = Path('/wholebrain/scratch/mdraw/tum/seg_fbp')##
+        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v9_tr-{tr_setting}')
+        # results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v9_tr-hek')
         if selected_enctype is not None:
             msuffix = '_expert' if use_expert else ''
             results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
         data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 
 
-        DRO_V5NAMES = ['DRO-1M-Mx', 'DRO-1M-Qt']
+        class_groups_to_include = [
+            'simple_hek',
+            'dro',
+            'mice',
+            'qttm',
+            'multi',
+        ]
 
         if selected_enctype is None:
-            if EVAL_ON_DRO:
-                DATA_SELECTION_V5NAMES = [  # for Drosophila
-                    'DRO-1M-Mx',
-                    'DRO-1M-Qt',
-                ]
-            else:
-                DATA_SELECTION_V5NAMES = [
-                    '1M-Mx',
-                    '1M-Qt',
-                    '2M-Mx',
-                    '2M-Qt',
-                    '3M-Qt',
-                    '1M-Tm',
-                    # 'DRO-1M-Mx',
-                    # 'DRO-1M-Qt',
-                ]
+            included = []
+            for cgrp in class_groups_to_include:
+                cgrp_classes = utils.CLASS_GROUPS[cgrp]
+                print(f'Including class group {cgrp} containing classes {cgrp_classes}')
+                included.extend(cgrp_classes)
+            DATA_SELECTION_V5NAMES = included
         else:
             DATA_SELECTION_V5NAMES = [selected_enctype]
 
 
-        def find_full_dro_images():
-            meta = get_meta()
-            # dro_meta = meta.loc[meta.scondv5.isin(DRO_V5NAMES)]
-            dro_meta = meta.loc[meta.scondv5.isin(DATA_SELECTION_V5NAMES)]
-            dro_image_numbers = dro_meta.num.to_list()
-            paths = [data_root / f'{i}/{i}.tif' for i in dro_image_numbers]
-            return paths
-
-
-        def find_v7_val_images(isplitpath=None):
-            """Find paths to all raw validation images of split v7"""
+        def find_v9_val_images(isplitpath=None):
+            """Find paths to all raw validation images of split v9"""
             if isplitpath is None:
-                isplitpath = data_root / 'isplitdata_v7'
+                isplitpath = data_root / 'isplitdata_v9'
             val_img_paths = []
-            for p in isplitpath.rglob('*_val.tif'):  # Look for all validation raw images recursively
+            for p in isplitpath.rglob('*_val.png'):  # Look for all validation raw images recursively
                 if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
                     val_img_paths.append(p)
             return val_img_paths
 
-        img_paths = []##
-        for p in Path('/wholebrain/scratch/mdraw/tum/fbpatterns_flat/').rglob('*'):  # Look for all validation raw images recursively##
-            img_paths.append(p)##
+        img_paths = find_v9_val_images()
 
-        # if EVAL_ON_DRO:
-        #     img_paths = find_full_dro_images()
-        # else:
-        #     img_paths = find_v7_val_images()
+        for p in [results_root / scond for scond in DATA_SELECTION_V5NAMES]:
+            os.makedirs(p, exist_ok=True)
 
-        # for p in [results_path / scond for scond in DATA_SELECTION]:
-        #     os.makedirs(p, exist_ok=True)
-
-        # if len(DATA_SELECTION_V5NAMES) == 1:
-        #     v5_enctype = DATA_SELECTION_V5NAMES[0]
-        #     results_root = Path(f'{str(results_root)}_{v5_enctype}')
+        if len(DATA_SELECTION_V5NAMES) == 1:
+            v5_enctype = DATA_SELECTION_V5NAMES[0]
+            results_root = Path(f'{str(results_root)}_{v5_enctype}')
 
     else:
         img_paths = [srcpath]
@@ -155,19 +193,14 @@ def main():
     DESIRED_OUTPUTS = [
         'raw',
         'thresh',
-        # 'lab',
+        'lab',
         'overlays',
-        # 'error_maps',
+        'error_maps',
         'probmaps',
-        # 'metrics',
+        'metrics',
     ]
 
     label_name = 'encapsulins'
-
-
-
-    for p in [results_root]:
-        p.mkdir(exist_ok=True)
 
 
     class Randomizer(torch.nn.Module):
@@ -176,31 +209,16 @@ def main():
             return torch.rand(x.shape[0], 2, *x.shape[2:])
 
 
-    if use_expert:
-        _empaths = {
-            '1M-Mx': '1M-Mx_B_GA___UNet__22-04-26_22-33-13',
-            '1M-Qt': '1M-Qt_B_GA___UNet__22-04-26_22-34-22',
-            '2M-Mx': '2M-Mx_B_GA___UNet__22-04-26_22-34-00',
-            '2M-Qt': '2M-Qt_B_GA___UNet__22-04-26_22-34-38',
-            '3M-Qt': '3M-Qt_B_GA___UNet__22-04-26_22-36-23',
-            '1M-Tm': '1M-Tm_B_GA___UNet__22-04-26_22-36-20',
+    if args.model is None:
+        model_dict = {
+            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_all__UNet__22-09-13_21-14-33/model_step160000.pts',
+            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_hek__UNet__22-09-13_21-17-42/model_step160000.pts',
+            'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/MICE_2M-Qt_GA_mice__UNet__22-09-13_21-18-55/model_step40000.pts',
         }
-        _empaths = {k: f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/{v}/model_step130000.pt' for k, v in _empaths.items()}
-        model_paths = [_empaths[selected_enctype]]
+        model_paths = [model_dict[tr_setting]]
+        # model_paths = [Randomizer()]  # produce random outputs instead
     else:
-        model_paths = [
-            # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_nodro__UNet__22-05-16_15-45-43/model_step160000.pts'  # without Drosophila classes
-            # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_notm_nodro__UNet__22-05-16_01-44-01/model_step160000.pts'  # without Tm and Drosophila classes
-            # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # without Drosophila classes
-            # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro_notm__UNet__22-05-19_01-43-20/model_step160000.pts'  # without Tm and Drosophila classes
-            
-            # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_alldata__UNet__22-05-29_02-22-27/model_final.pts'
-            '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlyhek__UNet__22-05-29_02-25-35/model_final.pts'
-            # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlydro__UNet__22-05-29_02-25-16/model_final.pts'
-            # Randomizer()  # produce random outputs instead
-        ]
-
-    # model_paths = ['./unet_v7_all.pts']
+        model_paths = [args.model]
 
     assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
     for model_path in model_paths:
@@ -233,6 +251,15 @@ def main():
         m_targets = []
         m_probs = []
         m_preds = []
+
+        if ENABLE_ENCTYPE_SUBDIRS:
+            per_enctype_results = {}
+            for enctype in DATA_SELECTION_V5NAMES:
+                per_enctype_results[enctype] = {
+                    'targets': [], 'preds': [], 'probs': []
+                }
+
+        assert len(img_paths) > 0
         for img_path in img_paths:
             inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
             out = predictor.predict(inp)
@@ -283,9 +310,9 @@ def main():
                 if ZERO_LABELS:
                     lab_img = np.zeros_like(raw_img, dtype=np.uint8)
                 else:
-                    lab_path = f'{str(img_path)[:-4]}_{label_name}.tif'
+                    lab_path = f'{str(img_path)[:-4]}_{label_name}.png'
                     if not Path(lab_path).exists():
-                        lab_path = f'{img_path[:-4]}_{label_name}.TIF'
+                        lab_path = f'{img_path[:-4]}_{label_name}.tif'
                     lab_img = np.array(iio.imread(lab_path))
                     lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False)[0].astype(np.int64)
 
@@ -340,9 +367,18 @@ def main():
                     iio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)
 
 
-                m_targets.append((lab_img > 0))#.reshape(-1))
-                m_preds.append((cout > 0))#.reshape(-1))
-                m_probs.append(out[0, 1])#.reshape(-1))
+                m_target = (lab_img > 0)#.reshape(-1)
+                m_pred = (cout > 0)#.reshape(-1))
+                m_prob = (out[0, 1])#.reshape(-1))
+
+                if ENABLE_ENCTYPE_SUBDIRS:
+                    per_enctype_results[enctype]['targets'].append(m_target)
+                    per_enctype_results[enctype]['preds'].append(m_pred)
+                    per_enctype_results[enctype]['probs'].append(m_prob)
+
+                m_targets.append(m_target)
+                m_preds.append(m_pred)
+                m_probs.append(m_prob)
 
                 if 'argmax' in DESIRED_OUTPUTS:
                     # Argmax of channel probs
@@ -353,59 +389,39 @@ def main():
                     iio.imwrite(out_path, plab)
 
         if 'metrics' in DESIRED_OUTPUTS:
-            # Calculate pixelwise precision and recall
-            m_targets = np.concatenate(m_targets, axis=None)
-            m_probs = np.concatenate(m_probs, axis=None)
-            m_preds = np.concatenate(m_preds, axis=None)
-            iou = sme.jaccard_score(m_targets, m_preds)  # iou == jaccard score
-            dsc = sme.f1_score(m_targets, m_preds)  # dsc == f1 score
-            precision = sme.precision_score(m_targets, m_preds)
-            recall = sme.recall_score(m_targets, m_preds)
-            # Plot pixelwise PR curve
-            p, r, t = sme.precision_recall_curve(m_targets, m_probs)
-            plt.figure(figsize=(3, 3))
-            np.savez_compressed('prdata.npy', p,r,t)
-            plt.plot(r, p)
-            plt.xlabel('Recall')
-            plt.ylabel('Precision')
-            plt.minorticks_on()
-            plt.grid(True, 'both')
+            METRICS_KEYS = ['dsc', 'iou', 'precision', 'recall']
+            global_metrics_dict = produce_metrics(
+                thresh=thresh,
+                results_root=results_root,
+                model_path=model_path,
+                data_selection=DATA_SELECTION_V5NAMES,
+                m_targets=m_targets,
+                m_preds=m_preds,
+                m_probs=m_probs
+            )
+            dfdict = {'All': [global_metrics_dict[k] for k in METRICS_KEYS]}
 
-            # Get index of pr-curve's threshold that's nearest to the one used in practice for this segmentation
-            _i = np.abs(t - thresh/255).argmin()
-            plt.scatter(r[_i], p[_i])
-            # plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
+            if ENABLE_ENCTYPE_SUBDIRS:
+                for enctype in DATA_SELECTION_V5NAMES:
+                    enctype_metrics_dict = produce_metrics(
+                        thresh=thresh,
+                        results_root=results_root / enctype,
+                        model_path=model_path,
+                        data_selection=[enctype],
+                        m_targets=per_enctype_results[enctype]['targets'],
+                        m_preds=per_enctype_results[enctype]['preds'],
+                        m_probs=per_enctype_results[enctype]['probs']
+                    )
+                    per_enctype_results[enctype]['metrics'] = enctype_metrics_dict
 
-            plt.tight_layout()
-            plt.savefig(eu(f'{results_root}/prcurve.pdf'), dpi=300)
-            
-            with open(eu(f'{results_root}/info.txt'), 'w') as f:
-                f.write(
-        f"""Output description:
-    - X_raw.jpg: raw image (image number X from the shared dataset)
-    - X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
-    - X_thresh.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
-    - X_overlay_lab.jpg: given GT label annotations, overlayed on raw image
-    - X_overlay_pred.jpg: prediction by the neural network, overlayed on raw image
-    - X_fn_error.png: map of false negative predictions w.r.t. GT labels
-    - X_fp_error.png: map of false positive predictions w.r.t. GT labels
-    - X_fn_error_overlay.jpg: map of false negative predictions w.r.t. GT labels, overlayed on raw image
-    - X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
+                    em = per_enctype_results[enctype]['metrics']
+                    assert list(em.keys()) == METRICS_KEYS 
+                    dfdict[enctype] = [em[k] for k in METRICS_KEYS]
 
+                # df_index = ['All'] + DATA_SELECTION_V5NAMES
 
-    Model info:
-    - model: {model_path}
-    - thresh: {thresh}
-
-    - IoU: {iou * 100:.1f}%
-    - DSC: {dsc * 100:.1f}%
-    - precision: {precision * 100:.1f}%
-    - recall: {recall * 100:.1f}%
-    """
-    )
-
-    # import IPython; IPython.embed(); exit()
-
+                dfmetrics = pd.DataFrame(dfdict, index=METRICS_KEYS)
+                dfmetrics.to_excel(results_root / 'metrics.xlsx')
 
 if __name__ == '__main__':
     main()
