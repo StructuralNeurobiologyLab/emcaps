@@ -4,9 +4,7 @@
 
 
 """
-Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles
-
-# TODO: Update description when it's clear what this script does.
+2D semantic segmentation training script
 """
 
 import argparse

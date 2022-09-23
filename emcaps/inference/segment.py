@@ -40,7 +40,7 @@ def write_tiff(path, img):
     iio.imwrite(uri=path, image=img, plugin='pillow')
 
 
-def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
+def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_path=None):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Running on device: {device}')
@@ -103,7 +103,8 @@ def main(srcpath, tta_num=0, enable_tiled_inference=False, minsize=150):
         p.mkdir(exist_ok=True)
 
 
-    model_path = './unet_v7_all.pts'
+    if model_path is None:
+        model_path = '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_all__UNet__22-09-13_21-14-33/model_step160000.pts'
 
     modelname = os.path.basename(os.path.dirname(model_path))
 
@@ -316,14 +317,16 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('srcpath', help='Path to input file', default=None)
+    parser.add_argument('--model', help='Path to model file', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('--minsize', default=150, type=int, help='Minimum size of segmented particles in pixels')
-    parser.add_argument('-a', type=int, default=0, choices=[0, 1, 2], help='Number of test-time augmentations to use')
+    parser.add_argument('-a', type=int, default=2, choices=[0, 1, 2], help='Number of test-time augmentations to use')
     args = parser.parse_args()
 
     tta_num = args.a
     enable_tiled_inference = args.t
     minsize = args.minsize
     srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
+    model_path = args.model
 
-    main(srcpath=srcpath, tta_num=tta_num, enable_tiled_inference=enable_tiled_inference, minsize=minsize)
+    main(srcpath=srcpath, tta_num=tta_num, enable_tiled_inference=enable_tiled_inference, minsize=minsize, model_path=model_path)

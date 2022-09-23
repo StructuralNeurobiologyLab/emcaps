@@ -213,6 +213,7 @@ def main():
         model_dict = {
             'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_all__UNet__22-09-13_21-14-33/model_step160000.pts',
             'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_hek__UNet__22-09-13_21-17-42/model_step160000.pts',
+            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_dro__UNet__22-09-13_21-18-13/model_step160000.pts',
             'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/MICE_2M-Qt_GA_mice__UNet__22-09-13_21-18-55/model_step40000.pts',
         }
         model_paths = [model_dict[tr_setting]]
