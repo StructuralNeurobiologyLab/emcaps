@@ -204,8 +204,18 @@ class ImageResources:
     enctypes_present: Optional[Sequence[str]] = None
 
 
-def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True):
+def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False):
     metarow = get_meta_row(path_or_num=img_num, sheet_path=sheet_path)
+
+    relevant_class_names = CLASS_NAMES.values()
+
+    if only_tm:
+        if '1M-Tm' not in metarow.scondv5:
+            return None
+        # For later **-**_1M-Tm image filter
+        relevant_class_names = [name for name in relevant_class_names if '1M-Tm' in name]
+
+
     raw_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
     if raw_path.is_file():
         raw = iio.imread(raw_path)
@@ -235,7 +245,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
     if merge_multilabel and label is None:
         # Label wasn't found yet, so we'll look for multiple label files, which have a different naming pattern.
         # Filter the list of potential label file name candidates by their existence as a file.
-        for scond in CLASS_NAMES.values():
+        for scond in relevant_class_names:
             for stem_pattern in [f'{raw_path.stem}_{scond}', f'{raw_path.stem}_label_enc_{scond}']:
                 if (m_path := raw_path.with_stem(stem_pattern)).is_file():
                     m_label = iio.imread(m_path) > 0

@@ -20,7 +20,7 @@ from emcaps.utils import get_meta, get_path_prefix, get_image_resources
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v9'
+isplit_data_root = data_root / 'isplitdata_v9-onlytm'
 sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 
@@ -33,6 +33,11 @@ logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler(f'{isplit_data_root}/splitdataset.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
+
+ONLY_TM = False
+
+if ONLY_TM:
+    logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
 
 
 def count_ccs(lab):
@@ -87,7 +92,10 @@ def main():
     for entry in tqdm.tqdm(meta.itertuples(), total=len(meta)):
         img_num = int(entry.num)
         # Load original images and resources
-        res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True)
+        res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True, only_tm=ONLY_TM)
+        if res is None:
+            logger.info(f'Skipping image {img_num} because of an image resource condition.')
+            continue
         logger.info(f'Using label source {res.labelpath}{" (curated)" if res.curated else ""}')
         if res.was_inverted:
             logger.info(f'Image {img_num} was re-inverted.')
