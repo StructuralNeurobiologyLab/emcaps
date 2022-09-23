@@ -119,21 +119,59 @@ CLASS_IDS = class_info['class_ids_v5']
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
-color_dict = {
-    1: 'magenta',
-    2: 'cyan',
-    3: 'blue',
-    4: 'purple',
-    5: 'orange',
-    6: 'green',
-    7: 'red',
-    8: 'yellow',
-}
-color_cycle = ['grey', 'magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow']
+# class_colors = {
+#     '1M-Qt': [1.0, 0.0, 1.0, 1.0],
+#     '2M-Qt': [1.0, 0.0, 0.0, 1.0],
+#     '3M-Qt': [1.0, 0.4, 0.0, 1.0],
+#     '1M-Mx': [0.0, 0.0, 1.0, 1.0],
+#     '2M-Mx': [0.0, 0.0, 0.5, 1.0],
+#     '1M-Tm': [0.0, 1.0, 0.0, 1.0],
+# }
+
+# class_colors = {
+#     '1M-Qt': 'magenta',
+#     '2M-Qt': 'red',
+#     '3M-Qt': 'orange',
+#     '1M-Mx': 'blue',
+#     '2M-Mx': 'cyan',
+#     '1M-Tm': 'green',
+# }
+
+# id_colors = {CLASS_IDS[name]: color for name, color in class_colors.items()}
+
+
+
+# color_dict = {
+#     1: 'magenta',
+#     2: 'cyan',
+#     3: 'blue',
+#     4: 'purple',
+#     5: 'orange',
+#     6: 'green',
+#     7: 'red',
+#     8: 'yellow',
+# }
+
+# color_cycle = ['grey', 'magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow']
 # TODO. Seg label 0 means background... How do we unify with class predictions?
 # color_dict = {k: v for k, v in enumerate(color_cycle)}
 # color_dict[0] = 'transparent'
 
+
+class_colors = {
+    0:                  'transparent',
+    1:                  'yellow',
+    CLASS_IDS['1M-Qt']: 'magenta',
+    CLASS_IDS['2M-Qt']: 'red',
+    CLASS_IDS['3M-Qt']: 'orange',
+    CLASS_IDS['1M-Mx']: 'blue',
+    CLASS_IDS['2M-Mx']: 'cyan',
+    CLASS_IDS['1M-Tm']: 'green',
+}
+
+color_cycle = [c for c in class_colors.values()]
+
+color_dict = class_colors
 
 segmenter_urls = {
     'unet_hek_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_hek_160k.pts',
