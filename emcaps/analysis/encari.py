@@ -174,6 +174,15 @@ color_cycle = [c for c in class_colors.values()]
 color_dict = class_colors
 
 segmenter_urls = {
+    'unet_all_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_200k.pts',
+    'unet_hek_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_160k.pts',
+    'unet_dro_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_dro_160k.pts',
+    'unet_mice_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_mice_240k.pts',
+    'unet_qttm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_qttm_240k.pts',
+    'unet_onlytm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_onlytm_160k.pts',
+    'unet_all_notm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_notm_200k.pts',
+    'unet_hek_notm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_notm_160k.pts',
+
     'unet_hek_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_hek_160k.pts',
     'unet_qttm_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_qttmpatterns_160k.pts',
     'unet_all_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_all_160k.pts',
