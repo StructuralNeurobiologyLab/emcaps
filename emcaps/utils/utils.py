@@ -10,7 +10,7 @@ import tempfile
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple, Sequence
+from typing import Dict, Optional, Tuple, Sequence
 
 import imageio.v3 as iio
 import numpy as np
@@ -197,6 +197,7 @@ class ImageResources:
     raw: Optional[np.ndarray] = None
     label: Optional[np.ndarray] = None
     roimask: Optional[np.ndarray] = None
+    regmasks: Optional[Dict[str, np.ndarray]] = None
     rawpath: Optional[Path] = None
     labelpath: Optional[Path] = None
     curated: bool = False
@@ -204,7 +205,7 @@ class ImageResources:
     enctypes_present: Optional[Sequence[str]] = None
 
 
-def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False):
+def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False, no_tm=False):
     metarow = get_meta_row(path_or_num=img_num, sheet_path=sheet_path)
 
     relevant_class_names = CLASS_NAMES.values()
@@ -214,6 +215,13 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
             return None
         # For later **-**_1M-Tm image filter
         relevant_class_names = [name for name in relevant_class_names if '1M-Tm' in name]
+
+    # Opposite
+    if no_tm:
+        if '1M-Tm' in metarow.scondv5:
+            return None
+        # For later **-**_1M-Tm image filter
+        relevant_class_names = [name for name in relevant_class_names if '1M-Tm' not in name]
 
 
     raw_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
@@ -257,12 +265,22 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
                     else:
                         label = np.bitwise_or(label, m_label)  # If at least on label is foreground at some location, define that as foreground
 
+    reg_masks = {}
+    # Retrieve multiclass masks that define class-regions ("cell"), if they exist.
+    for scond in CLASS_NAMES.values():
+        for stem_pattern in [f'{raw_path.stem}_label_cell_{scond}']:
+            if (reg_path := raw_path.with_stem(stem_pattern)).is_file():
+                reg_label = iio.imread(reg_path) > 0
+                reg_masks[scond] = reg_label
+
+
     roimask = None  # TODO. Not implemented yet 
 
     imgres = ImageResources(
         raw=raw,
         label=label,
         roimask=roimask,
+        regmasks=reg_masks,
         metarow=metarow,
         rawpath=raw_path,
         labelpath=label_path,

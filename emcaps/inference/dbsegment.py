@@ -116,6 +116,7 @@ def main():
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('--srcpath', help='Path to input file', default=None)
     parser.add_argument('--model', help='Path to model file', default=None)
+    parser.add_argument('-s', help='Traing setting (for auto model selection)', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
     parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
@@ -126,6 +127,7 @@ def main():
     use_expert = args.use_expert
     tta_num = args.a
     srcpath = None
+    tr_setting = args.s
 
     """
     for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
@@ -136,11 +138,12 @@ def main():
     thresh = 127
     dt_thresh = 0.00
 
-    tr_setting = 'all'
+    if tr_setting is None:
+        tr_setting = 'qttm'
 
     if srcpath is None:
-        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v9_tr-{tr_setting}')
-        # results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v9_tr-hek')
+        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v10a_tr-{tr_setting}')
+        # results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v10_tr-hek')
         if selected_enctype is not None:
             msuffix = '_expert' if use_expert else ''
             results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
@@ -166,17 +169,17 @@ def main():
             DATA_SELECTION_V5NAMES = [selected_enctype]
 
 
-        def find_v9_val_images(isplitpath=None):
-            """Find paths to all raw validation images of split v9"""
+        def find_vx_val_images(isplitpath=None):
+            """Find paths to all raw validation images of split vx"""
             if isplitpath is None:
-                isplitpath = data_root / 'isplitdata_v9'
+                isplitpath = data_root / 'isplitdata_v10a'
             val_img_paths = []
             for p in isplitpath.rglob('*_val.png'):  # Look for all validation raw images recursively
                 if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
                     val_img_paths.append(p)
             return val_img_paths
 
-        img_paths = find_v9_val_images()
+        img_paths = find_vx_val_images()
 
         for p in [results_root / scond for scond in DATA_SELECTION_V5NAMES]:
             os.makedirs(p, exist_ok=True)
@@ -208,13 +211,18 @@ def main():
         def forward(self, x):
             return torch.rand(x.shape[0], 2, *x.shape[2:])
 
-
     if args.model is None:
         model_dict = {
-            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_all__UNet__22-09-13_21-14-33/model_step160000.pts',
-            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_hek__UNet__22-09-13_21-17-42/model_step160000.pts',
-            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_dro__UNet__22-09-13_21-18-13/model_step160000.pts',
-            'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/MICE_2M-Qt_GA_mice__UNet__22-09-13_21-18-55/model_step40000.pts',
+            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_all_dec98__UNet__22-09-24_03-24-36/model_step160000.pts',
+            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_hek__UNet__22-09-24_03-29-06/model_step160000.pts',
+            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_dro__UNet__22-09-24_03-26-07/model_step160000.pts',
+            'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/MICE_2M-Qt_GA_mice__UNet__22-09-24_03-26-43/model_step240000.pts',
+
+            'qttm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_qttm__UNet__22-09-24_03-27-16/model_step240000.pts',
+
+            'onlytm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step160000.pts',
+            'all_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_all__UNet__22-09-24_03-33-19/model_step160000.pts',
+            'hek_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_hek__UNet__22-09-24_03-34-32/model_step160000.pts',
         }
         model_paths = [model_dict[tr_setting]]
         # model_paths = [Randomizer()]  # produce random outputs instead

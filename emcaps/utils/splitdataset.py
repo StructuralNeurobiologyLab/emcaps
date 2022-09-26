@@ -15,12 +15,19 @@ from skimage import measure
 from emcaps.utils import get_meta, get_path_prefix, get_image_resources
 
 
-# Load original image sheet
+ONLY_TM = False
+NO_TM = False
+
 
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v9-onlytm'
+isplit_data_root = data_root / 'isplitdata_v10a'
+if ONLY_TM:
+    isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_onlytm')
+if NO_TM:
+    isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_notm')
+
 sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 
@@ -34,7 +41,6 @@ fh = logging.FileHandler(f'{isplit_data_root}/splitdataset.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
-ONLY_TM = False
 
 if ONLY_TM:
     logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
@@ -130,6 +136,18 @@ def main():
         iio.imwrite(val_lab_path, val_lab)
         iio.imwrite(trn_lab_path, trn_lab)
 
+        # TODO:
+        # # Handle region masks if there are any
+        # if res.regmasks:
+        #     for scond, mask in res.regmasks.items():
+        #         logger.info(f'Splitting region masks for image {img_num}: {scond}')
+        #         val_mask, trn_mask = split_by_slices(mask, split_slices)
+        #         val_mask = val_mask.astype(np.uint8) * 255
+        #         trn_mask = trn_mask.astype(np.uint8) * 255
+        #         val_mask_path = img_subdir / f'{img_num}_val_mask_{scond}.png'
+        #         trn_mask_path = img_subdir / f'{img_num}_trn_mask_{scond}.png'
+        #         iio.imwrite(val_mask_path, val_mask)
+        #         iio.imwrite(trn_mask_path, trn_mask)
 
 if __name__ == '__main__':
     main()

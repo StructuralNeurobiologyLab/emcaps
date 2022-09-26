@@ -469,7 +469,7 @@ def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
 def make_seg_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
-    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all_v7',
+    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all_v10',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     assign_unique_instance_ids: bool = False,
