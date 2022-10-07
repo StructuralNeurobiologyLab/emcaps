@@ -126,76 +126,42 @@ MIN_CIRCULARITY = 0.8
 
 USE_EXTRA_TM_MODEL = False
 
-DRO_MODE = True
+DRO_MODE = False
 
 ALL_VALIDATION = False
 
-# DATA_SELECTION = [
-#     # 'DRO_1xMT3-MxEnc-Flag-NLS',
-#     # 'DRO_1xMT3-QtEnc-Flag-NLS',
-#     'HEK_1xMT3-MxEnc-Flag',
-#     'HEK_1xMT3-QtEnc-Flag',
-#     'HEK-2xMT3-MxEnc-Flag',
-#     'HEK-2xMT3-QtEnc-Flag',
-#     'HEK-3xMT3-QtEnc-Flag',
-#     'HEK-1xTmEnc-BC2-Tag',  # -> bad, requires extra model?
-# ]
 
-if DRO_MODE:
-    DATA_SELECTION = [
-        'DRO-1M-Mx',  # Drosophila
-        'DRO-1M-Qt',  # Drosophila
-        # '1M-Mx',
-        # '1M-Qt',
-        # '2M-Mx',
-        # '2M-Qt',
-        # '3M-Qt',
-        # '1M-Tm',  # -> requires extra model
-    ]
-else:
-    DATA_SELECTION = [
-        # 'DRO-1M-Mx',  # Drosophila
-        # 'DRO-1M-Qt',  # Drosophila
-        '1M-Mx',
-        '1M-Qt',
-        '2M-Mx',
-        '2M-Qt',
-        '3M-Qt',
-        '1M-Tm',  # -> requires extra model
-    ]
+class_groups_to_include = [
+    'simple_hek',
+    'dro',
+    'mice',
+    'qttm',
+    'multi',
+]
 
-
-root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
+# root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 sheet_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
-isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v7/')
+isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v10c/')
 
 
 
 img_paths = []
-lab_paths = []
-for p in isplitdata_root.rglob('*.tif'):
-    if 'encapsulins' in p.stem:
-        lab_paths.append(p)
-    else:
-        img_paths.append(p)
+for lp in isplitdata_root.rglob('*_encapsulins.png'):
+    # Indirectly find img paths via label paths: raw can be always found by stripping the "_encapsulins" substring
+    img_path = lp.with_stem(lp.stem.removesuffix('_encapsulins'))
+    img_paths.append(img_path)
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6_notm_nodro_dr{DILATE_MASKS_BY}{_tmextra_str}')
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6e_dr{DILATE_MASKS_BY}')
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v7_trhek_evhek_dr{DILATE_MASKS_BY}')
-patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v7_tr-hgt_ev-dro_gdr{DILATE_MASKS_BY}')
+patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10c_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'
 
 model_paths = eul([
-    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_nodro__UNet__22-05-16_15-45-43/model_step160000.pts'  # without Drosophila classes
-    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6a_best/GDL_CE_B_GA_dce_ra_notm_nodro__UNet__22-05-16_01-44-01/model_step160000.pts'  # without Tm and Drosophila classes
-    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6d/GDL_CE_B_GA_dv6a_nodro__UNet__22-05-19_01-41-08/model_step160000.pts'  # data split v6a, without Drosophila classes
-
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_alldata__UNet__22-05-29_02-22-27/model_final.pts'  # data split v7, all HEK and Drosophila classes
-    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlyhek__UNet__22-05-29_02-25-35/model_final.pts'  # data split v7, without Drosophila classes
-    # '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v7/GDL_CE_B_GA_onlydro__UNet__22-05-29_02-25-16/model_final.pts'  # v7, only Drosophila
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_all_dec98__UNet__22-09-24_03-24-36/model_step200000.pts'
 ])
 
 # Create output directories
@@ -212,6 +178,13 @@ logger.addHandler(fh)
 logger.info(f'Using data from {isplitdata_root}')
 logger.info(f'Using meta spreadsheet {sheet_path}')
 logger.info(f'Writing outputs to {patch_out_path}')
+
+included = []
+for cgrp in class_groups_to_include:
+    cgrp_classes = utils.CLASS_GROUPS[cgrp]
+    logger.info(f'Including class group {cgrp} containing classes {cgrp_classes}')
+    included.extend(utils.CLASS_GROUPS[cgrp])
+DATA_SELECTION = included
 
 
 class PatchMeta(NamedTuple):
@@ -232,11 +205,10 @@ class PatchMeta(NamedTuple):
     circularity: float = np.nan
 
 
-
 apply_softmax = True
 if USE_EXTRA_TM_MODEL:
     tm_predictor = Predictor(
-        model='/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v6/1M-Tm_B_GA___UNet__22-04-26_22-36-20/model_step130000.pt',
+        model='/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step160000.pts',
         device='cuda',
         float16=True,
         transform=pre_predict_transform,
@@ -262,7 +234,7 @@ for model_path in model_paths:
         apply_softmax=apply_softmax,
     )
 
-    for img_path in tqdm.tqdm(img_paths, position=0, desc='Images'):
+    for img_path in tqdm.tqdm(img_paths, position=0, desc='Images', dynamic_ncols=True):
 
         # TODO: Get info from path, load image, store train-test info
         
@@ -270,16 +242,25 @@ for model_path in model_paths:
 
         enctype = imgmeta.scondv5
 
+        full_scond = imgmeta.scond
+        host = 'hek'  # default to HEK
+        if 'MICE' in full_scond:
+            host = 'mice'
+        elif 'DRO' in full_scond:
+            host = 'dro'
+
         if pd.isna(enctype) or enctype not in DATA_SELECTION:
             logger.debug(f'enctype {enctype} skipped')
             continue
-        if DRO_MODE:
-            enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+        # if DRO_MODE:  # TODO: use different, more precise flag
+            # enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+            # enctype = enctype.replace('MICE_', '')  # do the same for MICE_
+        enctype = utils.strip_host_prefix(enctype)
 
         inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
         if USE_GT:
-            label_path = img_path.with_name(f'{img_path.stem}_encapsulins.tif')
+            label_path = img_path.with_name(f'{img_path.stem}_encapsulins.png')
             label = iio.imread(label_path).astype(np.int64)
             mask = label
         else:
@@ -305,6 +286,7 @@ for model_path in model_paths:
             is_validation = True  #DRO
         else:
             is_validation = '_val' in img_path.stem
+        role = 'val' if is_validation else 'trn'
         is_train = not is_validation
 
         cc, n_comps = ndimage.label(mask)
@@ -333,6 +315,9 @@ for model_path in model_paths:
 
             xslice = slice(lo[0], hi[0])
             yslice = slice(lo[1], hi[1])
+
+            # Get enctype for specific position (for supporting multi-class images)
+            enctype = utils.get_isplit_enctype(path=img_path, pos=tuple(centroid), isplitdata_root=isplitdata_root, role=role)
 
             raw_patch = raw[xslice, yslice]
             # mask_patch = mask[xslice, yslice]
@@ -363,7 +348,7 @@ for model_path in model_paths:
             if DILATE_MASKS_BY > 0:
                 disk = sm.disk(DILATE_MASKS_BY)
                 # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
-                mask_patch = sm.binary_dilation(mask_patch, selem=disk)
+                mask_patch = sm.binary_dilation(mask_patch, footprint=disk)
 
             # Measure again after mask dilation
             area_dilated = int(np.sum(mask_patch))
@@ -411,8 +396,8 @@ patchmeta = patchmeta.convert_dtypes()
 patchmeta = patchmeta.astype({'img_num': int})  # Int64
 patchmeta.to_excel(f'{patch_out_path}/patchmeta.xlsx', index_label='patch_id')
 
+individual_enctypes = patchmeta.enctype.unique()
 samples = []
-
 eval_samples = {}
 
 for role in ['train', 'validation']:
@@ -420,9 +405,12 @@ for role in ['train', 'validation']:
     # Find condition with smallest number of patches
     min_n_samples = 1_000_000  # Unexpected high value for initialization
     min_scond = None
-    for scond in DATA_SELECTION:
-        if DRO_MODE:
-            scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+    # # Gather selected enctypes in simple form (without host)
+    # individual_enctypes = [utils.strip_host_prefix(et) for et in DATA_SELECTION]
+    # individual_enctypes = [et for et in individual_enctypes if et in utils.CLASS_GROUPS['simple_hek']]
+    for scond in individual_enctypes:
+        # if DRO_MODE:
+        #     scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
         matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
         n_samples[scond] = len(matching_patches)
         print(f'({role}, {scond}) n_samples: {n_samples[scond]}')
@@ -433,9 +421,9 @@ for role in ['train', 'validation']:
 
     # Sample min_scond patches each to create a balanced dataset
     scond_samples = {}
-    for scond in DATA_SELECTION:
-        if DRO_MODE:
-            scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
+    for scond in individual_enctypes:
+        # if DRO_MODE:
+        #     scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
         # scond_samples[scond] = patchmeta[patchmeta['enctype'] == scond].sample(min_n_samples)
         matching_patches = patchmeta[(patchmeta['enctype'] == scond) & patchmeta[role]]
         scond_samples = matching_patches.sample(min_n_samples)
@@ -464,12 +452,12 @@ _kind = 'nobg'  #  or 'raw'
 for entry in shuffled_samples.itertuples():
     srcpath = f'{patch_out_path}/{_kind}/{entry.patch_fname.replace("raw", _kind)}'
     shutil.copyfile(srcpath, f'{patch_out_path}/samples/{entry.Index:03d}.tif')
-    imgs.append(Image.open(srcpath).resize((28*4, 28*4), Image.NEAREST))
+    imgs.append(Image.open(srcpath).resize((28*4, 28*4), Image.Resampling.NEAREST))
 
 text_color = 255 if _kind == 'nobg' else 0
 
 # grid = image_grid(imgs, len(DATA_SELECTION), N_EVAL_SAMPLES, text_color=text_color)
-grid = image_grid(imgs, len(DATA_SELECTION) * 2, N_EVAL_SAMPLES // 2, text_color=text_color)
+grid = image_grid(imgs, len(individual_enctypes) * 2, N_EVAL_SAMPLES // 2, text_color=text_color)
 grid.save(f'{patch_out_path}/samples_grid.png')
 
 

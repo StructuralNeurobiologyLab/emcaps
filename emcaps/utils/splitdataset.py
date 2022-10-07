@@ -12,17 +12,19 @@ import numpy as np
 import pandas as pd
 from skimage import measure
 
-from emcaps.utils import get_meta, get_path_prefix, get_image_resources
+from emcaps.utils import get_meta, get_path_prefix, get_image_resources, strip_host_prefix
 
 
 ONLY_TM = False
 NO_TM = False
 
+STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from output file names
+
 
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v10a'
+isplit_data_root = data_root / 'isplitdata_v10c'
 if ONLY_TM:
     isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_onlytm')
 if NO_TM:
@@ -41,6 +43,26 @@ fh = logging.FileHandler(f'{isplit_data_root}/splitdataset.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
+# Split definition constants
+HORIZONTAL = 0
+VERTICAL = 1
+
+# Override for 2-class images that could be split in such a way that the validation image will lack one of the classes.
+split_override_dict = {
+    201: VERTICAL,
+    202: HORIZONTAL,
+    203: HORIZONTAL,
+    204: HORIZONTAL,
+    205: HORIZONTAL,
+    206: HORIZONTAL,
+    207: VERTICAL,
+    208: VERTICAL,
+    209: VERTICAL,
+    210: VERTICAL,
+    211: VERTICAL,
+    212: VERTICAL,
+}
+split_override_dict = {}  # Disable override
 
 if ONLY_TM:
     logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
@@ -51,7 +73,7 @@ def count_ccs(lab):
     _, ncc = measure.label(lab, return_num=True)
     return ncc
 
-def get_best_split_slices(lab: np.ndarray, valid_ratio: float = 0.3) -> Tuple[Tuple[slice, slice], Tuple[slice, slice]]:
+def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.3) -> Tuple[Tuple[slice, slice], Tuple[slice, slice]]:
     """Determine best slices for splitting the image by considering particle ratios"""
     sh = np.array(lab.shape)
     vert_border, horiz_border = np.round(sh * valid_ratio).astype(np.int64)
@@ -63,6 +85,11 @@ def get_best_split_slices(lab: np.ndarray, valid_ratio: float = 0.3) -> Tuple[Tu
         (slice(0, None), slice(0, horiz_border)),
         (slice(0, None), slice(horiz_border, None)),
     )
+
+    if img_num in split_override_dict:
+        # Override found, directly return determined split
+        best_slices = vert_slices if split_override_dict[img_num] == VERTICAL else hori_slices
+        return best_slices
 
     # Count number of particles in each subimage
     val_vert_nc = count_ccs(lab[vert_slices[0]])
@@ -76,6 +103,7 @@ def get_best_split_slices(lab: np.ndarray, valid_ratio: float = 0.3) -> Tuple[Tu
     # Choose the split that minimizes difference between particle ratio and split ratio
     vert_split_penalty = abs(vert_split_nc_ratio - valid_ratio)
     hori_split_penalty = abs(hori_split_nc_ratio - valid_ratio)
+
     if vert_split_penalty <= hori_split_penalty:
         best_slices = vert_slices
     else:
@@ -116,7 +144,7 @@ def main():
             continue
 
         # Split images
-        split_slices = get_best_split_slices(res.label)
+        split_slices = get_best_split_slices(res.label, img_num=res.metarow.num)
         val_raw, trn_raw = split_by_slices(res.raw, split_slices)
         val_lab, trn_lab = split_by_slices(res.label, split_slices)
 
@@ -136,7 +164,20 @@ def main():
         iio.imwrite(val_lab_path, val_lab)
         iio.imwrite(trn_lab_path, trn_lab)
 
-        # TODO:
+        # Handle multiple individual per-enctype labels there are any
+        if res.per_enctype_labels:
+            for scond, elab in res.per_enctype_labels.items():
+                if STRIP_HOST_PREFIX:
+                    scond = strip_host_prefix(scond)
+                logger.info(f'Splitting per-enctype labels for image {img_num}: {scond}')
+                val_elab, trn_elab = split_by_slices(elab, split_slices)
+                val_elab = val_elab.astype(np.uint8) * 255
+                trn_elab = trn_elab.astype(np.uint8) * 255
+                val_elab_path = img_subdir / f'{img_num}_val_elab_{scond}.png'
+                trn_elab_path = img_subdir / f'{img_num}_trn_elab_{scond}.png'
+                iio.imwrite(val_elab_path, val_elab)
+                iio.imwrite(trn_elab_path, trn_elab)
+
         # # Handle region masks if there are any
         # if res.regmasks:
         #     for scond, mask in res.regmasks.items():

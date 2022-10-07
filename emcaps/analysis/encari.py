@@ -153,7 +153,6 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 # }
 
 # color_cycle = ['grey', 'magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow']
-# TODO. Seg label 0 means background... How do we unify with class predictions?
 # color_dict = {k: v for k, v in enumerate(color_cycle)}
 # color_dict[0] = 'transparent'
 
@@ -426,7 +425,6 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
 
     propdict.update(epropdict)
 
-    # TODO: Prune invalid rps
     is_invalid = propdict['is_invalid']
     num_invalid = int(np.sum(is_invalid))
     logger.info(f'Pruning {num_invalid} regions due to filter criteria...')
@@ -464,7 +462,7 @@ def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
     propframe.to_excel(xlsx_out_path, sheet_name='emcaps-regions', index=False)
 
 
-# TODO: Make tiling optional
+# TODO: Support optional tiling
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Segmenting...'})
 def make_seg_widget(
     pbar: widgets.ProgressBar,

@@ -18,6 +18,10 @@ import pandas as pd
 import yaml
 from PIL import Image, ImageDraw
 
+import logging
+
+logger = logging.getLogger('emcaps-utils')
+
 
 TMPPATH = '/tmp' if platform.system() == 'Darwin' else tempfile.gettempdir()
 
@@ -139,6 +143,61 @@ def get_v5_enctype(path) -> str:
     return v5_enctype
 
 
+# @lru_cache(maxsize=1024)
+# def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
+#     row = get_meta_row(path)
+#     if pos is None:
+#         v5_enctype = row.scondv5
+#     else:
+#         assert isplitdata_root is not None
+#         assert role is not None
+#         region_masks = get_isplit_multiclass_regions(img_num=row.num, isplitdata_root=isplitdata_root)
+#         rmasks = region_masks[role]
+#         if not rmasks:  # No rmasks found -> expect enctype to be known simply from table name
+#             v5_enctype = row.scondv5
+#         else:
+#             scond_at_pos = '?'
+#             for scond, rmask in rmasks.items():
+#                 if rmask[pos] > 0:
+#                     scond_at_pos = scond
+#                     break
+#             v5_enctype = scond_at_pos
+
+#     if 'G_1M-Tm' in v5_enctype:
+#         print('FAIL: Deduced dual v5_enctype for one patch pos')
+#         # import IPython ; IPython.embed(); raise SystemExit
+
+#     assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
+#     return v5_enctype
+
+
+@lru_cache(maxsize=1024)
+def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
+    row = get_meta_row(path)
+    if pos is None:  # If no pos is supplied, just one type is expected (position-independent)
+        return row.scondv5
+    else:  # Find specific enctype of encapsulin at position pos
+        assert isplitdata_root is not None
+        assert role is not None
+        elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)
+        elabs = elabs[role]
+        if not elabs:  # No elabs found -> expect enctype to be known simply from table name
+            return row.scondv5
+        else:
+            enctype_at_pos = '?'
+            for enctype, elab in elabs.items():
+                if elab[pos] > 0:
+                    enctype_at_pos = enctype
+                    break
+            v5_enctype = enctype_at_pos
+
+        if 'G_1M-Tm' in v5_enctype or 'and' in v5_enctype:
+            logger.error(f'FAIL: Deduced dual v5_enctype for one patch pos ({path=}, {pos=}, {isplitdata_root=}, {role=}')
+
+    assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
+    return v5_enctype
+
+
 @lru_cache(maxsize=1024)
 def is_for_validation(path) -> bool:
     row = get_meta_row(path)
@@ -185,7 +244,7 @@ def ensure_not_inverted(lab: np.ndarray, threshold: float = 0.5, verbose=True, e
         if error:
             raise ValueError(f'Binary label has unplausibly high mean {mean:.2f}. Please check if it is inverted.')
         if verbose:
-            print('ensure_not_inverted: re-inverting labels')
+            logger.info('ensure_not_inverted: re-inverting labels')
         lab = ~lab
     return lab, was_inverted
 
@@ -196,6 +255,7 @@ class ImageResources:
     metarow: pd.Series
     raw: Optional[np.ndarray] = None
     label: Optional[np.ndarray] = None
+    per_enctype_labels: Optional[Dict[str, np.ndarray]] = None
     roimask: Optional[np.ndarray] = None
     regmasks: Optional[Dict[str, np.ndarray]] = None
     rawpath: Optional[Path] = None
@@ -203,6 +263,39 @@ class ImageResources:
     curated: bool = False
     was_inverted: bool = False
     enctypes_present: Optional[Sequence[str]] = None
+    host: Optional[str] = None
+
+
+# @lru_cache(maxsize=1024)
+# def get_isplit_multiclass_regions(img_num: int, isplitdata_root: Path):
+#     region_masks = {'trn': {}, 'val': {}}
+#     ipath = isplitdata_root / f'{img_num}'
+#     for role in ['trn', 'val']:
+#         for scond in CLASS_NAMES.values():
+#             rpath = ipath / f'{img_num}_{role}_mask_{scond}.png'
+#             if rpath.is_file():
+#                 rmask = iio.imread(rpath) > 0
+#                 region_masks[role][scond] = rmask
+#     return region_masks
+
+@lru_cache(maxsize=1024)
+def get_isplit_per_enctype_labels(img_num: int, isplitdata_root: Path):
+    elabs = {'trn': {}, 'val': {}}
+    ipath = isplitdata_root / f'{img_num}'
+    for role in ['trn', 'val']:
+        for scond in CLASS_NAMES.values():
+            epath = ipath / f'{img_num}_{role}_elab_{scond}.png'
+            if epath.is_file():
+                rmask = iio.imread(epath) > 0
+                elabs[role][scond] = rmask
+    return elabs
+
+
+def strip_host_prefix(enctype: str, host_prefixes=('DRO-', 'MICE_')) -> str:
+    """drop DRO, MICE because we want to treat DRO amd MICE the same class as HEK in most cases"""
+    for pref in host_prefixes:
+        enctype = enctype.replace(pref, '')
+    return enctype
 
 
 def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False, no_tm=False):
@@ -210,15 +303,19 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
 
     relevant_class_names = CLASS_NAMES.values()
 
+    enctype = metarow.scondv5
+    # enctype = strip_host_prefix(enctype)
+    full_scond = metarow.scond
+
     if only_tm:
-        if '1M-Tm' not in metarow.scondv5:
+        if '1M-Tm' not in enctype:
             return None
         # For later **-**_1M-Tm image filter
         relevant_class_names = [name for name in relevant_class_names if '1M-Tm' in name]
 
     # Opposite
     if no_tm:
-        if '1M-Tm' in metarow.scondv5:
+        if '1M-Tm' in enctype:
             return None
         # For later **-**_1M-Tm image filter
         relevant_class_names = [name for name in relevant_class_names if '1M-Tm' not in name]
@@ -242,16 +339,17 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
     was_inverted = False
     enctypes_present = []
     label = None
+    per_enctype_labels = {}  # Collect individual labels where only one enctype is labeled
     if label_path.is_file():
         label = iio.imread(label_path)
         label = label > 0  # Binarize
         label, was_inverted = ensure_not_inverted(label)
-
-        enctypes_present.append(metarow.scond)
+        per_enctype_labels[enctype] = label
+        enctypes_present.append(enctype)
 
     # Handle multiple label files (multiple classes in one source image)
-    if merge_multilabel and label is None:
-        # Label wasn't found yet, so we'll look for multiple label files, which have a different naming pattern.
+    if merge_multilabel:# and label is None:
+        # Look for multiple label files, which have a different naming pattern.
         # Filter the list of potential label file name candidates by their existence as a file.
         for scond in relevant_class_names:
             for stem_pattern in [f'{raw_path.stem}_{scond}', f'{raw_path.stem}_label_enc_{scond}']:
@@ -260,6 +358,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
                     m_label, m_was_inverted = ensure_not_inverted(m_label)
                     was_inverted = was_inverted or m_was_inverted
                     enctypes_present.append(scond)
+                    per_enctype_labels[scond] = m_label
                     if label is None:
                         label = m_label
                     else:
@@ -276,9 +375,17 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
 
     roimask = None  # TODO. Not implemented yet 
 
+    full_scond = metarow.scond
+    host = 'hek'  # default to HEK
+    if 'MICE' in full_scond:
+        host = 'mice'
+    elif 'DRO' in full_scond:
+        host = 'dro'
+
     imgres = ImageResources(
         raw=raw,
         label=label,
+        per_enctype_labels=per_enctype_labels,
         roimask=roimask,
         regmasks=reg_masks,
         metarow=metarow,
@@ -287,6 +394,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
         curated=is_curated,
         was_inverted=was_inverted,
         enctypes_present=enctypes_present,
+        host=host
     )
 
     return imgres
