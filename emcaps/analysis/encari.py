@@ -38,6 +38,7 @@ from skimage.segmentation import clear_border
 from typing_extensions import Annotated
 
 from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius
+from emcaps import utils
 
 
 TMPPATH = '/tmp' if platform.system() == 'Darwin' else tempfile.gettempdir()
@@ -157,18 +158,32 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 # color_dict[0] = 'transparent'
 
 
+# TODO: color_cycle for regions seems to be broken.
+
 class_colors = {
     0:                  'transparent',
     1:                  'yellow',
+    CLASS_IDS['1M-Mx']: 'blue',
     CLASS_IDS['1M-Qt']: 'magenta',
+    CLASS_IDS['2M-Mx']: 'cyan',
     CLASS_IDS['2M-Qt']: 'red',
     CLASS_IDS['3M-Qt']: 'orange',
-    CLASS_IDS['1M-Mx']: 'blue',
-    CLASS_IDS['2M-Mx']: 'cyan',
     CLASS_IDS['1M-Tm']: 'green',
 }
 
-color_cycle = [c for c in class_colors.values()]
+# color_cycle = [c for c in class_colors.values()]
+
+color_cycle = []
+for i in sorted(class_colors.keys()):
+    color_cycle.append(class_colors[i])
+
+
+overlay_skimg_colors = color_cycle.copy()[1:]
+# overlay_skimg_colors[0] = 'purple'  # unused. "transparent" fails in skimage
+
+print(class_colors)
+print(color_cycle)
+print(overlay_skimg_colors)
 
 color_dict = class_colors
 
@@ -249,7 +264,6 @@ def calculate_padding(current_shape, target_shape):
 def assign_class_names(pred_ids):
     pred_class_names = [CLASS_NAMES[pred] for pred in pred_ids]
     return pred_class_names
-
 
 
 class ImageError(Exception):
@@ -444,6 +458,12 @@ def get_default_xlsx_output_path() -> str:
     return default_path
 
 
+def get_default_overlay_output_path() -> str:
+    default_path = f'{TMPPATH}/ec-overlay.png'
+    return default_path
+
+
+
 def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
     xlsx_out_path = xlsx_out_path.expanduser()
     # Create a dataframe from properties for saving to an .xlsx file
@@ -488,7 +508,7 @@ def make_seg_widget(
 
         meta = dict(
             name='segmentation',
-            color=color_dict,
+            color=color_dict.copy(),
             seed=0,
         )
         # return a "LayerDataTuple"
@@ -601,6 +621,24 @@ def make_regions_widget(
     return regions()
 
 
+def render_overlay(
+    img: ImageData,
+    lab: LabelsData
+) -> LayerDataTuple:
+    overlay = utils.render_skimage_overlay(img=img, lab=lab, colors=overlay_skimg_colors)
+    meta = dict(name='overlay')
+    return (overlay, meta, 'image')
+
+
+def export_overlay(
+    img: ImageData,
+    lab: LabelsData,
+    output_path: str = get_default_overlay_output_path(),
+) -> None:
+    overlay = utils.render_skimage_overlay(img=img, lab=lab, colors=overlay_skimg_colors)
+    iio.imwrite(output_path, overlay)
+    show_info(f'Exported overlay to {output_path}')
+
 
 def main():
 
@@ -618,7 +656,7 @@ def main():
         eimg = iio.imread(eip)[600:900, 600:900].copy()
         elab = iio.imread(ilp)[600:900, 600:900].copy() > 0
         viewer.add_image(eimg, name='img')
-        viewer.add_labels(elab, name='lab', seed=0, color=color_dict)
+        viewer.add_labels(elab, name='lab', seed=0, color=color_dict.copy())
         ipaths = []
 
     if ipaths and len(ipaths) > 0:
@@ -629,11 +667,13 @@ def main():
     if ipaths and len(ipaths) > 1:
         lab_path = Path(ipaths[1]).expanduser()
         lab = iio.imread(lab_path)
-        viewer.add_labels(lab, name=lab_path.name, seed=0, color=color_dict)
+        viewer.add_labels(lab, name=lab_path.name, seed=0, color=color_dict.copy())
 
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
+    # viewer.window.add_function_widget(render_overlay)
+    viewer.window.add_function_widget(export_overlay, name='Export overlay image')
 
     napari.run()
 
