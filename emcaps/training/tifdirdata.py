@@ -93,7 +93,7 @@ class EncPatchData(data.Dataset):
                 if self.dilate_masks_by > 0:
                     disk = sm.disk(self.dilate_masks_by)
                     # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
-                    mask = sm.binary_dilation(mask, selem=disk)
+                    mask = sm.binary_dilation(mask, footprint=disk)
                 inp[mask == 0] = 0
             if self.erase_disk_mask_radius > 0:
                 mask = create_circular_mask(*inp.shape, radius=self.erase_disk_mask_radius)
@@ -115,6 +115,9 @@ class EncPatchData(data.Dataset):
     def __getitem__(self, index):
         index %= len(self.meta)  # Wrap around to support epoch_multiplier
         inp = self.inps[index]
+        if True:
+            from emcaps.analysis.radial_patchlineplots import concentric_average, get_radial_profile
+            # inp = concentric_average(inp)  # TODO
         target = self.targets[index]
         fname = self.meta.patch_fname.iloc[index]
         label_name = target

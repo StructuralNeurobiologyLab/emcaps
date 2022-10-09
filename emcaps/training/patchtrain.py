@@ -110,8 +110,7 @@ if NEGATIVE_SAMPLING:
     # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-_dscr = 'v7_trhek_evdro_dr5'
-# _dscr = 'v7_tr-hgt_ev-dro_gdr5__gt'
+_dscr = 'v10c_tr-gt_ev-all_dr5__gt'
 descr_sheet = (os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_{_dscr}/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
@@ -129,7 +128,7 @@ max_steps = args.max_steps
 lr = 1e-3
 lr_stepsize = 1000
 lr_dec = 0.9
-batch_size = 64
+batch_size = 128
 
 
 if args.resume is not None:  # Load pretrained network params
@@ -156,6 +155,22 @@ train_transform = common_transforms + [
 ]
 
 valid_transform = common_transforms + []
+
+if True:
+    from emcaps.analysis.radial_patchlineplots import get_radial_profile, concentric_average
+
+    def _avg(img, target):
+        return concentric_average(img=img[0])[None], target
+
+    def _prof(img, target):
+        return get_radial_profile(img[0])[None], target
+
+    # train_transform.append(_prof)
+    # valid_transform.append(_prof)
+
+    train_transform.append(_avg)
+    valid_transform.append(_avg)
+
 
 
 train_transform = transforms.Compose(train_transform)
@@ -268,7 +283,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=8,  # TODO
+    num_workers=8,
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,

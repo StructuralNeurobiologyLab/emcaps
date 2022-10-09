@@ -81,7 +81,7 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
         results_root = Path(img_paths[0]).parent
     elif srcpath.is_dir():
         img_paths = list(srcpath.rglob('*'))
-        results_root = srcpath.parent / f'{srcpath.name}_seg'
+        results_root = srcpath.parent / f'{srcpath.name}_seg'#_tr-all'
     else:
         raise FileNotFoundError(f'{srcpath} not found')
 
@@ -104,7 +104,12 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
 
 
     if model_path is None:
-        model_path = '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v9/GA_all__UNet__22-09-13_21-14-33/model_step160000.pts'
+        _model_paths = {
+            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
+            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
+            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
+        }
+        model_path = _model_paths['all']
 
     modelname = os.path.basename(os.path.dirname(model_path))
 
@@ -200,7 +205,8 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
                 lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
 
             if 'raw' in DESIRED_OUTPUTS:
-                iio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
+                # iio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
+                iio.imwrite(eu(f'{results_path}/{basename}_raw.png'), raw_img)
             if 'lab' in DESIRED_OUTPUTS:
                 iio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
 

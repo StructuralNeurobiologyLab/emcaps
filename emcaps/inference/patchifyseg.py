@@ -33,7 +33,7 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
 
-from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius
+from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius, concentric_average
 from emcaps import utils
 
 
@@ -116,8 +116,8 @@ EC_MIN_AREA = 150
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
 
-# USE_GT = False
-USE_GT = True
+USE_GT = False
+# USE_GT = True
 
 FILL_HOLES = True
 DILATE_MASKS_BY = 5
@@ -155,17 +155,17 @@ _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6_notm_nodro_dr{DILATE_MASKS_BY}{_tmextra_str}')
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6e_dr{DILATE_MASKS_BY}')
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v7_trhek_evhek_dr{DILATE_MASKS_BY}')
-patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10c_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
+patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10c1_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'
 
 model_paths = eul([
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_all_dec98__UNet__22-09-24_03-24-36/model_step200000.pts'
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts'
 ])
 
 # Create output directories
-for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg']:
+for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg']:
     os.makedirs(p, exist_ok=True)
 
 # Set up logging
@@ -319,6 +319,10 @@ for model_path in model_paths:
             # Get enctype for specific position (for supporting multi-class images)
             enctype = utils.get_isplit_enctype(path=img_path, pos=tuple(centroid), isplitdata_root=isplitdata_root, role=role)
 
+            if enctype == '?':
+                logger.info(f'Skipping patch, can\'t determine local enctype: image {img_num=}, {role=}, pos={centroid}')
+                continue
+
             raw_patch = raw[xslice, yslice]
             # mask_patch = mask[xslice, yslice]
             # For some reason mask[xslice, yslice] does not always contain nonzero values, but cc at the same slice does.
@@ -358,11 +362,13 @@ for model_path in model_paths:
             nobg_patch = raw_patch.copy()
             nobg_patch[mask_patch == 0] = 0
 
-            # raw_patch_fname = f'{patch_out_path}/raw/raw_{enctype}_{patch_id:06d}.tif'
-            # mask_patch_fname = f'{patch_out_path}/mask/mask{enctype}_{patch_id:06d}.tif'
-            raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:06d}.tif'
-            mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:06d}.tif'
-            nobg_patch_fname = f'{patch_out_path}/nobg/nobg_patch_{patch_id:06d}.tif'
+            # # Concentric average image
+            # cavg_patch = concentric_average(raw_patch)
+
+            raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:06d}.png'
+            mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:06d}.png'
+            nobg_patch_fname = f'{patch_out_path}/nobg/nobg_patch_{patch_id:06d}.png'
+            # cavg_patch_fname = f'{patch_out_path}/cavg/cavg_patch_{patch_id:06d}.png'
 
             patchmeta.append(PatchMeta(
                 # patch_id=patch_id,
@@ -385,6 +391,7 @@ for model_path in model_paths:
             iio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
             iio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
             iio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
+            # iio.imwrite(cavg_patch_fname, cavg_patch.astype(np.uint8))
             patch_id += 1
 
 
@@ -451,7 +458,7 @@ imgs = []
 _kind = 'nobg'  #  or 'raw'
 for entry in shuffled_samples.itertuples():
     srcpath = f'{patch_out_path}/{_kind}/{entry.patch_fname.replace("raw", _kind)}'
-    shutil.copyfile(srcpath, f'{patch_out_path}/samples/{entry.Index:03d}.tif')
+    shutil.copyfile(srcpath, f'{patch_out_path}/samples/{entry.Index:03d}.png')
     imgs.append(Image.open(srcpath).resize((28*4, 28*4), Image.Resampling.NEAREST))
 
 text_color = 255 if _kind == 'nobg' else 0

@@ -176,18 +176,18 @@ class_colors = {
 color_cycle = []
 for i in sorted(class_colors.keys()):
     color_cycle.append(class_colors[i])
-
-
-overlay_skimg_colors = color_cycle.copy()[1:]
-# overlay_skimg_colors[0] = 'purple'  # unused. "transparent" fails in skimage
+color_cycle = color_cycle[1:]  # label 0 is not used for classification -> begin counting at 1
 
 print(class_colors)
 print(color_cycle)
-print(overlay_skimg_colors)
+
+_global_state = {}
 
 color_dict = class_colors
 
 segmenter_urls = {
+    'unet_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts',
+
     'unet_all_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_200k.pts',
     'unet_hek_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_160k.pts',
     'unet_dro_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_dro_160k.pts',
@@ -204,6 +204,8 @@ segmenter_urls = {
     'unet_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_dro_160k.pts',
 }
 classifier_urls = {
+    'effnet_m_hek_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v10c_all_80k.pts',
+
     'effnet_m_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_hek_80k.pts',
     'effnet_s_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_hek_80k.pts',
     'effnet_m_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_dro_80k.pts',
@@ -487,7 +489,7 @@ def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
 def make_seg_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
-    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all_v10',
+    segmenter_variant: Annotated[str, {'choices': list(segmenter_urls.keys())}] = 'unet_all_v10c',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     assign_unique_instance_ids: bool = False,
@@ -525,7 +527,7 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
-    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_s_hek_v7',
+    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_m_hek_v10c',
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
@@ -622,20 +624,24 @@ def make_regions_widget(
 
 
 def render_overlay(
-    img: ImageData,
-    lab: LabelsData
+    image: ImageData,
+    labels: LabelsData
 ) -> LayerDataTuple:
-    overlay = utils.render_skimage_overlay(img=img, lab=lab, colors=overlay_skimg_colors)
+    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=color_cycle)
     meta = dict(name='overlay')
     return (overlay, meta, 'image')
 
 
 def export_overlay(
-    img: ImageData,
-    lab: LabelsData,
+    image: ImageData,
+    labels: LabelsData,
     output_path: str = get_default_overlay_output_path(),
 ) -> None:
-    overlay = utils.render_skimage_overlay(img=img, lab=lab, colors=overlay_skimg_colors)
+    # # TODO: HACK
+    # if (segpath := _global_state.get('seg_path')) is not None:
+    #     output_path = segpath.with_stem(segpath.stem.replace('thresh', 'cls'))
+
+    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=color_cycle)
     iio.imwrite(output_path, overlay)
     show_info(f'Exported overlay to {output_path}')
 
@@ -664,6 +670,14 @@ def main():
         img = iio.imread(img_path)
         viewer.add_image(img, name=img_path.name)
         print(img_path.stem)
+
+        # # TEMPORARY HACK for fast segmap opening TODO remove/rewrite
+        # seg_path = img_path.with_stem(img_path.stem.replace('raw', 'thresh'))
+        # seg = iio.imread(seg_path)
+        # seg = (seg > 0).astype(np.int32)
+        # viewer.add_labels(seg, name=seg_path.name, seed=0, color=color_dict.copy())
+        # _global_state['seg_path'] = seg_path
+
     if ipaths and len(ipaths) > 1:
         lab_path = Path(ipaths[1]).expanduser()
         lab = iio.imread(lab_path)

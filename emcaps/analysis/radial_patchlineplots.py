@@ -13,8 +13,10 @@ import os
 import sys
 from pathlib import Path
 from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
 import tqdm
 import seaborn as sns
+
 
 
 def filter_nan(x):
@@ -22,9 +24,10 @@ def filter_nan(x):
     return x[~np.isnan(x)].copy()
 
 # Based on https://stackoverflow.com/a/21242776
-def get_radial_profile(img: np.ndarray, center=None) -> np.ndarray:
+def get_radial_profile(img: np.ndarray, center=None, half=True) -> np.ndarray:
     if center is None:
         center = np.array(img.shape) // 2 - 1
+        # center = np.array(img.shape) // 2  # ^ rounding error?
     y, x = np.indices((img.shape))
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
     r = r.astype(np.int64)
@@ -32,7 +35,8 @@ def get_radial_profile(img: np.ndarray, center=None) -> np.ndarray:
     tbin = np.bincount(r.ravel(), img.ravel())
     nr = np.bincount(r.ravel())
     radialprofile = tbin / nr
-    radialprofile = radialprofile[:img.shape[0] // 2]
+    if half:
+        radialprofile = radialprofile[:img.shape[0] // 2]
     return radialprofile
 
 
@@ -120,6 +124,47 @@ def measure_outer_disk_radius(mask: np.ndarray, discrete: bool = False) -> float
     if outer_radius < 3:  # Note plausible
         return np.nan
     return outer_radius
+
+
+# Based on https://stackoverflow.com/a/36502578
+def _centered_distance_matrix(n):
+    assert n % 2 == 1, "make sure n is odd" # -> can this be relaxed here?
+    x, y = np.meshgrid(range(n), range(n))
+    return np.sqrt((x - (n / 2) + 1) ** 2 + (y - (n / 2) + 1) ** 2)
+
+
+def _interp(d, y, n):
+    x = np.arange(n)
+    f = interp1d(x, y)
+    return f(d.flat).reshape(d.shape)
+
+
+def _profile_concentric_average(profile, n=49):
+    assert len(profile) == n
+    d = _centered_distance_matrix(n)
+    y = profile
+    f = _interp(d, y, n)
+    return f
+
+
+def concentric_average(img, pad_to=None):
+    assert img.ndim == 2 and img.shape[0] == img.shape[1]
+    profile = get_radial_profile(img=img, half=False)
+    # profile = profile[:-1]  # Slice off last element to get an odd number
+    if pad_to is not None:
+        diff = img.shape[0] - len(profile)
+        # padded_profile = np.zeros((img.shape[0],))
+        # padded_profile[diff // 2:diff // 2 + len(profile)] = profile
+        after = diff // 2
+        before = diff - after
+        padded_profile = np.pad(profile, (before, after))
+        # padded_profile = np.pad(profile, (0, after))
+        profile = padded_profile
+    # avg = _profile_concentric_average(profile=profile, n=img.shape[0])
+    # TODO: avg is somehow black in the middle, but should be black outside...
+    avg = _profile_concentric_average(profile=profile, n=len(profile))
+    return avg
+
 
 if __name__ == '__main__':
     # plt.rcParams.update({'font.family': 'Arial'})

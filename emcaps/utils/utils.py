@@ -185,16 +185,21 @@ def get_v5_enctype(path) -> str:
 @lru_cache(maxsize=1024)
 def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
     row = get_meta_row(path)
+    v5_enctype = '?'
     if pos is None:  # If no pos is supplied, just one type is expected (position-independent)
-        return row.scondv5
+        v5_enctype = row.scondv5
     else:  # Find specific enctype of encapsulin at position pos
         assert isplitdata_root is not None
         assert role is not None
-        elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)
-        elabs = elabs[role]
-        if not elabs:  # No elabs found -> expect enctype to be known simply from table name
-            return row.scondv5
-        else:
+        # Prefer region masks because they cover more area
+        elabs = get_isplit_per_enctype_regmasks(img_num=row.num, isplitdata_root=isplitdata_root)[role]
+        if not elabs:  # No regmask found -> Look for enctype-specific label map instead
+            elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)[role]
+            if not elabs:  # Still nothing found -> expect enctype to be known simply from table name
+                # return row.scondv5
+                pass
+        else:  # Masks or labels found -> Get enctype at pos
+            # enctype_at_pos = row.scondv5
             enctype_at_pos = '?'
             for enctype, elab in elabs.items():
                 if elab[pos] > 0:
@@ -202,10 +207,9 @@ def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=N
                     break
             v5_enctype = enctype_at_pos
 
-        if 'G_1M-Tm' in v5_enctype or 'and' in v5_enctype:
-            logger.error(f'FAIL: Deduced dual v5_enctype for one patch pos ({path=}, {pos=}, {isplitdata_root=}, {role=}')
-
-    assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
+    # if 'G_1M-Tm' in v5_enctype or 'and' in v5_enctype:
+    #     logger.error(f'FAIL: Deduced dual v5_enctype for one patch pos ({path=}, {pos=}, {isplitdata_root=}, {role=}')
+    # assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
     return v5_enctype
 
 
@@ -290,7 +294,7 @@ class ImageResources:
 #     return region_masks
 
 @lru_cache(maxsize=1024)
-def get_isplit_per_enctype_labels(img_num: int, isplitdata_root: Path):
+def get_isplit_per_enctype_labels(img_num: int, isplitdata_root: Path) -> Dict[str, Dict[str, np.ndarray]]:
     elabs = {'trn': {}, 'val': {}}
     ipath = isplitdata_root / f'{img_num}'
     for role in ['trn', 'val']:
@@ -300,6 +304,24 @@ def get_isplit_per_enctype_labels(img_num: int, isplitdata_root: Path):
                 rmask = iio.imread(epath) > 0
                 elabs[role][scond] = rmask
     return elabs
+
+
+@lru_cache(maxsize=1024)
+def get_isplit_per_enctype_regmasks(img_num: int, isplitdata_root: Path) -> Dict[str, Dict[str, np.ndarray]]:
+    rmasks = {'trn': {}, 'val': {}}
+    ipath = isplitdata_root / f'{img_num}'
+    for role in ['trn', 'val']:
+        for scond in CLASS_NAMES.values():
+            rpath = ipath / f'{img_num}_{role}_mask_{scond}.png'
+            if rpath.is_file():
+                rmask = iio.imread(rpath) > 0
+                rmasks[role][scond] = rmask
+    return rmasks
+
+# @lru_cache(maxsize=1024)
+# def get_isplit_per_enctype_regmasks_or_labels(img_num: int, isplitdata_root: Path):
+#     regmasks = get_isplit_per_enctype_regmasks(img_num=img_num, isplitdata_root=isplitdata_root)
+
 
 
 def strip_host_prefix(enctype: str, host_prefixes=('DRO-', 'MICE_')) -> str:

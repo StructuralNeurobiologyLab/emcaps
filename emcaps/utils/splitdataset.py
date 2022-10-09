@@ -178,17 +178,17 @@ def main():
                 iio.imwrite(val_elab_path, val_elab)
                 iio.imwrite(trn_elab_path, trn_elab)
 
-        # # Handle region masks if there are any
-        # if res.regmasks:
-        #     for scond, mask in res.regmasks.items():
-        #         logger.info(f'Splitting region masks for image {img_num}: {scond}')
-        #         val_mask, trn_mask = split_by_slices(mask, split_slices)
-        #         val_mask = val_mask.astype(np.uint8) * 255
-        #         trn_mask = trn_mask.astype(np.uint8) * 255
-        #         val_mask_path = img_subdir / f'{img_num}_val_mask_{scond}.png'
-        #         trn_mask_path = img_subdir / f'{img_num}_trn_mask_{scond}.png'
-        #         iio.imwrite(val_mask_path, val_mask)
-        #         iio.imwrite(trn_mask_path, trn_mask)
+        # Handle region masks if there are any
+        if res.regmasks:
+            for scond, mask in res.regmasks.items():
+                logger.info(f'Splitting region masks for image {img_num}: {scond}')
+                val_mask, trn_mask = split_by_slices(mask, split_slices)
+                val_mask = val_mask.astype(np.uint8) * 255
+                trn_mask = trn_mask.astype(np.uint8) * 255
+                val_mask_path = img_subdir / f'{img_num}_val_mask_{scond}.png'
+                trn_mask_path = img_subdir / f'{img_num}_trn_mask_{scond}.png'
+                iio.imwrite(val_mask_path, val_mask)
+                iio.imwrite(trn_mask_path, trn_mask)
 
 if __name__ == '__main__':
     main()

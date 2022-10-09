@@ -139,11 +139,10 @@ def main():
     dt_thresh = 0.00
 
     if tr_setting is None:
-        tr_setting = 'qttm'
+        tr_setting = 'all'
 
     if srcpath is None:
-        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v10a_tr-{tr_setting}')
-        # results_root = Path('/wholebrain/scratch/mdraw/tum/results_seg_v10_tr-hek')
+        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v10c_tr-{tr_setting}')
         if selected_enctype is not None:
             msuffix = '_expert' if use_expert else ''
             results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
@@ -172,7 +171,7 @@ def main():
         def find_vx_val_images(isplitpath=None):
             """Find paths to all raw validation images of split vx"""
             if isplitpath is None:
-                isplitpath = data_root / 'isplitdata_v10a'
+                isplitpath = data_root / 'isplitdata_v10c'
             val_img_paths = []
             for p in isplitpath.rglob('*_val.png'):  # Look for all validation raw images recursively
                 if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
@@ -213,14 +212,14 @@ def main():
 
     if args.model is None:
         model_dict = {
-            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_all_dec98__UNet__22-09-24_03-24-36/model_step160000.pts',
-            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_hek__UNet__22-09-24_03-29-06/model_step160000.pts',
-            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_dro__UNet__22-09-24_03-26-07/model_step160000.pts',
+            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
+            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
+            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
+            'qttm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_qttm__UNet__22-10-05_04-25-24/model_step240000.pts',
+
             'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/MICE_2M-Qt_GA_mice__UNet__22-09-24_03-26-43/model_step240000.pts',
 
-            'qttm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/GA_qttm__UNet__22-09-24_03-27-16/model_step240000.pts',
-
-            'onlytm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step160000.pts',
+            'onlytm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step40000.pts',
             'all_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_all__UNet__22-09-24_03-33-19/model_step160000.pts',
             'hek_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_hek__UNet__22-09-24_03-34-32/model_step160000.pts',
         }
