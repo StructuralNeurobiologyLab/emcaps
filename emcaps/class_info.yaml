@@ -25,6 +25,15 @@ class_ids_v5:
   MICE_2M-Qt:          19
 
 
+class_colors:
+  invalid: yellow
+  1M-Mx:   blue
+  2M-Mx:   cyan
+  1M-Qt:   magenta
+  2M-Qt:   red
+  3M-Qt:   orange
+  1M-Tm:   green
+
 
 label_name: encapsulins
 

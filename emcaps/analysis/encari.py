@@ -158,7 +158,7 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 # color_dict[0] = 'transparent'
 
 
-# TODO: color_cycle for regions seems to be broken.
+# TODO: Determine color map in class_info.yaml
 
 class_colors = {
     0:                  'transparent',
@@ -204,7 +204,7 @@ segmenter_urls = {
     'unet_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_dro_160k.pts',
 }
 classifier_urls = {
-    'effnet_m_hek_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v10c_all_80k.pts',
+    'effnet_m_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v10c_all_80k.pts',
 
     'effnet_m_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_hek_80k.pts',
     'effnet_s_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_hek_80k.pts',
