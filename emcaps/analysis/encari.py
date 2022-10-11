@@ -178,8 +178,6 @@ for i in sorted(class_colors.keys()):
     color_cycle.append(class_colors[i])
 color_cycle = color_cycle[1:]  # label 0 is not used for classification -> begin counting at 1
 
-print(class_colors)
-print(color_cycle)
 
 _global_state = {}
 
@@ -456,12 +454,18 @@ def compute_majority_class_name(class_preds):
 
 
 def get_default_xlsx_output_path() -> str:
-    default_path = f'{TMPPATH}/ec-out.xlsx'
+    if (src_spath := _global_state.get('src_path')) is not None:
+        default_path = src_spath.with_stem(f'{src_spath.stem}_cls.xlsx')
+    else:
+        default_path = f'{TMPPATH}/ec-cls.xlsx'
     return default_path
 
 
 def get_default_overlay_output_path() -> str:
-    default_path = f'{TMPPATH}/ec-overlay.png'
+    if (src_spath := _global_state.get('src_path')) is not None:
+        default_path = src_spath.with_stem(f'{src_spath.stem}_cls.png')
+    else:
+        default_path = f'{TMPPATH}/ec-cls.png'
     return default_path
 
 
@@ -527,7 +531,7 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
-    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_m_hek_v10c',
+    classifier_variant: Annotated[str, {'choices': list(classifier_urls.keys())}] = 'effnet_m_all_v10c',
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
@@ -669,7 +673,14 @@ def main():
         img_path = Path(ipaths[0]).expanduser()
         img = iio.imread(img_path)
         viewer.add_image(img, name=img_path.name)
-        print(img_path.stem)
+        # print(img_path.stem)
+
+        _global_state['src_path'] = img_path
+        _global_state['src_name'] = img_path.stem
+        # Reassign default paths based on updated image source info
+        # TODO: WIP, Make this actually reassign paths:
+        make_regions_widget.xlsx_output_path = get_default_xlsx_output_path()
+        export_overlay.output_path = get_default_overlay_output_path()
 
         # # TEMPORARY HACK for fast segmap opening TODO remove/rewrite
         # seg_path = img_path.with_stem(img_path.stem.replace('raw', 'thresh'))
@@ -683,11 +694,10 @@ def main():
         lab = iio.imread(lab_path)
         viewer.add_labels(lab, name=lab_path.name, seed=0, color=color_dict.copy())
 
-
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
-    # viewer.window.add_function_widget(render_overlay)
-    viewer.window.add_function_widget(export_overlay, name='Export overlay image')
+    viewer.window.add_function_widget(render_overlay, name='Render overlay image')
+    viewer.window.add_function_widget(export_overlay, name='Render and export overlay image')
 
     napari.run()
 
