@@ -18,6 +18,7 @@ import tempfile
 
 import imageio.v3 as iio
 import napari
+import napari.utils
 import numpy as np
 import torch
 import tqdm
@@ -29,6 +30,7 @@ from napari.qt.threading import FunctionWorker, thread_worker, GeneratorWorker
 from napari.types import ImageData, LabelsData, LayerDataTuple
 from napari.utils.notifications import show_info
 from napari.utils.progress import progrange, progress
+from napari.layers.shapes._shapes_constants import ColorMode
 from scipy import ndimage
 from skimage import data
 from skimage.measure import label, regionprops_table, regionprops
@@ -39,7 +41,7 @@ from typing_extensions import Annotated
 
 from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius
 from emcaps import utils
-
+from emcaps.utils.colorlabel import color_dict_rgba
 
 TMPPATH = '/tmp' if platform.system() == 'Darwin' else tempfile.gettempdir()
 
@@ -111,51 +113,13 @@ def make_bbox(bbox_extents):
 
 repo_root = Path(__file__).parents[2]
 
-
+# TODO: Replace with utils.* refs
 # Load mapping from class names to class IDs
 class_info_path = repo_root / 'emcaps/class_info.yaml'
 with open(class_info_path) as f:
     class_info = yaml.load(f, Loader=yaml.FullLoader)
 CLASS_IDS = class_info['class_ids_v5']
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
-
-
-# class_colors = {
-#     '1M-Qt': [1.0, 0.0, 1.0, 1.0],
-#     '2M-Qt': [1.0, 0.0, 0.0, 1.0],
-#     '3M-Qt': [1.0, 0.4, 0.0, 1.0],
-#     '1M-Mx': [0.0, 0.0, 1.0, 1.0],
-#     '2M-Mx': [0.0, 0.0, 0.5, 1.0],
-#     '1M-Tm': [0.0, 1.0, 0.0, 1.0],
-# }
-
-# class_colors = {
-#     '1M-Qt': 'magenta',
-#     '2M-Qt': 'red',
-#     '3M-Qt': 'orange',
-#     '1M-Mx': 'blue',
-#     '2M-Mx': 'cyan',
-#     '1M-Tm': 'green',
-# }
-
-# id_colors = {CLASS_IDS[name]: color for name, color in class_colors.items()}
-
-
-
-# color_dict = {
-#     1: 'magenta',
-#     2: 'cyan',
-#     3: 'blue',
-#     4: 'purple',
-#     5: 'orange',
-#     6: 'green',
-#     7: 'red',
-#     8: 'yellow',
-# }
-
-# color_cycle = ['grey', 'magenta', 'cyan', 'blue', 'purple', 'orange', 'green', 'red', 'yellow']
-# color_dict = {k: v for k, v in enumerate(color_cycle)}
-# color_dict[0] = 'transparent'
 
 
 # TODO: Determine color map in class_info.yaml
@@ -167,21 +131,37 @@ class_colors = {
     CLASS_IDS['1M-Qt']: 'magenta',
     CLASS_IDS['2M-Mx']: 'cyan',
     CLASS_IDS['2M-Qt']: 'red',
-    CLASS_IDS['3M-Qt']: 'orange',
-    CLASS_IDS['1M-Tm']: 'green',
+    # CLASS_IDS['3M-Qt']: 'orange',
+    # CLASS_IDS['1M-Tm']: 'green',
+    CLASS_IDS['3M-Qt']: 'azure',
+    CLASS_IDS['1M-Tm']: 'brown',
 }
 
 # color_cycle = [c for c in class_colors.values()]
 
 color_cycle = []
+colormap_data = []
 for i in sorted(class_colors.keys()):
-    color_cycle.append(class_colors[i])
-color_cycle = color_cycle[1:]  # label 0 is not used for classification -> begin counting at 1
+    col = class_colors[i]
+    color_cycle.append(col)
+    rgba = color_dict_rgba[col]
+    colormap_data.append(rgba)
 
+colormap_data = np.stack(colormap_data) * 0
+
+napcolormap = napari.utils.Colormap(colors=colormap_data, display_name='cls_colors', interpolation='zero')
+
+skimage_color_cycle = color_cycle.copy()[1:]
+
+# skimage_color_cycle[0] = 'black'
+
+print(class_colors)
+# print(color_cycle)
+print(skimage_color_cycle)
 
 _global_state = {}
 
-color_dict = class_colors
+class_colors = class_colors
 
 segmenter_urls = {
     'unet_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts',
@@ -282,22 +262,26 @@ def check_image(img, normalized=False, shape=None):
 
 
 # TODO: Support invalidation for low-confidence predictions
-def classify_patch(patch, classifier_variant):
+def classify_patch(patch, classifier_variant, class_ids_to_exlude=(0, 1)):
 
     inp = normalize(patch)
     check_image(inp, normalized=True)
 
     classifier_model = get_model(classifier_variant)
 
-    import string
-    import random
+    # import string
+    # import random
     # fn = '/tmp/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
     # iio.imwrite(fn, np.uint8(inp * 128 + 128))
 
     inp = torch.from_numpy(inp)[None, None]
     with torch.inference_mode():
         out = classifier_model(inp)
+        out = torch.softmax(out, 1)
+        for c in class_ids_to_exlude:
+            out[:, c] = 0.
         pred = torch.argmax(out, dim=1)[0].item()
+        # pred -= 2 #p2
     return pred
 
 
@@ -514,7 +498,7 @@ def make_seg_widget(
 
         meta = dict(
             name='segmentation',
-            color=color_dict.copy(),
+            color=class_colors.copy(),
             seed=0,
         )
         # return a "LayerDataTuple"
@@ -596,6 +580,8 @@ def make_regions_widget(
             shape_type=shape_type,
             edge_color_cycle=color_cycle,
             face_color_cycle=color_cycle,
+            # face_colormap=napcolormap,
+            # edge_colormap=napcolormap,
             opacity=0.35,
             properties=properties,
             text=text_parameters,
@@ -631,7 +617,7 @@ def render_overlay(
     image: ImageData,
     labels: LabelsData
 ) -> LayerDataTuple:
-    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=color_cycle)
+    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=skimage_color_cycle)
     meta = dict(name='overlay')
     return (overlay, meta, 'image')
 
@@ -645,7 +631,7 @@ def export_overlay(
     # if (segpath := _global_state.get('seg_path')) is not None:
     #     output_path = segpath.with_stem(segpath.stem.replace('thresh', 'cls'))
 
-    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=color_cycle)
+    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=skimage_color_cycle)
     iio.imwrite(output_path, overlay)
     show_info(f'Exported overlay to {output_path}')
 
@@ -666,7 +652,7 @@ def main():
         eimg = iio.imread(eip)[600:900, 600:900].copy()
         elab = iio.imread(ilp)[600:900, 600:900].copy() > 0
         viewer.add_image(eimg, name='img')
-        viewer.add_labels(elab, name='lab', seed=0, color=color_dict.copy())
+        viewer.add_labels(elab, name='lab', seed=0, color=class_colors.copy())
         ipaths = []
 
     if ipaths and len(ipaths) > 0:
@@ -686,18 +672,18 @@ def main():
         # seg_path = img_path.with_stem(img_path.stem.replace('raw', 'thresh'))
         # seg = iio.imread(seg_path)
         # seg = (seg > 0).astype(np.int32)
-        # viewer.add_labels(seg, name=seg_path.name, seed=0, color=color_dict.copy())
+        # viewer.add_labels(seg, name=seg_path.name, seed=0, color=class_colors.copy())
         # _global_state['seg_path'] = seg_path
 
     if ipaths and len(ipaths) > 1:
         lab_path = Path(ipaths[1]).expanduser()
         lab = iio.imread(lab_path)
-        viewer.add_labels(lab, name=lab_path.name, seed=0, color=color_dict.copy())
+        viewer.add_labels(lab, name=lab_path.name, seed=0, color=class_colors.copy())
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
-    viewer.window.add_function_widget(render_overlay, name='Render overlay image')
-    viewer.window.add_function_widget(export_overlay, name='Render and export overlay image')
+    viewer.window.add_function_widget(render_overlay, name='Render overlay image', area='right')
+    viewer.window.add_function_widget(export_overlay, name='Render and export overlay image', area='right')
 
     napari.run()
 

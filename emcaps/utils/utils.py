@@ -17,7 +17,9 @@ import numpy as np
 import pandas as pd
 import yaml
 from PIL import Image, ImageDraw
-from skimage.color import label2rgb
+# from skimage.color import label2rgb
+
+from emcaps.utils import colorlabel
 
 import logging
 
@@ -73,7 +75,7 @@ V5NAMES_TO_OLDNAMES = {v: k for k, v in OLDNAMES_TO_V5NAMES.items()}
 
 
 def render_skimage_overlay(img: np.ndarray, lab: np.ndarray, bg_label=0, alpha=0.5, **label2rgb_kwargs) -> np.ndarray:
-    ov = label2rgb(label=lab, image=img, bg_label=bg_label, alpha=alpha, **label2rgb_kwargs)
+    ov = colorlabel.label2rgb(label=lab, image=img, bg_label=bg_label, alpha=alpha, **label2rgb_kwargs)
     # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
     img01 = img.astype(np.float64) / 255.
     ov[lab == 0, :] = img01[lab == 0, None]
