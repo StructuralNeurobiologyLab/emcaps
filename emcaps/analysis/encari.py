@@ -131,10 +131,8 @@ class_colors = {
     CLASS_IDS['1M-Qt']: 'magenta',
     CLASS_IDS['2M-Mx']: 'cyan',
     CLASS_IDS['2M-Qt']: 'red',
-    # CLASS_IDS['3M-Qt']: 'orange',
-    # CLASS_IDS['1M-Tm']: 'green',
-    CLASS_IDS['3M-Qt']: 'azure',
-    CLASS_IDS['1M-Tm']: 'brown',
+    CLASS_IDS['3M-Qt']: 'orange',
+    CLASS_IDS['1M-Tm']: 'green',
 }
 
 # color_cycle = [c for c in class_colors.values()]
@@ -519,7 +517,7 @@ def make_regions_widget(
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
-    shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'ellipse',
+    shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'none',
     inplace_relabel: bool = True,
     xlsx_output_path: str = get_default_xlsx_output_path(),
     # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
@@ -578,11 +576,11 @@ def make_regions_widget(
         meta = dict(
             name='regions',
             shape_type=shape_type,
-            edge_color_cycle=color_cycle,
-            face_color_cycle=color_cycle,
+            # edge_color_cycle=color_cycle,
+            # face_color_cycle=color_cycle,
             # face_colormap=napcolormap,
             # edge_colormap=napcolormap,
-            opacity=0.35,
+            # opacity=0.35,
             properties=properties,
             text=text_parameters,
             metadata={'majority_class_name': majority_class_name},
@@ -592,12 +590,12 @@ def make_regions_widget(
         match shape_type:
             case 'ellipse':
                 meta.update({
-                    'edge_color': 'transparent',
-                    'face_color': 'class_id',
+                    'edge_color': 'white',
+                    'face_color': 'transparent',
                 })
             case 'rectangle':
                 meta.update({
-                    'edge_color': 'class_id',
+                    'edge_color': 'white',
                     'face_color': 'transparent',
                 })
             # case 'none' is already handled by the early return above
