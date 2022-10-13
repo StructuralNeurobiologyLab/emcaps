@@ -259,8 +259,11 @@ def check_image(img, normalized=False, shape=None):
         raise ImageError(f'{img.shape=}, but expected {shape}')
 
 
+CLASS_IDS_TO_EXCLUDE = (0, 1)
+# CLASS_IDS_TO_EXCLUDE = (0, 1, 4, 5, 6, 7)
+
 # TODO: Support invalidation for low-confidence predictions
-def classify_patch(patch, classifier_variant, class_ids_to_exlude=(0, 1)):
+def classify_patch(patch, classifier_variant, class_ids_to_exlude=CLASS_IDS_TO_EXCLUDE):
 
     inp = normalize(patch)
     check_image(inp, normalized=True)
@@ -283,7 +286,7 @@ def classify_patch(patch, classifier_variant, class_ids_to_exlude=(0, 1)):
     return pred
 
 
-def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, noborder=False, min_circularity=0.8, inplace_relabel=False):
+def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, noborder=False, min_circularity=0.8, inplace_relabel=False, constrain_to_1MQt_and_1MMx=False):
 
     # Code mainly redundant with / copied from patchifyseg. TODO: Refactor into shared function
 
@@ -389,7 +392,12 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
 
         check_image(nobg_patch, normalized=False, shape=PATCH_SHAPE)
 
-        class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant)
+        if constrain_to_1MQt_and_1MMx:
+            class_ids_to_exclude = (0, 1, 4, 5, 6, 7)
+        else:
+            class_ids_to_exclude = (0, 1)
+
+        class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant, class_ids_to_exlude=class_ids_to_exclude)
         class_name = CLASS_NAMES[class_id]
 
         if inplace_relabel:
@@ -518,6 +526,7 @@ def make_regions_widget(
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'none',
+    constrain_to_1MQt_and_1MMx: bool = False,
     inplace_relabel: bool = True,
     xlsx_output_path: str = get_default_xlsx_output_path(),
     # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
@@ -537,6 +546,7 @@ def make_regions_widget(
             maxsize=maxsize,
             min_circularity=mincircularity,
             inplace_relabel=inplace_relabel,
+            constrain_to_1MQt_and_1MMx=constrain_to_1MQt_and_1MMx,
         )
 
         nonlocal xlp
@@ -663,8 +673,8 @@ def main():
         _global_state['src_name'] = img_path.stem
         # Reassign default paths based on updated image source info
         # TODO: WIP, Make this actually reassign paths:
-        make_regions_widget.xlsx_output_path = get_default_xlsx_output_path()
-        export_overlay.output_path = get_default_overlay_output_path()
+        # make_regions_widget.xlsx_output_path = get_default_xlsx_output_path()
+        # export_overlay.output_path = get_default_overlay_output_path()
 
         # # TEMPORARY HACK for fast segmap opening TODO remove/rewrite
         # seg_path = img_path.with_stem(img_path.stem.replace('raw', 'thresh'))
@@ -676,7 +686,7 @@ def main():
     if ipaths and len(ipaths) > 1:
         lab_path = Path(ipaths[1]).expanduser()
         lab = iio.imread(lab_path)
-        viewer.add_labels(lab, name=lab_path.name, seed=0, color=class_colors.copy())
+        viewer.add_labels(lab > 0, name=lab_path.name, seed=0, color=class_colors.copy())
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')

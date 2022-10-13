@@ -318,6 +318,7 @@ for model_path in model_paths:
 
             # Get enctype for specific position (for supporting multi-class images)
             enctype = utils.get_isplit_enctype(path=img_path, pos=tuple(centroid), isplitdata_root=isplitdata_root, role=role)
+            # TODO: Test below condition
 
             if enctype == '?':
                 logger.info(f'Skipping patch, can\'t determine local enctype: image {img_num=}, {role=}, pos={centroid}')
