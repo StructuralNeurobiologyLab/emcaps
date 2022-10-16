@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from scipy.signal import find_peaks
 from scipy.interpolate import interp1d
+from skimage.transform import rotate
 import tqdm
 import seaborn as sns
 
@@ -147,7 +148,7 @@ def _profile_concentric_average(profile, n=49):
     return f
 
 
-def concentric_average(img, pad_to=None):
+def __proto_concentric_average(img, pad_to=None):
     assert img.ndim == 2 and img.shape[0] == img.shape[1]
     profile = get_radial_profile(img=img, half=False)
     # profile = profile[:-1]  # Slice off last element to get an odd number
@@ -163,6 +164,28 @@ def concentric_average(img, pad_to=None):
     # avg = _profile_concentric_average(profile=profile, n=img.shape[0])
     # TODO: avg is somehow black in the middle, but should be black outside...
     avg = _profile_concentric_average(profile=profile, n=len(profile))
+    return avg
+
+
+def get_rotations(img, steps=360):
+    assert img.ndim == 2 and img.shape[0] == img.shape[1]
+    rotated_imgs = []
+    for angle in np.linspace(0, 360, num=steps, endpoint=False):
+        rot = rotate(img, angle)
+        rotated_imgs.append(rot)
+    rotated_imgs = np.stack(rotated_imgs)
+    return rotated_imgs
+
+
+def concentric_average(img, steps=360):
+    rotated_imgs = get_rotations(img=img, steps=steps)
+    avg = rotated_imgs.mean(0)
+    return avg
+
+
+def concentric_max(img, steps=360):
+    rotated_imgs = get_rotations(img=img, steps=steps)
+    avg = rotated_imgs.max(0)
     return avg
 
 

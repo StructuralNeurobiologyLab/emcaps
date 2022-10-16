@@ -190,8 +190,10 @@ def get_v5_enctype(path) -> str:
 def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
     row = get_meta_row(path)
     v5_enctype = '?'
-    if pos is None:  # If no pos is supplied, just one type is expected (position-independent)
-        v5_enctype = row.scondv5
+    if row.scondv5 in CLASS_GROUPS['simple_hek'] or pos is None:
+        # If scondv5 is simple, the only enctype there can be scondv5 itself.
+        # If no pos is supplied, just one type is expected (position-independent)
+        return row.scondv5
     else:  # Find specific enctype of encapsulin at position pos
         assert isplitdata_root is not None
         assert role is not None
@@ -199,9 +201,8 @@ def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=N
         elabs = get_isplit_per_enctype_regmasks(img_num=row.num, isplitdata_root=isplitdata_root)[role]
         if not elabs:  # No regmask found -> Look for enctype-specific label map instead
             elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)[role]
-            if not elabs:  # Still nothing found -> expect enctype to be known simply from table name
-                # return row.scondv5
-                pass
+            if not elabs:  # Still nothing found
+                return '?'
         else:  # Masks or labels found -> Get enctype at pos
             # enctype_at_pos = row.scondv5
             enctype_at_pos = '?'

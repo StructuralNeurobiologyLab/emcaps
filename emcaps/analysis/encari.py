@@ -286,7 +286,18 @@ def classify_patch(patch, classifier_variant, class_ids_to_exlude=CLASS_IDS_TO_E
     return pred
 
 
-def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, noborder=False, min_circularity=0.8, inplace_relabel=False, constrain_to_1MQt_and_1MMx=False):
+def compute_rprops(
+    image,
+    lab,
+    classifier_variant,
+    minsize=150,
+    maxsize=None,
+    noborder=False,
+    min_circularity=0.8,
+    inplace_relabel=False,
+    constrain_to_1MQt_and_1MMx=False,
+    return_relabeled_seg=False
+):
 
     # Code mainly redundant with / copied from patchifyseg. TODO: Refactor into shared function
 
@@ -323,6 +334,9 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
         'radius2': np.empty((len(rprops),), dtype=np.float32),
         'is_invalid': np.empty((len(rprops),), dtype=bool),
     }
+
+    if return_relabeled_seg:
+        relabeled = lab.copy()
 
     for i, rp in enumerate(tqdm.tqdm(rprops, position=1, leave=True, desc='Analyzing regions', dynamic_ncols=True)):
         is_invalid = False
@@ -400,10 +414,13 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
         class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant, class_ids_to_exlude=class_ids_to_exclude)
         class_name = CLASS_NAMES[class_id]
 
-        if inplace_relabel:
-            # This feels (morally) wrong but it seems to work.
-            # Overwrite lab argument from caller by writing back into original memory
-            lab[tuple(rp.coords.T)] = class_id
+        if not is_invalid:
+            if return_relabeled_seg:
+                relabeled[tuple(rp.coords.T)] = class_id
+            if inplace_relabel:
+                # This feels (morally) wrong but it seems to work.
+                # Overwrite lab argument from caller by writing back into original memory
+                lab[tuple(rp.coords.T)] = class_id
 
         # # Attribute assignments don't stick for _props_to_dict() for some reason
         # rp.class_id = class_id
@@ -419,7 +436,6 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
 
         # iio.imwrite('/tmp/nobg-{i:03d}.png', nobg_patch)
 
-
     # print(rprops)
     # print(epropdict)
     # Can only assign builtin props here
@@ -434,6 +450,10 @@ def compute_rprops(image, lab, classifier_variant, minsize=150, maxsize=None, no
     logger.info(f'Pruning {num_invalid} regions due to filter criteria...')
     for k in propdict.keys():
         propdict[k] = np.delete(propdict[k], is_invalid)
+
+    if return_relabeled_seg:
+        return propdict, relabeled
+
     return propdict
 
 

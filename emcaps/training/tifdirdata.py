@@ -147,7 +147,7 @@ class EncSegData(data.Dataset):
             label_names: Sequence[str],
             valid_nums: Optional[Sequence[int]] = None,
             descr_sheet=(os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
-            data_subdirname: str = 'isplitdata_v10',
+            data_subdirname: str = 'isplitdata_v13',
             meta_filter = lambda x: x,
             train: bool = True,
             transform=transforms.Identity(),
@@ -208,6 +208,7 @@ class EncSegData(data.Dataset):
         #         meta = meta[meta['num'].isin(self.valid_nums)]
 
         self.root_path = Path(descr_sheet[0]).parent / data_subdirname
+        logger.info('Getting data from {self.root_path}')
 
         # Not all images are always available
         self.available_img_nums = [

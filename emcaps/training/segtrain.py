@@ -91,7 +91,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=240_001,
+    '-m', '--max-steps', type=int, default=300_001,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -192,13 +192,13 @@ model = UNet(
 sr_suffix = ''
 # if ONLY_QTTM:
 #     sr_suffix = f'{sr_suffix}_onlyqttm'
-save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b{sr_suffix}').expanduser()
+save_root = Path(f'/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13{sr_suffix}').expanduser()
 
 
 max_steps = conf.max_steps
 lr = 1e-3
 lr_stepsize = 1000
-lr_dec = 0.98
+lr_dec = 0.99
 batch_size = 8
 
 
@@ -251,7 +251,7 @@ train_dataset = EncSegData(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=True,
-    data_subdirname=f'isplitdata_v10b{sr_suffix}',
+    data_subdirname=f'isplitdata_v13{sr_suffix}',
     label_names=label_names,
     transform=train_transform,
     target_dtype=target_dtype,
@@ -267,7 +267,7 @@ valid_dataset = EncSegData(
     meta_filter=meta_filter,
     # valid_nums=valid_image_numbers,  # read from table
     train=False,
-    data_subdirname=f'isplitdata_v10b{sr_suffix}',
+    data_subdirname=f'isplitdata_v13{sr_suffix}',
     label_names=label_names,
     transform=valid_transform,
     target_dtype=target_dtype,

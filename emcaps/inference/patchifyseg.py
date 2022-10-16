@@ -33,7 +33,7 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 from elektronn3.models.unet import UNet
 
-from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius, concentric_average
+from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius, concentric_average, concentric_max
 from emcaps import utils
 
 
@@ -97,7 +97,8 @@ pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ])
 
-thresh = 100  # slightly lower than 50%
+# thresh = 100  # slightly lower than 50%
+thresh = 140  # slightly higher than 50%
 
 N_EVAL_SAMPLES = 30
 
@@ -141,7 +142,7 @@ class_groups_to_include = [
 
 # root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
 sheet_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
-isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v10c/')
+isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v13/')
 
 
 
@@ -152,20 +153,18 @@ for lp in isplitdata_root.rglob('*_encapsulins.png'):
     img_paths.append(img_path)
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
-# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6_notm_nodro_dr{DILATE_MASKS_BY}{_tmextra_str}')
-# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v6e_dr{DILATE_MASKS_BY}')
-# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v7_trhek_evhek_dr{DILATE_MASKS_BY}')
-patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10c1_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
+# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10d_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
+patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v13_dr{DILATE_MASKS_BY}_t{thresh}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'
 
 model_paths = eul([
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts'
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA___UNet__22-10-15_20-29-01/model_best.pts'
 ])
 
 # Create output directories
-for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg']:
+for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg', f'{patch_out_path}/cmax']:
     os.makedirs(p, exist_ok=True)
 
 # Set up logging
@@ -174,6 +173,9 @@ logger.setLevel(logging.DEBUG)
 fh = logging.FileHandler(f'{patch_out_path}/patchify.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
+# sh = logging.StreamHandler()
+# sh.setLevel(logging.INFO)
+# logger.addHandler(sh)
 
 logger.info(f'Using data from {isplitdata_root}')
 logger.info(f'Using meta spreadsheet {sheet_path}')
@@ -364,12 +366,14 @@ for model_path in model_paths:
             nobg_patch[mask_patch == 0] = 0
 
             # # Concentric average image
-            # cavg_patch = concentric_average(raw_patch)
+            cavg_patch = concentric_average(raw_patch)
+            cmax_patch = concentric_max(raw_patch)
 
             raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:06d}.png'
             mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:06d}.png'
             nobg_patch_fname = f'{patch_out_path}/nobg/nobg_patch_{patch_id:06d}.png'
-            # cavg_patch_fname = f'{patch_out_path}/cavg/cavg_patch_{patch_id:06d}.png'
+            cavg_patch_fname = f'{patch_out_path}/cavg/cavg_patch_{patch_id:06d}.png'
+            cmax_patch_fname = f'{patch_out_path}/cmax/cmax_patch_{patch_id:06d}.png'
 
             patchmeta.append(PatchMeta(
                 # patch_id=patch_id,
@@ -392,7 +396,8 @@ for model_path in model_paths:
             iio.imwrite(raw_patch_fname, raw_patch.astype(np.uint8))
             iio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
             iio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
-            # iio.imwrite(cavg_patch_fname, cavg_patch.astype(np.uint8))
+            iio.imwrite(cavg_patch_fname, cavg_patch.astype(np.uint8))
+            iio.imwrite(cmax_patch_fname, cmax_patch.astype(np.uint8))
             patch_id += 1
 
 
@@ -404,7 +409,8 @@ patchmeta = patchmeta.convert_dtypes()
 patchmeta = patchmeta.astype({'img_num': int})  # Int64
 patchmeta.to_excel(f'{patch_out_path}/patchmeta.xlsx', index_label='patch_id')
 
-individual_enctypes = patchmeta.enctype.unique()
+# individual_enctypes = patchmeta.enctype.unique()
+individual_enctypes = utils.CLASS_GROUPS['simple_hek']
 samples = []
 eval_samples = {}
 
@@ -414,8 +420,6 @@ for role in ['train', 'validation']:
     min_n_samples = 1_000_000  # Unexpected high value for initialization
     min_scond = None
     # # Gather selected enctypes in simple form (without host)
-    # individual_enctypes = [utils.strip_host_prefix(et) for et in DATA_SELECTION]
-    # individual_enctypes = [et for et in individual_enctypes if et in utils.CLASS_GROUPS['simple_hek']]
     for scond in individual_enctypes:
         # if DRO_MODE:
         #     scond = scond.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO

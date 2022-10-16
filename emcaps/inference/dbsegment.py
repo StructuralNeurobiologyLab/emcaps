@@ -142,7 +142,7 @@ def main():
         tr_setting = 'all'
 
     if srcpath is None:
-        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v10c_tr-{tr_setting}')
+        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v13_tr-{tr_setting}')
         if selected_enctype is not None:
             msuffix = '_expert' if use_expert else ''
             results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
@@ -171,7 +171,7 @@ def main():
         def find_vx_val_images(isplitpath=None):
             """Find paths to all raw validation images of split vx"""
             if isplitpath is None:
-                isplitpath = data_root / 'isplitdata_v10c'
+                isplitpath = data_root / 'isplitdata_v13'
             val_img_paths = []
             for p in isplitpath.rglob('*_val.png'):  # Look for all validation raw images recursively
                 if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:

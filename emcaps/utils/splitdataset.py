@@ -24,7 +24,7 @@ STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from outp
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v10c'
+isplit_data_root = data_root / 'isplitdata_v13'
 if ONLY_TM:
     isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_onlytm')
 if NO_TM:
@@ -46,23 +46,25 @@ logger.addHandler(fh)
 # Split definition constants
 HORIZONTAL = 0
 VERTICAL = 1
+HORIZONTAL_SWAPPED = 2
+VERTICAL_SWAPPED = 3
 
 # Override for 2-class images that could be split in such a way that the validation image will lack one of the classes.
 split_override_dict = {
-    201: VERTICAL,
-    202: HORIZONTAL,
-    203: HORIZONTAL,
-    204: HORIZONTAL,
-    205: HORIZONTAL,
-    206: HORIZONTAL,
-    207: VERTICAL,
-    208: VERTICAL,
-    209: VERTICAL,
-    210: VERTICAL,
-    211: VERTICAL,
-    212: VERTICAL,
+    201: HORIZONTAL_SWAPPED,
+    202: VERTICAL,
+    203: VERTICAL,
+    204: VERTICAL_SWAPPED,
+    205: VERTICAL,
+    206: VERTICAL,
+    207: HORIZONTAL,
+    208: HORIZONTAL,
+    209: HORIZONTAL,
+    210: VERTICAL_SWAPPED,
+    211: HORIZONTAL,
+    212: HORIZONTAL,
 }
-split_override_dict = {}  # Disable override
+# split_override_dict = {}  # Disable override
 
 if ONLY_TM:
     logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
@@ -73,10 +75,13 @@ def count_ccs(lab):
     _, ncc = measure.label(lab, return_num=True)
     return ncc
 
-def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.3) -> Tuple[Tuple[slice, slice], Tuple[slice, slice]]:
-    """Determine best slices for splitting the image by considering particle ratios"""
-    sh = np.array(lab.shape)
-    vert_border, horiz_border = np.round(sh * valid_ratio).astype(np.int64)
+
+def get_slices(sh: np.ndarray, valid_ratio: float = 0.3, from_left=True):
+    if from_left:
+        relative_split_border = valid_ratio
+    else:
+        relative_split_border = 1 - valid_ratio
+    vert_border, horiz_border = np.round(sh * relative_split_border).astype(np.int64)
     vert_slices = (
         (slice(0, vert_border), slice(0, None)),
         (slice(vert_border, None), slice(0, None)),
@@ -85,10 +90,33 @@ def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.
         (slice(0, None), slice(0, horiz_border)),
         (slice(0, None), slice(horiz_border, None)),
     )
+    if not from_left:  # Swap slices -> Preserve split ratio, but change direction from which to split
+        vert_slices = vert_slices[::-1]
+        hori_slices = hori_slices[::-1]
+    return vert_slices, hori_slices
+
+
+def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.3) -> Tuple[Tuple[slice, slice], Tuple[slice, slice]]:
+    """Determine best slices for splitting the image by considering particle ratios"""
+    sh = np.array(lab.shape)
+    vert_slices, hori_slices = get_slices(sh, valid_ratio=valid_ratio, from_left=True)
+    right_vert_slices, right_hori_slices = get_slices(sh, valid_ratio=valid_ratio, from_left=False)
 
     if img_num in split_override_dict:
         # Override found, directly return determined split
-        best_slices = vert_slices if split_override_dict[img_num] == VERTICAL else hori_slices
+
+        if split_override_dict[img_num] == VERTICAL:
+            best_slices = vert_slices
+        elif split_override_dict[img_num] == HORIZONTAL:
+            best_slices = hori_slices
+        elif split_override_dict[img_num] == VERTICAL_SWAPPED:
+            best_slices = right_vert_slices
+        elif split_override_dict[img_num] == HORIZONTAL_SWAPPED:
+            best_slices = right_hori_slices
+        else:
+            raise ValueError(f'Invalid choice {split_override_dict[img_num]}')
+
+        logger.info(f'Override split: {img_num}.')
         return best_slices
 
     # Count number of particles in each subimage
