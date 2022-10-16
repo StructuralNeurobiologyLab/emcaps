@@ -116,7 +116,7 @@ class EncPatchData(data.Dataset):
         index %= len(self.meta)  # Wrap around to support epoch_multiplier
         inp = self.inps[index]
         if True:
-            from emcaps.analysis.radial_patchlineplots import concentric_average, get_radial_profile
+            pass
             # inp = concentric_average(inp)  # TODO
         target = self.targets[index]
         fname = self.meta.patch_fname.iloc[index]

@@ -20,28 +20,20 @@ Uses a patch dataset that can be created by inference/patchifyseg.py
 
 import argparse
 import datetime
-from math import inf
 import os
 import random
-from typing import Literal
-from elektronn3.data.transforms.transforms import RandomCrop
 
 import torch
 from torch import nn
 from torch import optim
 import numpy as np
-import pandas as pd
-import yaml
-
 
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
-from torch.nn.modules.loss import MSELoss
-from torch.utils import data
 
 elektronn3.select_mpl_backend('Agg')
 
-from elektronn3.training import Trainer, Backup, SWA
+from elektronn3.training import Trainer, Backup
 from elektronn3.training import metrics
 from elektronn3.data import transforms
 
@@ -49,7 +41,7 @@ import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
 from emcaps.training.tifdirdata import EncPatchData
-from emcaps.models.effnetv2 import effnetv2_s, effnetv2_m
+from emcaps.models.effnetv2 import effnetv2_m
 from emcaps import utils
 
 
@@ -157,7 +149,7 @@ train_transform = common_transforms + [
 valid_transform = common_transforms + []
 
 if True:
-    from emcaps.analysis.radial_patchlineplots import get_radial_profile, concentric_average
+    from emcaps.utils.patch_utils import get_radial_profile, concentric_average
 
     def _avg(img, target):
         return concentric_average(img=img[0])[None], target

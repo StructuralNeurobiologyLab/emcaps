@@ -19,10 +19,10 @@ import tqdm
 import seaborn as sns
 
 
-
 def filter_nan(x):
     print(f'Filtering {np.sum(np.isnan(x))} NaN values from a total of {x.size} values')
     return x[~np.isnan(x)].copy()
+
 
 # Based on https://stackoverflow.com/a/21242776
 def get_radial_profile(img: np.ndarray, center=None, half=True) -> np.ndarray:

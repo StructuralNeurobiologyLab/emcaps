@@ -30,7 +30,6 @@ color_dict_rgba = {k: (*v, 1.) for k, v in color_dict.items()}
 color_dict_rgba['transparent'] = (0., 0., 0., 0.)
 
 
-
 def _rgb_vector(color):
     """Return RGB color as (1, 3) array.
 

@@ -7,33 +7,25 @@ around particle centroids
 """
 import os
 from pathlib import Path
-from os.path import expanduser as eu
 from typing import NamedTuple
 import shutil
 import logging
 
 import numpy as np
 import imageio.v3 as iio
-import skimage
-import torch
 import tqdm
 import pandas as pd
-import yaml
 
 from PIL import Image, ImageDraw
 
 from scipy import ndimage
 from skimage import morphology as sm
-from skimage.color import label2rgb
 from skimage import measure
-from sklearn import metrics as sme
-
 
 from elektronn3.inference import Predictor
 from elektronn3.data import transforms
-from elektronn3.models.unet import UNet
 
-from emcaps.analysis.radial_patchlineplots import measure_outer_disk_radius, concentric_average, concentric_max
+from emcaps.utils.patch_utils import measure_outer_disk_radius, concentric_average, concentric_max
 from emcaps import utils
 
 
