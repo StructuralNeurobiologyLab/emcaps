@@ -74,11 +74,12 @@ OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
 V5NAMES_TO_OLDNAMES = {v: k for k, v in OLDNAMES_TO_V5NAMES.items()}
 
 
-def render_skimage_overlay(img: np.ndarray, lab: np.ndarray, bg_label=0, alpha=0.5, **label2rgb_kwargs) -> np.ndarray:
+def render_skimage_overlay(img: Optional[np.ndarray], lab: np.ndarray, bg_label=0, alpha=0.5, **label2rgb_kwargs) -> np.ndarray:
     ov = colorlabel.label2rgb(label=lab, image=img, bg_label=bg_label, alpha=alpha, **label2rgb_kwargs)
-    # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
-    img01 = img.astype(np.float64) / 255.
-    ov[lab == 0, :] = img01[lab == 0, None]
+    if img is not None:
+        # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
+        img01 = img.astype(np.float64) / 255.
+        ov[lab == 0, :] = img01[lab == 0, None]
     # Convert from [0, 1] float to [0, 255] uint8 for imageio
     ov = (ov * 255.).astype(np.uint8)
     return ov

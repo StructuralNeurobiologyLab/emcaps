@@ -8,6 +8,8 @@ from skimage import morphology as sm
 from skimage.measure import regionprops
 from skimage.measure._regionprops import _props_to_dict
 from skimage.segmentation import clear_border
+from pathlib import Path
+from functools import lru_cache
 
 from emcaps.utils.patch_utils import measure_outer_disk_radius
 from emcaps import utils
@@ -20,9 +22,9 @@ fh = logging.FileHandler(f'{utils.TMPPATH}/encari.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Running on {device}')
-DTYPE = torch.float16 if 'cuda' in str(device) else torch.float32
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Running on {DEVICE}')
+DTYPE = torch.float16 if 'cuda' in str(DEVICE) else torch.float32
 
 
 def calculate_circularity(perimeter, area):
@@ -74,6 +76,29 @@ def make_bbox(bbox_extents):
     return bbox_rect
 
 
+class_colors = {
+    0:                  'transparent',
+    1:                  'yellow',
+    utils.CLASS_IDS['1M-Mx']: 'blue',
+    utils.CLASS_IDS['1M-Qt']: 'magenta',
+    utils.CLASS_IDS['2M-Mx']: 'cyan',
+    utils.CLASS_IDS['2M-Qt']: 'red',
+    utils.CLASS_IDS['3M-Qt']: 'orange',
+    utils.CLASS_IDS['1M-Tm']: 'green',
+}
+
+# color_cycle = [c for c in class_colors.values()]
+
+color_cycle = []
+for i in sorted(class_colors.keys()):
+    col = class_colors[i]
+    color_cycle.append(col)
+
+
+skimage_color_cycle = color_cycle.copy()[1:]
+
+
+
 segmenter_urls = {
     'unet_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts',
 
@@ -103,17 +128,22 @@ classifier_urls = {
 model_urls = {**segmenter_urls, **classifier_urls}
 
 
+@lru_cache()
 def get_model(variant: str) -> torch.jit.ScriptModule:
-    if variant not in model_urls.keys():
-        raise ValueError(f'Model variant {variant} not found. Valid choices are: {list(model_urls.keys())}')
-    url = model_urls[variant]
-    local_path = ub.grabdata(url, appname='emcaps')
+    if variant in model_urls.keys():
+        url = model_urls[variant]
+        local_path = ub.grabdata(url, appname='emcaps')
+    else:
+        if (p := Path(variant).expanduser()).is_file():
+            local_path = variant
+        else:
+            raise ValueError(f'Model variant {variant} not found. Valid choices are existing file paths or the following variant short names:\n{list(model_urls.keys())}')
     model = load_torchscript_model(local_path)
     return model
 
 
 def load_torchscript_model(path: str) -> torch.jit.ScriptModule:
-    model = torch.jit.load(path, map_location=device).eval().to(DTYPE)
+    model = torch.jit.load(path, map_location=DEVICE).eval().to(DTYPE)
     model = torch.jit.optimize_for_inference(model)
     return model
 
@@ -128,7 +158,7 @@ def normalize(image: np.ndarray) -> np.ndarray:
 def segment(image: np.ndarray, thresh: float, segmenter_variant: str) -> np.ndarray:
     # return image > 0.9
     seg_model = get_model(segmenter_variant)
-    img = torch.from_numpy(image)[None, None].to(DTYPE)
+    img = torch.from_numpy(image)[None, None].to(device=DEVICE, dtype=DTYPE)
     with torch.inference_mode():
         out = seg_model(img)
         # pred = torch.argmax(out, dim=1)
@@ -168,10 +198,7 @@ def check_image(img, normalized=False, shape=None):
         raise ImageError(f'{img.shape=}, but expected {shape}')
 
 
-CLASS_IDS_TO_EXCLUDE = (0, 1)
-
-
-def classify_patch(patch, classifier_variant, class_ids_to_exlude=CLASS_IDS_TO_EXCLUDE):
+def classify_patch(patch, classifier_variant, class_ids_to_exlude=(0, 1)):
 
     inp = normalize(patch)
     check_image(inp, normalized=True)
@@ -183,7 +210,7 @@ def classify_patch(patch, classifier_variant, class_ids_to_exlude=CLASS_IDS_TO_E
     # fn = '/tmp/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
     # iio.imwrite(fn, np.uint8(inp * 128 + 128))
 
-    inp = torch.from_numpy(inp)[None, None]
+    inp = torch.from_numpy(inp)[None, None].to(device=DEVICE, dtype=DTYPE)
     with torch.inference_mode():
         out = classifier_model(inp)
         out = torch.softmax(out, 1)
@@ -199,7 +226,7 @@ def compute_rprops(
     lab,
     classifier_variant,
     minsize=150,
-    maxsize=None,
+    maxsize=1000,
     noborder=False,
     min_circularity=0.8,
     inplace_relabel=False,

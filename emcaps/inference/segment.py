@@ -30,7 +30,8 @@ from elektronn3.data import transforms
 
 
 from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
-
+from emcaps.utils import inference_utils as iu
+from emcaps import utils
 
 # torch.backends.cudnn.benchmark = True
 
@@ -93,6 +94,7 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
         # 'error_maps',
         'probmaps',
         # 'metrics',
+        'cls_overlays'
     ]
 
     label_name = 'encapsulins'
@@ -110,6 +112,8 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
             'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
         }
         model_path = _model_paths['all']
+    
+    classifier_path = 'effnet_s_hek_v7'  # TODO: Update with path
 
     modelname = os.path.basename(os.path.dirname(model_path))
 
@@ -225,6 +229,20 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
                 if not ZERO_LABELS:
                     iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
+
+            if 'cls_overlays' in DESIRED_OUTPUTS:
+                rprops, cls_relabeled = iu.compute_rprops(
+                    image=raw_img,
+                    lab=cout > 0,
+                    classifier_variant=classifier_path,
+                    return_relabeled_seg=True
+                )
+                # TODO: Is this getting the colorization right? Everything looks suspiciously yellow...
+                cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+                iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
+                cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+                iio.imwrite(eu(f'{results_path}/{basename}_cls.png'), cls)
+
 
             if 'error_maps' in DESIRED_OUTPUTS:
                 # Create error image

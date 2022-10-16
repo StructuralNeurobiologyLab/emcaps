@@ -89,8 +89,8 @@ pre_predict_transform = transforms.Compose([
     transforms.Normalize(mean=dataset_mean, std=dataset_std)
 ])
 
-# thresh = 100  # slightly lower than 50%
-thresh = 140  # slightly higher than 50%
+thresh = 100  # slightly lower than 50%
+# thresh = 80  # even lower
 
 N_EVAL_SAMPLES = 30
 

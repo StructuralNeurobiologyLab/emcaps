@@ -63,43 +63,12 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
 # TODO: Determine color map in class_info.yaml
-
-class_colors = {
-    0:                  'transparent',
-    1:                  'yellow',
-    CLASS_IDS['1M-Mx']: 'blue',
-    CLASS_IDS['1M-Qt']: 'magenta',
-    CLASS_IDS['2M-Mx']: 'cyan',
-    CLASS_IDS['2M-Qt']: 'red',
-    CLASS_IDS['3M-Qt']: 'orange',
-    CLASS_IDS['1M-Tm']: 'green',
-}
-
-# color_cycle = [c for c in class_colors.values()]
-
-color_cycle = []
-colormap_data = []
-for i in sorted(class_colors.keys()):
-    col = class_colors[i]
-    color_cycle.append(col)
-    rgba = color_dict_rgba[col]
-    colormap_data.append(rgba)
-
-colormap_data = np.stack(colormap_data) * 0
-
-napcolormap = napari.utils.Colormap(colors=colormap_data, display_name='cls_colors', interpolation='zero')
-
-skimage_color_cycle = color_cycle.copy()[1:]
-
-# skimage_color_cycle[0] = 'black'
+from emcaps.utils.inference_utils import class_colors, skimage_color_cycle
 
 print(class_colors)
-# print(color_cycle)
 print(skimage_color_cycle)
 
 _global_state = {}
-
-class_colors = class_colors
 
 
 # TODO: Support invalidation for low-confidence predictions
