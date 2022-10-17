@@ -41,7 +41,7 @@ def write_tiff(path, img):
     iio.imwrite(uri=path, image=img, plugin='pillow')
 
 
-def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_path=None):
+def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmenter_path=None, classifier_path=None):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Running on device: {device}')
@@ -105,17 +105,18 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
         p.mkdir(exist_ok=True)
 
 
-    if model_path is None:
-        _model_paths = {
+    if segmenter_path is None:
+        _segmenter_paths = {
             'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
             'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
             'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
         }
-        model_path = _model_paths['all']
+        segmenter_path = _segmenter_paths['all']
     
-    classifier_path = 'effnet_s_hek_v7'  # TODO: Update with path
+    if classifier_path is None:
+        classifier_path = 'effnet_s_hek_v7'  # TODO: Update with path
 
-    modelname = os.path.basename(os.path.dirname(model_path))
+    segmodelname = os.path.basename(os.path.dirname(segmenter_path))
 
     if enable_tiled_inference:
         tile_shape = (448, 448)
@@ -129,7 +130,7 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
 
     apply_softmax = True
     predictor = Predictor(
-        model=model_path,
+        model=segmenter_path,
         device=device,
         tile_shape=tile_shape,
         overlap_shape=overlap_shape,
@@ -237,7 +238,6 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, model_pa
                     classifier_variant=classifier_path,
                     return_relabeled_seg=True
                 )
-                # TODO: Is this getting the colorization right? Everything looks suspiciously yellow...
                 cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
                 cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
@@ -341,7 +341,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('srcpath', help='Path to input file', default=None)
-    parser.add_argument('--model', help='Path to model file', default=None)
+    parser.add_argument('--segmenter', help='Path to segmentation model file', default=None)
+    parser.add_argument('--classifier', help='Path to classifier model file', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('--minsize', default=150, type=int, help='Minimum size of segmented particles in pixels')
     parser.add_argument('-a', type=int, default=2, choices=[0, 1, 2], help='Number of test-time augmentations to use')
@@ -351,6 +352,7 @@ if __name__ == '__main__':
     enable_tiled_inference = args.t
     minsize = args.minsize
     srcpath = os.path.expanduser(args.srcpath) if args.srcpath is not None else None
-    model_path = args.model
+    segmenter_path = args.segmenter
+    classifier_path = args.classifier
 
-    main(srcpath=srcpath, tta_num=tta_num, enable_tiled_inference=enable_tiled_inference, minsize=minsize, model_path=model_path)
+    main(srcpath=srcpath, tta_num=tta_num, enable_tiled_inference=enable_tiled_inference, minsize=minsize, segmenter_path=segmenter_path, classifier_path=classifier_path)

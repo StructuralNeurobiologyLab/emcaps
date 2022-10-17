@@ -30,7 +30,7 @@ from elektronn3.data import transforms
 
 from emcaps import utils
 from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
-
+from emcaps.utils import inference_utils as iu
 
 # torch.backends.cudnn.benchmark = True
 
@@ -115,7 +115,8 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='Run inference with a trained network.')
     parser.add_argument('--srcpath', help='Path to input file', default=None)
-    parser.add_argument('--model', help='Path to model file', default=None)
+    parser.add_argument('--segmenter', help='Path to segmentation model file', default=None)
+    parser.add_argument('--classifier', help='Path to classifier model file', default=None)
     parser.add_argument('-s', help='Traing setting (for auto model selection)', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
@@ -128,6 +129,9 @@ def main():
     tta_num = args.a
     srcpath = None
     tr_setting = args.s
+    segmenter_path = args.segmenter
+    classifier_path = args.classifier
+
 
     """
     for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
@@ -200,6 +204,7 @@ def main():
         'error_maps',
         'probmaps',
         'metrics',
+        # 'cls_overlays'
     ]
 
     label_name = 'encapsulins'
@@ -210,8 +215,8 @@ def main():
         def forward(self, x):
             return torch.rand(x.shape[0], 2, *x.shape[2:])
 
-    if args.model is None:
-        model_dict = {
+    if segmenter_path is None:
+        segmenter_dict = {
             'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
             'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
             'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
@@ -223,10 +228,13 @@ def main():
             'all_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_all__UNet__22-09-24_03-33-19/model_step160000.pts',
             'hek_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_hek__UNet__22-09-24_03-34-32/model_step160000.pts',
         }
-        model_paths = [model_dict[tr_setting]]
-        # model_paths = [Randomizer()]  # produce random outputs instead
+        segmenter_paths = [segmenter_dict[tr_setting]]
+        # segmenter_paths = [Randomizer()]  # produce random outputs instead
     else:
-        model_paths = [args.model]
+        segmenter_paths = [segmenter_path]
+
+    if classifier_path is None:
+        classifier_path = 'effnet_s_hek_v7'  # TODO: Update with path
 
     assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
     for model_path in model_paths:
@@ -347,6 +355,18 @@ def main():
                     if not ZERO_LABELS:
                         iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
                     iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
+
+                if 'cls_overlays' in DESIRED_OUTPUTS:
+                    rprops, cls_relabeled = iu.compute_rprops(
+                        image=raw_img,
+                        lab=cout > 0,
+                        classifier_variant=classifier_path,
+                        return_relabeled_seg=True
+                    )
+                    cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+                    iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
+                    cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+                    iio.imwrite(eu(f'{results_path}/{basename}_cls.png'), cls)
 
                 if 'error_maps' in DESIRED_OUTPUTS:
                     # Create error image

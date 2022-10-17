@@ -99,6 +99,8 @@ skimage_color_cycle = color_cycle.copy()[1:]
 
 
 
+
+
 segmenter_urls = {
     'unet_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts',
 
@@ -271,7 +273,7 @@ def compute_rprops(
     }
 
     if return_relabeled_seg:
-        relabeled = lab.copy()
+        relabeled = lab.astype(np.uint8)
 
     for i, rp in enumerate(tqdm.tqdm(rprops, position=1, leave=True, desc='Analyzing regions', dynamic_ncols=True)):
         is_invalid = False
