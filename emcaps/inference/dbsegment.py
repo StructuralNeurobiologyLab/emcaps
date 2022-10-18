@@ -32,10 +32,10 @@ from emcaps import utils
 from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
 from emcaps.utils import inference_utils as iu
 
-# torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.benchmark = True
 
 
-def produce_metrics(thresh, results_root, model_path, data_selection, m_targets, m_preds, m_probs):
+def produce_metrics(thresh, results_root, segmenter_path, classifier_path, data_selection, m_targets, m_preds, m_probs):
     # Calculate pixelwise precision and recall
     # if m_targets.max() < 1:
     #     import IPython ; IPython.embed(); raise SystemExit
@@ -79,7 +79,8 @@ def produce_metrics(thresh, results_root, model_path, data_selection, m_targets,
 - X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
 Info:
 - data: {data_selection}
-- model: {model_path}
+- segmenter: {segmenter_path}
+- classifier: {classifier_path}
 - thresh: {thresh}
 - IoU: {iou * 100:.1f}%
 - DSC: {dsc * 100:.1f}%
@@ -117,6 +118,7 @@ def main():
     parser.add_argument('--srcpath', help='Path to input file', default=None)
     parser.add_argument('--segmenter', help='Path to segmentation model file', default=None)
     parser.add_argument('--classifier', help='Path to classifier model file', default=None)
+    parser.add_argument('--minsize', default=60, type=int, help='Minimum size of segmented particles in pixels')
     parser.add_argument('-s', help='Traing setting (for auto model selection)', default=None)
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
     parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
@@ -127,6 +129,7 @@ def main():
     selected_enctype = args.constraintype
     use_expert = args.use_expert
     tta_num = args.a
+    minsize = args.minsize
     srcpath = None
     tr_setting = args.s
     segmenter_path = args.segmenter
@@ -165,7 +168,7 @@ def main():
             included = []
             for cgrp in class_groups_to_include:
                 cgrp_classes = utils.CLASS_GROUPS[cgrp]
-                print(f'Including class group {cgrp} containing classes {cgrp_classes}')
+                print(f'Including class group {cgrp}, containing classes {cgrp_classes}')
                 included.extend(cgrp_classes)
             DATA_SELECTION_V5NAMES = included
         else:
@@ -216,17 +219,20 @@ def main():
             return torch.rand(x.shape[0], 2, *x.shape[2:])
 
     if segmenter_path is None:
+        # segmenter_dict = {
+        #     'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
+        #     'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
+        #     'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
+        #     'qttm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_qttm__UNet__22-10-05_04-25-24/model_step240000.pts',
+
+        #     'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/MICE_2M-Qt_GA_mice__UNet__22-09-24_03-26-43/model_step240000.pts',
+
+        #     'onlytm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step40000.pts',
+        #     'all_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_all__UNet__22-09-24_03-33-19/model_step160000.pts',
+        #     'hek_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_hek__UNet__22-09-24_03-34-32/model_step160000.pts',
+        # }
         segmenter_dict = {
-            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
-            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
-            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
-            'qttm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_qttm__UNet__22-10-05_04-25-24/model_step240000.pts',
-
-            'mice': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10/MICE_2M-Qt_GA_mice__UNet__22-09-24_03-26-43/model_step240000.pts',
-
-            'onlytm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step40000.pts',
-            'all_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_all__UNet__22-09-24_03-33-19/model_step160000.pts',
-            'hek_notm': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_notm/GA_notm_hek__UNet__22-09-24_03-34-32/model_step160000.pts',
+            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA_lrdec99__UNet__22-10-15_20-29-15/model_step240000.pts'
         }
         segmenter_paths = [segmenter_dict[tr_setting]]
         # segmenter_paths = [Randomizer()]  # produce random outputs instead
@@ -234,11 +240,15 @@ def main():
         segmenter_paths = [segmenter_path]
 
     if classifier_path is None:
-        classifier_path = 'effnet_s_hek_v7'  # TODO: Update with path
+        classifier_path = 'effnet_hek_s_v7'  # TODO: Update with path
 
-    assert len(model_paths) == 1, 'Currently only one model is supported per inference run'
-    for model_path in model_paths:
-        modelname = os.path.basename(os.path.dirname(model_path))
+    if not 'cls_overlays' in DESIRED_OUTPUTS:
+        # Classifier not required, so we disable it and don't reference it
+        classifier_path = ''
+
+    assert len(segmenter_paths) == 1, 'Currently only one model is supported per inference run'
+    for segmenter_path in segmenter_paths:
+        # segmentername = os.path.basename(os.path.dirname(segmenter_path))
 
         if args.t:
             tile_shape = (448, 448)
@@ -253,7 +263,7 @@ def main():
 
         apply_softmax = True
         predictor = Predictor(
-            model=model_path,
+            model=segmenter_path,
             device=None,
             tile_shape=tile_shape,
             overlap_shape=overlap_shape,
@@ -303,13 +313,13 @@ def main():
                     kind = f'dtthresh{dt_thresh}'
 
                 # Postprocessing:
-                # cout = sm.remove_small_holes(cout, 2000)
-                # cout = sm.remove_small_objects(cout, 100)
+                cout = sm.remove_small_holes(cout, 2000)
+                cout = sm.remove_small_objects(cout, minsize)
 
                 # Make iio.imwrite-able
                 cout = cout.astype(np.uint8) * 255
 
-                # out_path = eu(f'{results_path}/{basename}_{modelname}_{kind}.png')
+                # out_path = eu(f'{results_path}/{basename}_{segmentername}_{kind}.png')
                 out_path = eu(f'{results_path}/{basename}_{kind}.png')
                 print(f'Writing inference result to {out_path}')
                 if 'thresh' in DESIRED_OUTPUTS:
@@ -421,7 +431,8 @@ def main():
             global_metrics_dict = produce_metrics(
                 thresh=thresh,
                 results_root=results_root,
-                model_path=model_path,
+                segmenter_path=segmenter_path,
+                classifier_path=classifier_path,
                 data_selection=DATA_SELECTION_V5NAMES,
                 m_targets=m_targets,
                 m_preds=m_preds,
@@ -434,7 +445,8 @@ def main():
                     enctype_metrics_dict = produce_metrics(
                         thresh=thresh,
                         results_root=results_root / enctype,
-                        model_path=model_path,
+                        segmenter_path=segmenter_path,
+                        classifier_path=classifier_path,
                         data_selection=[enctype],
                         m_targets=per_enctype_results[enctype]['targets'],
                         m_preds=per_enctype_results[enctype]['preds'],

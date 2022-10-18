@@ -26,7 +26,7 @@ class_ids_v5:
 
 
 class_colors:
-  invalid: yellow
+  default: yellow
   1M-Mx:   blue
   2M-Mx:   cyan
   1M-Qt:   magenta

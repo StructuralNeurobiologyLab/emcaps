@@ -41,7 +41,7 @@ def write_tiff(path, img):
     iio.imwrite(uri=path, image=img, plugin='pillow')
 
 
-def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmenter_path=None, classifier_path=None):
+def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=60, segmenter_path=None, classifier_path=None):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Running on device: {device}')
@@ -93,7 +93,6 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmente
         'overlays',
         # 'error_maps',
         'probmaps',
-        # 'metrics',
         'cls_overlays'
     ]
 
@@ -107,16 +106,12 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmente
 
     if segmenter_path is None:
         _segmenter_paths = {
-            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_all_dec98__UNet__22-10-05_04-22-48/model_step240000.pts',
-            'hek': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_hek_dec98__UNet__22-10-05_04-24-22/model_step240000.pts',
-            'dro': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10b/GA_dro__UNet__22-10-05_04-26-13/model_step240000.pts',
+            'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA_lrdec99__UNet__22-10-15_20-29-15/model_step240000.pts',
         }
         segmenter_path = _segmenter_paths['all']
     
     if classifier_path is None:
         classifier_path = 'effnet_s_hek_v7'  # TODO: Update with path
-
-    segmodelname = os.path.basename(os.path.dirname(segmenter_path))
 
     if enable_tiled_inference:
         tile_shape = (448, 448)
@@ -141,9 +136,6 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmente
         augmentations=tta_num,
         apply_softmax=apply_softmax,
     )
-    m_targets = []
-    m_probs = []
-    m_preds = []
     for img_path in img_paths:
         inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         out = predictor.predict(inp)
@@ -271,10 +263,6 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmente
                 iio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)
 
 
-            m_targets.append((lab_img > 0))#.reshape(-1))
-            m_preds.append((cout > 0))#.reshape(-1))
-            m_probs.append(out[0, 1])#.reshape(-1))
-
             if 'argmax' in DESIRED_OUTPUTS:
                 # Argmax of channel probs
                 pred = np.argmax(out, 1)[0]
@@ -283,59 +271,6 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=150, segmente
                 out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.png')
                 iio.imwrite(out_path, plab)
 
-    if 'metrics' in DESIRED_OUTPUTS:
-        # Calculate pixelwise precision and recall
-        m_targets = np.concatenate(m_targets, axis=None)
-        m_probs = np.concatenate(m_probs, axis=None)
-        m_preds = np.concatenate(m_preds, axis=None)
-        iou = sme.jaccard_score(m_targets, m_preds)  # iou == jaccard score
-        dsc = sme.f1_score(m_targets, m_preds)  # dsc == f1 score
-        precision = sme.precision_score(m_targets, m_preds)
-        recall = sme.recall_score(m_targets, m_preds)
-        # Plot pixelwise PR curve
-        p, r, t = sme.precision_recall_curve(m_targets, m_probs)
-        plt.figure(figsize=(3, 3))
-        np.savez_compressed('prdata.npy', p,r,t)
-        plt.plot(r, p)
-        plt.xlabel('Recall')
-        plt.ylabel('Precision')
-        plt.minorticks_on()
-        plt.grid(True, 'both')
-
-        # Get index of pr-curve's threshold that's nearest to the one used in practice for this segmentation
-        _i = np.abs(t - thresh/255).argmin()
-        plt.scatter(r[_i], p[_i])
-        # plt.annotate(f'(r={r[_i]:.2f}, p={p[_i]:.2f})', (r[_i] - 0.6, p[_i] - 0.2))
-
-        plt.tight_layout()
-        plt.savefig(eu(f'{results_root}/prcurve.pdf'), dpi=300)
-        
-        with open(eu(f'{results_root}/info.txt'), 'w') as f:
-            f.write(
-f"""Output description:
-- X_raw.jpg: raw image (image number X from the shared dataset)
-- X_probmap.jpg: raw softmax pseudo-probability outputs (before thresholding).
-- X_thresh.png: binary segmentation map, obtained by neural network with standard threshold 127/255 (i.e. ~ 50% confidence)
-- X_overlay_lab.jpg: given GT label annotations, overlayed on raw image
-- X_overlay_pred.jpg: prediction by the neural network, overlayed on raw image
-- X_fn_error.jpg: map of false negative predictions w.r.t. GT labels
-- X_fp_error.jpg: map of false positive predictions w.r.t. GT labels
-- X_fn_error_overlay.jpg: map of false negative predictions w.r.t. GT labels, overlayed on raw image
-- X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
-
-
-Model info:
-- model: {model_path}
-- thresh: {thresh}
-
-- IoU: {iou * 100:.1f}%
-- DSC: {dsc * 100:.1f}%
-- precision: {precision * 100:.1f}%
-- recall: {recall * 100:.1f}%
-"""
-            )
-
-
 
 if __name__ == '__main__':
 
@@ -343,8 +278,8 @@ if __name__ == '__main__':
     parser.add_argument('srcpath', help='Path to input file', default=None)
     parser.add_argument('--segmenter', help='Path to segmentation model file', default=None)
     parser.add_argument('--classifier', help='Path to classifier model file', default=None)
+    parser.add_argument('--minsize', default=60, type=int, help='Minimum size of segmented particles in pixels')
     parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
-    parser.add_argument('--minsize', default=150, type=int, help='Minimum size of segmented particles in pixels')
     parser.add_argument('-a', type=int, default=2, choices=[0, 1, 2], help='Number of test-time augmentations to use')
     args = parser.parse_args()
 

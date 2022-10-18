@@ -105,7 +105,7 @@ EC_REGION_RADIUS = 24
 # Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
 EC_REGION_ODD_PLUS1 = 1
 
-EC_MIN_AREA = 150
+EC_MIN_AREA = 60
 EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
 
 
@@ -146,13 +146,15 @@ for lp in isplitdata_root.rglob('*_encapsulins.png'):
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10d_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
-patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v13_dr{DILATE_MASKS_BY}_t{thresh}')
+patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v13_dr{DILATE_MASKS_BY}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'
+else:
+    patch_out_path = f'{patch_out_path}__t{thresh}'
 
 model_paths = eul([
-    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA___UNet__22-10-15_20-29-01/model_best.pts'
+    '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA_lrdec99__UNet__22-10-15_20-29-15/model_step240000.pts'
 ])
 
 # Create output directories
@@ -176,7 +178,7 @@ logger.info(f'Writing outputs to {patch_out_path}')
 included = []
 for cgrp in class_groups_to_include:
     cgrp_classes = utils.CLASS_GROUPS[cgrp]
-    logger.info(f'Including class group {cgrp} containing classes {cgrp_classes}')
+    logger.info(f'Including class group {cgrp}, containing classes {cgrp_classes}')
     included.extend(utils.CLASS_GROUPS[cgrp])
 DATA_SELECTION = included
 
@@ -229,6 +231,7 @@ for model_path in model_paths:
     )
 
     for img_path in tqdm.tqdm(img_paths, position=0, desc='Images', dynamic_ncols=True):
+        logger.debug(str(img_path))
 
         # TODO: Get info from path, load image, store train-test info
         

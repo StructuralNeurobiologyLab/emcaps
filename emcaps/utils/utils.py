@@ -72,6 +72,7 @@ OLD_CLASS_IDS = class_info['class_ids']  # Use v5 class names
 OLD_CLASS_NAMES = {v: k for k, v in OLD_CLASS_IDS.items()}
 OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
 V5NAMES_TO_OLDNAMES = {v: k for k, v in OLDNAMES_TO_V5NAMES.items()}
+CLASS_COLORS = class_info['class_colors']
 
 
 def render_skimage_overlay(img: Optional[np.ndarray], lab: np.ndarray, bg_label=0, alpha=0.5, **label2rgb_kwargs) -> np.ndarray:
@@ -190,11 +191,14 @@ def get_v5_enctype(path) -> str:
 @lru_cache(maxsize=1024)
 def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
     row = get_meta_row(path)
+    scondv5 = strip_host_prefix(row.scondv5)  # Don't care about organism
     v5_enctype = '?'
-    if row.scondv5 in CLASS_GROUPS['simple_hek'] or pos is None:
+    # if row.num == 199:
+        # import IPython ; IPython.embed(); raise SystemExit
+    if scondv5 in CLASS_GROUPS['simple_hek'] or pos is None:
         # If scondv5 is simple, the only enctype there can be scondv5 itself.
         # If no pos is supplied, just one type is expected (position-independent)
-        return row.scondv5
+        return scondv5
     else:  # Find specific enctype of encapsulin at position pos
         assert isplitdata_root is not None
         assert role is not None
@@ -204,14 +208,14 @@ def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=N
             elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)[role]
             if not elabs:  # Still nothing found
                 return '?'
-        else:  # Masks or labels found -> Get enctype at pos
-            # enctype_at_pos = row.scondv5
-            enctype_at_pos = '?'
-            for enctype, elab in elabs.items():
-                if elab[pos] > 0:
-                    enctype_at_pos = enctype
-                    break
-            v5_enctype = enctype_at_pos
+        # Masks or labels found -> Get enctype at pos
+        # enctype_at_pos = scondv5
+        enctype_at_pos = '?'
+        for enctype, elab in elabs.items():
+            if elab[pos] > 0:
+                enctype_at_pos = enctype
+                break
+        v5_enctype = enctype_at_pos
 
     # if 'G_1M-Tm' in v5_enctype or 'and' in v5_enctype:
     #     logger.error(f'FAIL: Deduced dual v5_enctype for one patch pos ({path=}, {pos=}, {isplitdata_root=}, {role=}')

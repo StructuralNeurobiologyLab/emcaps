@@ -87,16 +87,23 @@ class_colors = {
     utils.CLASS_IDS['1M-Tm']: 'green',
 }
 
-# color_cycle = [c for c in class_colors.values()]
-
 color_cycle = []
 for i in sorted(class_colors.keys()):
     col = class_colors[i]
     color_cycle.append(col)
 
-
 skimage_color_cycle = color_cycle.copy()[1:]
 
+
+# named_class_colors = utils.class_info['class_colors']
+# class_colors = {
+#     utils.CLASS_IDS.get(k, 1): v for k, v in named_class_colors.items()
+# }
+# color_cycle = []
+# for i in sorted(class_colors.keys()):
+#     col = class_colors[i]
+#     color_cycle.append(col)
+# skimage_color_cycle = color_cycle.copy()
 
 
 
@@ -137,7 +144,7 @@ def get_model(variant: str) -> torch.jit.ScriptModule:
         local_path = ub.grabdata(url, appname='emcaps')
     else:
         if (p := Path(variant).expanduser()).is_file():
-            local_path = variant
+            local_path = p
         else:
             raise ValueError(f'Model variant {variant} not found. Valid choices are existing file paths or the following variant short names:\n{list(model_urls.keys())}')
     model = load_torchscript_model(local_path)

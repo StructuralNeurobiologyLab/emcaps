@@ -145,7 +145,7 @@ if args.constraintype is None:
     included = []
     for cgrp in class_groups_to_include:
         cgrp_classes = utils.CLASS_GROUPS[cgrp]
-        logger.info(f'Including class group {cgrp} containing classes {cgrp_classes}')
+        logger.info(f'Including class group {cgrp}, containing classes {cgrp_classes}')
         included.extend(utils.CLASS_GROUPS[cgrp])
     DATA_SELECTION_V5NAMES = included
 else:
