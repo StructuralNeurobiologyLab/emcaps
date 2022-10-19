@@ -86,10 +86,13 @@ class EncPatchData(data.Dataset):
         self.targets = []
 
         for patch_meta in self.meta.itertuples():
-            inp = mimread(self.root_path / 'raw' / patch_meta.patch_fname)
+            inp = mimread(self.root_path / 'raw' / patch_meta.patch_fname).copy()
+            # cmax = mimread(self.root_path / 'cmax' / patch_meta.patch_fname.replace('raw', 'cmax')).copy()
+            # cavg = mimread(self.root_path / 'cavg' / patch_meta.patch_fname.replace('raw', 'cavg')).copy()
+
             if self.erase_mask_bg:
                 # Erase mask background from inputs
-                mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
+                mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask')).copy()
                 if self.dilate_masks_by > 0:
                     disk = sm.disk(self.dilate_masks_by)
                     # mask_patch = ndimage.binary_dilation(mask_patch, iterations=DILATE_MASKS_BY)
@@ -101,6 +104,8 @@ class EncPatchData(data.Dataset):
 
             # mask = mimread(self.root_path / 'mask' / patch_meta.patch_fname.replace('raw', 'mask'))
             # inp = mask * 255
+
+            # inp = np.stack((inp, cmax, cavg), axis=0)
 
             target = utils.CLASS_IDS[patch_meta.enctype]
             self.inps.append(inp)
@@ -122,7 +127,8 @@ class EncPatchData(data.Dataset):
         fname = self.meta.patch_fname.iloc[index]
         label_name = target
         fname = f'{fname} ({label_name})'
-        inp = inp[None]  # (C=1, H, W)
+        if inp.ndim == 2:
+            inp = inp[None]  # (C=1, H, W)
         # Pass None instead of target because scalar targets are not to be augmented.
         inp, _ = self.transform(inp, None)
         sample = {

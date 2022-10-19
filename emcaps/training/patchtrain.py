@@ -49,7 +49,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=80_001,
+    '-m', '--max-steps', type=int, default=120_001,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -102,19 +102,19 @@ if NEGATIVE_SAMPLING:
     # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-_dscr = 'v10c_tr-gt_ev-all_dr5__gt'
-descr_sheet = (os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_{_dscr}/patchmeta_traintest.xlsx'), 'Sheet1')
+_dscr = 'v13_dr5__t100'
+descr_sheet = (os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_{_dscr}/patchmeta_traintest.xlsx'), 'Sheet1')
 
-
+in_channels = 1
 out_channels = 8
 
 # model = effnetv2_s(in_c=1, num_classes=out_channels).to(device)
-model = effnetv2_m(in_c=1, num_classes=out_channels).to(device)
+model = effnetv2_m(in_c=in_channels, num_classes=out_channels).to(device)
 # model = effnetv2_l(in_c=1, num_classes=out_channels).to(device)
 
 
 # USER PATHS
-save_root = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patch_trainings_{_dscr}')
+save_root = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patch_trainings_{_dscr}')
 
 max_steps = args.max_steps
 lr = 1e-3
@@ -126,8 +126,8 @@ batch_size = 128
 if args.resume is not None:  # Load pretrained network params
     model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
 
-dataset_mean = (128.0,)
-dataset_std = (128.0,)
+dataset_mean = (128.0,) * in_channels
+dataset_std = (128.0,) * in_channels
 
 
 # Transformations to be applied to samples before feeding them to the network
@@ -148,20 +148,20 @@ train_transform = common_transforms + [
 
 valid_transform = common_transforms + []
 
-if True:
-    from emcaps.utils.patch_utils import get_radial_profile, concentric_average
+# if True:
+#     from emcaps.utils.patch_utils import get_radial_profile, concentric_average
 
-    def _avg(img, target):
-        return concentric_average(img=img[0])[None], target
+#     def _avg(img, target):
+#         return concentric_average(img=img[0])[None], target
 
-    def _prof(img, target):
-        return get_radial_profile(img[0])[None], target
+#     def _prof(img, target):
+#         return get_radial_profile(img[0])[None], target
 
-    # train_transform.append(_prof)
-    # valid_transform.append(_prof)
+#     # train_transform.append(_prof)
+#     # valid_transform.append(_prof)
 
-    train_transform.append(_avg)
-    valid_transform.append(_avg)
+#     train_transform.append(_avg)
+#     valid_transform.append(_avg)
 
 
 
@@ -275,7 +275,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=batch_size,
-    num_workers=8,
+    num_workers=16,
     save_root=save_root,
     exp_name=exp_name,
     inference_kwargs=inference_kwargs,
