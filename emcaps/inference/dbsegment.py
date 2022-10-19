@@ -14,6 +14,7 @@ import skimage
 import torch
 import yaml
 import pandas as pd
+import torch.backends.cudnn
 
 from skimage import morphology as sm
 from skimage.color import label2rgb
@@ -210,6 +211,16 @@ def main():
         # 'cls_overlays'
     ]
 
+    # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
+    allowed_classes_for_classification = [
+        '1M-Mx',
+        '1M-Qt',
+        '2M-Mx',
+        '2M-Qt',
+        '3M-Qt',
+        '1M-Tm',
+    ]
+
     label_name = 'encapsulins'
 
 
@@ -371,7 +382,8 @@ def main():
                         image=raw_img,
                         lab=cout > 0,
                         classifier_variant=classifier_path,
-                        return_relabeled_seg=True
+                        return_relabeled_seg=True,
+                        allowed_classes=allowed_classes_for_classification
                     )
                     cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
                     iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)

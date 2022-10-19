@@ -207,23 +207,24 @@ def check_image(img, normalized=False, shape=None):
         raise ImageError(f'{img.shape=}, but expected {shape}')
 
 
-def classify_patch(patch, classifier_variant, class_ids_to_exlude=(0, 1)):
+def classify_patch(patch, classifier_variant, allowed_classes=utils.CLASS_GROUPS['simple_hek']):
 
     inp = normalize(patch)
     check_image(inp, normalized=True)
 
     classifier_model = get_model(classifier_variant)
 
-    # import string
-    # import random
-    # fn = '/tmp/' + ''.join(random.choice(string.ascii_lowercase) for i in range(16)) + '.png'
-    # iio.imwrite(fn, np.uint8(inp * 128 + 128))
+    allowed_class_ids = [utils.CLASS_IDS[cn] for cn in allowed_classes]
 
     inp = torch.from_numpy(inp)[None, None].to(device=DEVICE, dtype=DTYPE)
     with torch.inference_mode():
         out = classifier_model(inp)
         out = torch.softmax(out, 1)
-        for c in class_ids_to_exlude:
+        # for c in range(out.shape[1]):
+        #     if not c in allowed_class_ids:
+        #         out[:, c] = 0.
+        excluded_class_ids = set(range(out.shape[1])) - set(allowed_class_ids)
+        for c in excluded_class_ids:
             out[:, c] = 0.
         pred = torch.argmax(out, dim=1)[0].item()
         # pred -= 2 #p2
@@ -239,7 +240,7 @@ def compute_rprops(
     noborder=False,
     min_circularity=0.8,
     inplace_relabel=False,
-    constrain_to_1MQt_and_1MMx=False,
+    allowed_classes=utils.CLASS_GROUPS['simple_hek'],
     return_relabeled_seg=False
 ):
 
@@ -350,12 +351,7 @@ def compute_rprops(
 
         check_image(nobg_patch, normalized=False, shape=PATCH_SHAPE)
 
-        if constrain_to_1MQt_and_1MMx:
-            class_ids_to_exclude = (0, 1, 4, 5, 6, 7)
-        else:
-            class_ids_to_exclude = (0, 1)
-
-        class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant, class_ids_to_exlude=class_ids_to_exclude)
+        class_id = classify_patch(patch=nobg_patch, classifier_variant=classifier_variant, allowed_classes=allowed_classes)
         class_name = utils.CLASS_NAMES[class_id]
 
         if not is_invalid:

@@ -11,6 +11,7 @@ import numpy as np
 import imageio.v3 as iio
 import skimage
 import torch
+import torch.backends.cudnn
 import yaml
 
 from skimage import morphology as sm
@@ -33,7 +34,7 @@ from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, c
 from emcaps.utils import inference_utils as iu
 from emcaps import utils
 
-# torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.benchmark = True
 
 
 def write_tiff(path, img):
@@ -94,6 +95,16 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=60, segmenter
         # 'error_maps',
         'probmaps',
         'cls_overlays'
+    ]
+
+    # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
+    allowed_classes_for_classification = [
+        '1M-Mx',
+        '1M-Qt',
+        '2M-Mx',
+        '2M-Qt',
+        '3M-Qt',
+        '1M-Tm',
     ]
 
     label_name = 'encapsulins'
@@ -228,7 +239,8 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=60, segmenter
                     image=raw_img,
                     lab=cout > 0,
                     classifier_variant=classifier_path,
-                    return_relabeled_seg=True
+                    return_relabeled_seg=True,
+                    allowed_classes=allowed_classes_for_classification
                 )
                 cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)

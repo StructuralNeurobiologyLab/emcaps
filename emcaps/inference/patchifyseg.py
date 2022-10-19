@@ -21,6 +21,7 @@ from PIL import Image, ImageDraw
 from scipy import ndimage
 from skimage import morphology as sm
 from skimage import measure
+import torch.backends.cudnn
 
 from elektronn3.inference import Predictor
 from elektronn3.data import transforms
@@ -77,6 +78,8 @@ def calculate_circularity(perimeter, area):
 
     return circularity
 
+
+torch.backends.cudnn.benchmark = True
 
 np.random.seed(0)
 
@@ -146,7 +149,7 @@ for lp in isplitdata_root.rglob('*_encapsulins.png'):
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
 # patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10d_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
-patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v13_dr{DILATE_MASKS_BY}')
+patch_out_path: str = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_v13_dr{DILATE_MASKS_BY}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'

@@ -153,11 +153,11 @@ def make_regions_widget(
     image: ImageData,
     labels: LabelsData,
     classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_m_all_v10c',
+    allowed_classes: Annotated[list[str], {'choices': utils.CLASS_GROUPS['simple_hek'], 'allow_multiple': True}] = utils.CLASS_GROUPS['simple_hek'],
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
     shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'none',
-    constrain_to_1MQt_and_1MMx: bool = False,
     inplace_relabel: bool = True,
     xlsx_output_path: str = get_default_xlsx_output_path(),
     # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
@@ -177,7 +177,7 @@ def make_regions_widget(
             maxsize=maxsize,
             min_circularity=mincircularity,
             inplace_relabel=inplace_relabel,
-            constrain_to_1MQt_and_1MMx=constrain_to_1MQt_and_1MMx,
+            allowed_classes=allowed_classes
         )
 
         nonlocal xlp
