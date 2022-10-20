@@ -376,12 +376,10 @@ def compute_rprops(
 
         # iio.imwrite('/tmp/nobg-{i:03d}.png', nobg_patch)
 
-    # print(rprops)
-    # print(epropdict)
     # Can only assign builtin props here
     propdict = _props_to_dict(
         rprops, properties=['label', 'bbox', 'perimeter', 'area', 'solidity', 'centroid']
-    )
+    ) if len(rprops) > 0 else {}
 
     propdict.update(epropdict)
 

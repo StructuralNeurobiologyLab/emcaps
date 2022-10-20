@@ -150,7 +150,8 @@ def main():
         tr_setting = 'all'
 
     if srcpath is None:
-        results_root = Path(f'/wholebrain/scratch/mdraw/tum/results_seg_v13_tr-{tr_setting}')
+        results_root = Path(f'/cajal/nvmescratch/users/mdraw/tum/results_seg_and_cls_v13_tr-{tr_setting}')
+        # results_root = Path(f'/cajal/nvmescratch/users/mdraw/tum/results_seg_and_cls_v13_tr-{tr_setting}_constrained_1M-Qt_and_1M-Tm')
         if selected_enctype is not None:
             msuffix = '_expert' if use_expert else ''
             results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
@@ -208,7 +209,7 @@ def main():
         'error_maps',
         'probmaps',
         'metrics',
-        # 'cls_overlays'
+        'cls_overlays'
     ]
 
     # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
@@ -251,7 +252,7 @@ def main():
         segmenter_paths = [segmenter_path]
 
     if classifier_path is None:
-        classifier_path = 'effnet_hek_s_v7'  # TODO: Update with path
+        classifier_path = '/cajal/nvmescratch/users/mdraw/tum/patch_trainings_v13_dr5__t100/erasemaskbg___EffNetV2__22-10-19_03-39-30/model_step80000.pts'
 
     if not 'cls_overlays' in DESIRED_OUTPUTS:
         # Classifier not required, so we disable it and don't reference it
