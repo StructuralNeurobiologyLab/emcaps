@@ -24,7 +24,7 @@ STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from outp
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v13'
+isplit_data_root = data_root / 'isplitdata_v14'
 if ONLY_TM:
     isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_onlytm')
 if NO_TM:

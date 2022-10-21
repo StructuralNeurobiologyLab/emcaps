@@ -88,7 +88,8 @@ def render_skimage_overlay(img: Optional[np.ndarray], lab: np.ndarray, bg_label=
 
 def get_path_prefix() -> Path:
     if os.getenv('CLUSTER') in ['WHOLEBRAIN', 'CAJAL']:
-        path_prefix = Path('/wholebrain/scratch/mdraw/tum/').expanduser()
+        # path_prefix = Path('/wholebrain/scratch/mdraw/tum/').expanduser()
+        path_prefix = Path('/cajal/nvmescratch/users/mdraw/tum/').expanduser()
     else:
         path_prefix = Path('~/tum/').expanduser()
     assert path_prefix.is_dir()
@@ -341,7 +342,7 @@ def strip_host_prefix(enctype: str, host_prefixes=('DRO-', 'MICE_')) -> str:
     return enctype
 
 
-def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False, no_tm=False):
+def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False, no_tm=False, invert_region_masks=True):
     metarow = get_meta_row(path_or_num=img_num, sheet_path=sheet_path)
 
     relevant_class_names = CLASS_NAMES.values()
@@ -413,6 +414,10 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
         for stem_pattern in [f'{raw_path.stem}_label_cell_{scond}']:
             if (reg_path := raw_path.with_stem(stem_pattern)).is_file():
                 reg_label = iio.imread(reg_path) > 0
+                if invert_region_masks:
+                    if not 'tif' in reg_path.suffix.lower():
+                        logger.warning(f'Applying TIFF-specific region mask inversion hack to image {reg_path}, but image is not TIFF.')
+                    reg_label = ~reg_label
                 reg_masks[scond] = reg_label
 
 

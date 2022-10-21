@@ -102,7 +102,7 @@ if NEGATIVE_SAMPLING:
     # descr_sheet = (os.path.expanduser('/wholebrain/scratch/mdraw/tum/patches_v2/patchmeta_traintest.xlsx'), 'Sheet1')
 
 
-_dscr = 'v13_dr5__t100'
+_dscr = 'v14_dr5__t100'
 descr_sheet = (os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_{_dscr}/patchmeta_traintest.xlsx'), 'Sheet1')
 
 in_channels = 1
@@ -184,7 +184,7 @@ valid_dataset = EncPatchData(
     descr_sheet=descr_sheet,
     train=False,
     transform=valid_transform,
-    epoch_multiplier=4 if NEGATIVE_SAMPLING else 30,
+    epoch_multiplier=4 if NEGATIVE_SAMPLING else 10,
     erase_mask_bg=ERASE_MASK_BG,
     erase_disk_mask_radius=ERASE_DISK_MASK_RADIUS,
 )

@@ -90,25 +90,6 @@ def get_default_overlay_output_path() -> str:
     return default_path
 
 
-
-def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
-    xlsx_out_path = xlsx_out_path.expanduser()
-    # Create a dataframe from properties for saving to an .xlsx file
-    propframe = pd.DataFrame(properties)
-    propframe = propframe.round(2)  # Round every float entry to 2 decimal places
-    propframe.rename(columns={'label': 'region_id'}, inplace=True)  # Rename misleading column for conn. comp. id
-    # Select and reorder columns of interest
-    selected_columns = ['region_id'] +\
-                       ['class_id', 'class_name'] +\
-                       ['area', 'radius2'] +\
-                       [f'centroid-{i}' for i in range(2)] +\
-                       [f'bbox-{i}' for i in range(4)]
-    propframe = propframe[selected_columns]
-    logger.info(f'Writing output to {xlsx_out_path}')
-    # Save to spreadsheet
-    propframe.to_excel(xlsx_out_path, sheet_name='emcaps-regions', index=False)
-
-
 # TODO: Support optional tiling
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Segmenting...'})
 def make_seg_widget(
@@ -184,7 +165,7 @@ def make_regions_widget(
         # Save region info to .xlsx file
         if not isinstance(xlp, Path):
             xlp = Path(xlp)
-        save_properties_to_xlsx(properties=properties, xlsx_out_path=xlp)
+        iu.save_properties_to_xlsx(properties=properties, xlsx_out_path=xlp)
 
         # If inplace_relabel is true, this has modified the labels from the
         # caller in place without napari suspecting anything, so we'll refresh manually

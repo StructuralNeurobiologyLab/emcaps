@@ -136,8 +136,8 @@ class_groups_to_include = [
 ]
 
 # root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
-sheet_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
-isplitdata_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v13/')
+sheet_path = Path('/cajal/nvmescratch/users/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
+isplitdata_root = Path('/cajal/nvmescratch/users/mdraw/tum/Single-table_database/isplitdata_v14/')
 
 
 
@@ -148,8 +148,7 @@ for lp in isplitdata_root.rglob('*_encapsulins.png'):
     img_paths.append(img_path)
 
 _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
-# patch_out_path: str = os.path.expanduser(f'/wholebrain/scratch/mdraw/tum/patches_v10d_tr-gt_ev-all_dr{DILATE_MASKS_BY}')
-patch_out_path: str = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_v13_dr{DILATE_MASKS_BY}')
+patch_out_path: str = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_v14_dr{DILATE_MASKS_BY}')
 
 if USE_GT:
     patch_out_path = f'{patch_out_path}__gt'
@@ -365,13 +364,13 @@ for model_path in model_paths:
 
             # # Concentric average image
             cavg_patch = concentric_average(raw_patch)
-            cmax_patch = concentric_max(raw_patch)
+            # cmax_patch = concentric_max(raw_patch)
 
             raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:06d}.png'
             mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:06d}.png'
             nobg_patch_fname = f'{patch_out_path}/nobg/nobg_patch_{patch_id:06d}.png'
             cavg_patch_fname = f'{patch_out_path}/cavg/cavg_patch_{patch_id:06d}.png'
-            cmax_patch_fname = f'{patch_out_path}/cmax/cmax_patch_{patch_id:06d}.png'
+            # cmax_patch_fname = f'{patch_out_path}/cmax/cmax_patch_{patch_id:06d}.png'
 
             patchmeta.append(PatchMeta(
                 # patch_id=patch_id,
@@ -395,7 +394,7 @@ for model_path in model_paths:
             iio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
             iio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
             iio.imwrite(cavg_patch_fname, cavg_patch.astype(np.uint8))
-            iio.imwrite(cmax_patch_fname, cmax_patch.astype(np.uint8))
+            # iio.imwrite(cmax_patch_fname, cmax_patch.astype(np.uint8))
             patch_id += 1
 
 

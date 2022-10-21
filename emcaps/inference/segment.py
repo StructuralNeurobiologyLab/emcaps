@@ -247,6 +247,7 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=60, segmenter
                 cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
                 iio.imwrite(eu(f'{results_path}/{basename}_cls.png'), cls)
 
+                iu.save_properties_to_xlsx(properties=rprops, xlsx_out_path=results_path / f'{basename}_cls_table.xlsx')
 
             if 'error_maps' in DESIRED_OUTPUTS:
                 # Create error image
