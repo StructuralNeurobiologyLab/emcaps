@@ -149,9 +149,24 @@ def main():
     if tr_setting is None:
         tr_setting = 'all'
 
+    # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
+    allowed_classes_for_classification = [
+        '1M-Mx',
+        '1M-Qt',
+        '2M-Mx',
+        '2M-Qt',
+        '3M-Qt',
+        '1M-Tm',
+    ]
+
+    constraint_signature = ''  # Unconstrained
+    if allowed_classes_for_classification != utils.CLASS_GROUPS['simple_hek']:
+        constraint_signature = '_constrained'
+        for ac in allowed_classes_for_classification:
+            constraint_signature = f'{constraint_signature}_{ac}'
+
     if srcpath is None:
-        results_root = Path(f'/cajal/nvmescratch/users/mdraw/tum/results_seg_and_cls_v13_tr-{tr_setting}')
-        # results_root = Path(f'/cajal/nvmescratch/users/mdraw/tum/results_seg_and_cls_v13_tr-{tr_setting}_constrained_1M-Qt_and_1M-Tm')
+        results_root = Path(f'/cajal/nvmescratch/users/mdraw/tum/results_seg_and_cls_v14_tr-{tr_setting}{constraint_signature}')
         if selected_enctype is not None:
             msuffix = '_expert' if use_expert else ''
             results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
@@ -212,16 +227,6 @@ def main():
         'cls_overlays'
     ]
 
-    # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
-    allowed_classes_for_classification = [
-        '1M-Mx',
-        '1M-Qt',
-        '2M-Mx',
-        '2M-Qt',
-        '3M-Qt',
-        '1M-Tm',
-    ]
-
     label_name = 'encapsulins'
 
 
@@ -252,7 +257,7 @@ def main():
         segmenter_paths = [segmenter_path]
 
     if classifier_path is None:
-        classifier_path = '/cajal/nvmescratch/users/mdraw/tum/patch_trainings_v13_dr5__t100/erasemaskbg___EffNetV2__22-10-19_03-39-30/model_step80000.pts'
+        classifier_path = '/cajal/nvmescratch/users/mdraw/tum/patch_trainings_v14_dr5__t100/erasemaskbg___EffNetV2__22-10-21_02-44-53/model_step120000.pts'
 
     if not 'cls_overlays' in DESIRED_OUTPUTS:
         # Classifier not required, so we disable it and don't reference it

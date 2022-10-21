@@ -122,7 +122,7 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=60, segmenter
         segmenter_path = _segmenter_paths['all']
     
     if classifier_path is None:
-        classifier_path = '/cajal/nvmescratch/users/mdraw/tum/patch_trainings_v13_dr5__t100/erasemaskbg___EffNetV2__22-10-19_03-39-30/model_step80000.pts'
+        classifier_path = '/cajal/nvmescratch/users/mdraw/tum/patch_trainings_v14_dr5__t100/erasemaskbg___EffNetV2__22-10-21_02-44-53/model_step120000.pts'
 
     if enable_tiled_inference:
         tile_shape = (448, 448)

@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 import tqdm
 import ubelt as ub
@@ -396,6 +397,9 @@ def compute_rprops(
 
 
 def save_properties_to_xlsx(properties: dict, xlsx_out_path: Path) -> None:
+    if not properties or properties['class_id'].size == 0:
+        logger.debug('properties empty -> not saving .xlsx file')
+        return
     xlsx_out_path = xlsx_out_path.expanduser()
     # Create a dataframe from properties for saving to an .xlsx file
     propframe = pd.DataFrame(properties)
