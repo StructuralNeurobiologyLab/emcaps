@@ -110,6 +110,8 @@ skimage_color_cycle = color_cycle.copy()[1:]
 
 
 segmenter_urls = {
+    'unet_all_v13': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v13_all_240k.pts',
+
     'unet_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts',
 
     'unet_all_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_200k.pts',
@@ -128,6 +130,8 @@ segmenter_urls = {
     'unet_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_dro_160k.pts',
 }
 classifier_urls = {
+    'effnet_m_all_v14': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v14_all_120k.pts',
+
     'effnet_m_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v10c_all_80k.pts',
 
     'effnet_m_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_hek_80k.pts',
