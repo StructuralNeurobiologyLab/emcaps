@@ -5,6 +5,7 @@ import os
 from os.path import expanduser as eu
 from pathlib import Path
 from typing import Tuple, List
+from enum import Enum, auto
 
 import tqdm
 import imageio.v3 as iio
@@ -24,7 +25,7 @@ STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from outp
 path_prefix = get_path_prefix()
 data_root = path_prefix / 'Single-table_database'
 # Image based split
-isplit_data_root = data_root / 'isplitdata_v14'
+isplit_data_root = data_root / 'isplitdata_v15'
 if ONLY_TM:
     isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_onlytm')
 if NO_TM:
@@ -44,27 +45,28 @@ fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
 # Split definition constants
-HORIZONTAL = 0
-VERTICAL = 1
-HORIZONTAL_SWAPPED = 2
-VERTICAL_SWAPPED = 3
+class Split(Enum):
+    vertical_tr_val = auto()
+    vertical_val_tr = auto()
+    horizontal_tr_val = auto()
+    horizontal_val_tr = auto()
+
 
 # Override for 2-class images that could be split in such a way that the validation image will lack one of the classes.
 split_override_dict = {
-    201: HORIZONTAL_SWAPPED,
-    202: VERTICAL,
-    203: VERTICAL,
-    204: VERTICAL_SWAPPED,
-    205: VERTICAL,
-    206: VERTICAL,
-    207: HORIZONTAL,
-    208: HORIZONTAL,
-    209: HORIZONTAL,
-    210: VERTICAL_SWAPPED,
-    211: HORIZONTAL,
-    212: HORIZONTAL,
+    201: Split.vertical_tr_val,
+    202: Split.horizontal_val_tr,
+    203: Split.horizontal_val_tr,
+    204: Split.horizontal_tr_val,
+    205: Split.horizontal_val_tr,
+    206: Split.horizontal_val_tr,
+    207: Split.vertical_val_tr,
+    208: Split.vertical_val_tr,
+    209: Split.vertical_val_tr,
+    210: Split.horizontal_tr_val,
+    211: Split.vertical_val_tr,
+    212: Split.vertical_val_tr,
 }
-# split_override_dict = {}  # Disable override
 
 if ONLY_TM:
     logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
@@ -81,14 +83,14 @@ def get_slices(sh: np.ndarray, valid_ratio: float = 0.3, from_left=True):
         relative_split_border = valid_ratio
     else:
         relative_split_border = 1 - valid_ratio
-    vert_border, horiz_border = np.round(sh * relative_split_border).astype(np.int64)
-    vert_slices = (
-        (slice(0, vert_border), slice(0, None)),
-        (slice(vert_border, None), slice(0, None)),
-    )
+    vert_border, hori_border = np.round(sh * relative_split_border).astype(np.int64)
     hori_slices = (
-        (slice(0, None), slice(0, horiz_border)),
-        (slice(0, None), slice(horiz_border, None)),
+        (slice(0, hori_border), slice(0, None)),
+        (slice(hori_border, None), slice(0, None)),
+    )
+    vert_slices = (
+        (slice(0, None), slice(0, vert_border)),
+        (slice(0, None), slice(vert_border, None)),
     )
     if not from_left:  # Swap slices -> Preserve split ratio, but change direction from which to split
         vert_slices = vert_slices[::-1]
@@ -105,13 +107,13 @@ def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.
     if img_num in split_override_dict:
         # Override found, directly return determined split
 
-        if split_override_dict[img_num] == VERTICAL:
+        if split_override_dict[img_num] == Split.horizontal_val_tr:
             best_slices = vert_slices
-        elif split_override_dict[img_num] == HORIZONTAL:
+        elif split_override_dict[img_num] == Split.vertical_val_tr:
             best_slices = hori_slices
-        elif split_override_dict[img_num] == VERTICAL_SWAPPED:
+        elif split_override_dict[img_num] == Split.horizontal_tr_val:
             best_slices = right_vert_slices
-        elif split_override_dict[img_num] == HORIZONTAL_SWAPPED:
+        elif split_override_dict[img_num] == Split.vertical_tr_val:
             best_slices = right_hori_slices
         else:
             raise ValueError(f'Invalid choice {split_override_dict[img_num]}')
