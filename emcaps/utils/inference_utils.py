@@ -28,6 +28,7 @@ print(f'Running on {DEVICE}')
 DTYPE = torch.float16 if 'cuda' in str(DEVICE) else torch.float32
 
 
+# From https://github.com/napari/napari/blob/5cfcc38c0a313f42cc8b0f82ac3db945874ae362/examples/annotate_segmentation_with_text.py#L75
 def calculate_circularity(perimeter, area):
     """Calculate the circularity of the region
 
@@ -48,6 +49,7 @@ def calculate_circularity(perimeter, area):
     return circularity
 
 
+# From https://github.com/napari/napari/blob/5cfcc38c0a313f42cc8b0f82ac3db945874ae362/examples/annotate_segmentation_with_text.py#L46
 def make_bbox(bbox_extents):
     """Get the coordinates of the corners of a
     bounding box from the extents
@@ -240,7 +242,7 @@ def compute_rprops(
     image,
     lab,
     classifier_variant,
-    minsize=150,
+    minsize=60,
     maxsize=1000,
     noborder=False,
     min_circularity=0.8,

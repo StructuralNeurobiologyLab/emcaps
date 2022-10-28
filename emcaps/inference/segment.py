@@ -240,7 +240,8 @@ def main(srcpath, tta_num=2, enable_tiled_inference=False, minsize=60, segmenter
                     lab=cout > 0,
                     classifier_variant=classifier_path,
                     return_relabeled_seg=True,
-                    allowed_classes=allowed_classes_for_classification
+                    allowed_classes=allowed_classes_for_classification,
+                    minsize=minsize
                 )
                 cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
