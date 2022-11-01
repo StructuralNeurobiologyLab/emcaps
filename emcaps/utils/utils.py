@@ -87,26 +87,26 @@ def render_skimage_overlay(img: Optional[np.ndarray], lab: np.ndarray, bg_label=
 
 
 def get_path_prefix() -> Path:
-    if os.getenv('CLUSTER') in ['WHOLEBRAIN', 'CAJAL']:
-        # path_prefix = Path('/wholebrain/scratch/mdraw/tum/').expanduser()
-        path_prefix = Path('/cajal/nvmescratch/users/mdraw/tum/').expanduser()
+    if os.getenv('CLUSTER') in ['CAJAL']:
+        path_prefix = Path('/cajal/nvmescratch/users/mdraw/tum/')
     else:
         path_prefix = Path('~/tum/').expanduser()
     assert path_prefix.is_dir()
     return path_prefix
 
 
+def get_default_sheet_path() -> Path:
+    return get_path_prefix() / 'emcapsulin' / 'emcapsulin_data.xlsx'
+
+
 @lru_cache(maxsize=1024)
-def get_meta(sheet_path=None, sheet_name=0, v5names=True) -> pd.DataFrame:
+def get_meta(sheet_path=None, sheet_name=0) -> pd.DataFrame:
     if sheet_path is None:
-        path_prefix = get_path_prefix()
-        sheet_path = path_prefix / 'Single-table_database/Image_annotation_for_ML_single_table.xlsx'
-        sheet_name = 'all_metadata'
+        sheet_path = get_default_sheet_path()
     sheet = pd.read_excel(sheet_path, sheet_name=sheet_name)
     meta = sheet.copy()
-    meta = meta.rename(columns={' Image': 'num'})
-    meta = meta.loc[meta['num'] >= 16]
-    meta = meta.rename(columns={'Short experimental condition': 'scond'})
+    meta = meta.rename(columns={'Image ID': 'num'})
+    meta = meta.rename(columns={'Short Experimental Condition': 'scond'})
     meta = meta.convert_dtypes()
     meta['scondv5'] = meta.scond.replace(OLDNAMES_TO_V5NAMES)
     return meta
@@ -227,17 +227,17 @@ def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=N
 @lru_cache(maxsize=1024)
 def is_for_validation(path) -> bool:
     row = get_meta_row(path)
+    raise NotImplementedError
     return row.Validation.item()
 
 
 @lru_cache(maxsize=1024)
 def get_raw_path(img_num: int, sheet_path=None) -> Path:
     if sheet_path is None:
-        path_prefix = get_path_prefix()
-        sheet_path = path_prefix / 'Single-table_database/Image_annotation_for_ML_single_table.xlsx'
+        sheet_path = get_default_sheet_path()
     # meta = get_meta(sheet_path=sheet_path)
     subdir_path = sheet_path.parent / f'{img_num}'
-    img_path = subdir_path / f'{img_num}.tif'
+    img_path = subdir_path / f'{img_num}.png'
     return img_path
 
 
@@ -250,10 +250,6 @@ def get_raw(img_num: int, sheet_path=None) -> np.ndarray:
 
 @lru_cache(maxsize=1024)
 def read_image(path: Path) -> np.ndarray:
-    if not path.is_file():
-        uppercase_suf_path = path.with_suffix('.TIF')
-        if uppercase_suf_path.is_file():
-            path = uppercase_suf_path
     img = iio.imread(path)
     return img
 
@@ -286,10 +282,7 @@ class ImageResources:
     regmasks: Optional[Dict[str, np.ndarray]] = None
     rawpath: Optional[Path] = None
     labelpath: Optional[Path] = None
-    curated: bool = False
-    was_inverted: bool = False
     enctypes_present: Optional[Sequence[str]] = None
-    host: Optional[str] = None
 
 
 # @lru_cache(maxsize=1024)
@@ -334,7 +327,6 @@ def get_isplit_per_enctype_regmasks(img_num: int, isplitdata_root: Path) -> Dict
 #     regmasks = get_isplit_per_enctype_regmasks(img_num=img_num, isplitdata_root=isplitdata_root)
 
 
-
 def strip_host_prefix(enctype: str, host_prefixes=('DRO-', 'MICE_')) -> str:
     """drop DRO, MICE because we want to treat DRO amd MICE the same class as HEK in most cases"""
     for pref in host_prefixes:
@@ -342,7 +334,7 @@ def strip_host_prefix(enctype: str, host_prefixes=('DRO-', 'MICE_')) -> str:
     return enctype
 
 
-def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True, merge_multilabel=True, only_tm=False, no_tm=False, invert_region_masks=True):
+def get_image_resources(img_num, sheet_path=None, only_tm=False, no_tm=False):
     metarow = get_meta_row(path_or_num=img_num, sheet_path=sheet_path)
 
     relevant_class_names = CLASS_NAMES.values()
@@ -370,43 +362,30 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
         raw = iio.imread(raw_path)
     else:
         raw = None
-    label_path = raw_path.with_stem(f'{raw_path.stem}_{LABEL_NAME}')
+    label_path = raw_path.with_stem(f'{raw_path.stem}_label_enc')
     # Look for improved labels in "curated" subdir. If nothing is found, use regular label file.
-    is_curated = False
-    if use_curated_if_available:
-        for curated_dir_candidate in ['Curated', 'curated']:  # Sometimes lowercase
-            candidate = label_path.parent / curated_dir_candidate / label_path.name
-            if candidate.is_file():
-                label_path = candidate  # Update label_path
-                is_curated = True
-                break  # Found it, stop searching
-    was_inverted = False
     enctypes_present = []
     label = None
     per_enctype_labels = {}  # Collect individual labels where only one enctype is labeled
     if label_path.is_file():
         label = iio.imread(label_path)
         label = label > 0  # Binarize
-        label, was_inverted = ensure_not_inverted(label)
         per_enctype_labels[enctype] = label
         enctypes_present.append(enctype)
 
     # Handle multiple label files (multiple classes in one source image)
-    if merge_multilabel:# and label is None:
-        # Look for multiple label files, which have a different naming pattern.
-        # Filter the list of potential label file name candidates by their existence as a file.
-        for scond in relevant_class_names:
-            for stem_pattern in [f'{raw_path.stem}_{scond}', f'{raw_path.stem}_label_enc_{scond}']:
-                if (m_path := raw_path.with_stem(stem_pattern)).is_file():
-                    m_label = iio.imread(m_path) > 0
-                    m_label, m_was_inverted = ensure_not_inverted(m_label)
-                    was_inverted = was_inverted or m_was_inverted
-                    enctypes_present.append(scond)
-                    per_enctype_labels[scond] = m_label
-                    if label is None:
-                        label = m_label
-                    else:
-                        label = np.bitwise_or(label, m_label)  # If at least on label is foreground at some location, define that as foreground
+    # Look for multiple label files, which have a different naming pattern.
+    # Filter the list of potential label file name candidates by their existence as a file.
+    for scond in relevant_class_names:
+        for stem_pattern in [f'{raw_path.stem}_{scond}', f'{raw_path.stem}_label_enc_{scond}']:
+            if (m_path := raw_path.with_stem(stem_pattern)).is_file():
+                m_label = iio.imread(m_path) > 0
+                enctypes_present.append(scond)
+                per_enctype_labels[scond] = m_label
+                if label is None:
+                    label = m_label
+                else:
+                    label = np.bitwise_or(label, m_label)  # If at least on label is foreground at some location, define that as foreground
 
     reg_masks = {}
     # Retrieve multiclass masks that define class-regions ("cell"), if they exist.
@@ -414,21 +393,10 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
         for stem_pattern in [f'{raw_path.stem}_label_cell_{scond}']:
             if (reg_path := raw_path.with_stem(stem_pattern)).is_file():
                 reg_label = iio.imread(reg_path) > 0
-                if invert_region_masks:
-                    if not 'tif' in reg_path.suffix.lower():
-                        logger.warning(f'Applying TIFF-specific region mask inversion hack to image {reg_path}, but image is not TIFF.')
-                    reg_label = ~reg_label
                 reg_masks[scond] = reg_label
 
 
     roimask = None  # TODO. Not implemented yet 
-
-    full_scond = metarow.scond
-    host = 'hek'  # default to HEK
-    if 'MICE' in full_scond:
-        host = 'mice'
-    elif 'DRO' in full_scond:
-        host = 'dro'
 
     imgres = ImageResources(
         raw=raw,
@@ -439,10 +407,7 @@ def get_image_resources(img_num, sheet_path=None, use_curated_if_available=True,
         metarow=metarow,
         rawpath=raw_path,
         labelpath=label_path,
-        curated=is_curated,
-        was_inverted=was_inverted,
         enctypes_present=enctypes_present,
-        host=host
     )
 
     return imgres

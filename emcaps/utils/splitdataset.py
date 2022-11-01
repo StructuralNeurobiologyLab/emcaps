@@ -4,7 +4,7 @@ import logging
 import os
 from os.path import expanduser as eu
 from pathlib import Path
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from enum import Enum, auto
 
 import tqdm
@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from skimage import measure
 
-from emcaps.utils import get_meta, get_path_prefix, get_image_resources, strip_host_prefix
+from emcaps.utils import get_meta, get_path_prefix, get_image_resources, strip_host_prefix, get_meta_row
 
 
 ONLY_TM = False
@@ -23,7 +23,7 @@ STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from outp
 
 
 path_prefix = get_path_prefix()
-data_root = path_prefix / 'Single-table_database'
+data_root = path_prefix / 'emcapsulin'
 # Image based split
 isplit_data_root = data_root / 'isplitdata_v15'
 if ONLY_TM:
@@ -31,10 +31,10 @@ if ONLY_TM:
 if NO_TM:
     isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_notm')
 
-sheet_path = data_root / 'Image_annotation_for_ML_single_table.xlsx'
+sheet_path = data_root / 'emcapsulin_data.xlsx'
 isplit_data_root.mkdir(exist_ok=True)
 
-meta = get_meta(sheet_path=sheet_path, v5names=True)
+meta = get_meta(sheet_path=sheet_path)
 
 
 # Set up logging
@@ -52,21 +52,13 @@ class Split(Enum):
     horizontal_val_tr = auto()
 
 
-# Override for 2-class images that could be split in such a way that the validation image will lack one of the classes.
-split_override_dict = {
-    201: Split.vertical_tr_val,
-    202: Split.horizontal_val_tr,
-    203: Split.horizontal_val_tr,
-    204: Split.horizontal_tr_val,
-    205: Split.horizontal_val_tr,
-    206: Split.horizontal_val_tr,
-    207: Split.vertical_val_tr,
-    208: Split.vertical_val_tr,
-    209: Split.vertical_val_tr,
-    210: Split.horizontal_tr_val,
-    211: Split.vertical_val_tr,
-    212: Split.vertical_val_tr,
-}
+def get_split_override(img_num: int) -> Optional[Split]:
+    row = get_meta_row(img_num)
+    dscr = row.get('Image Split')
+    if pd.isna(dscr):
+        return None
+    return Split[dscr]
+
 
 if ONLY_TM:
     logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
@@ -104,30 +96,34 @@ def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.
     vert_slices, hori_slices = get_slices(sh, valid_ratio=valid_ratio, from_left=True)
     right_vert_slices, right_hori_slices = get_slices(sh, valid_ratio=valid_ratio, from_left=False)
 
-    if img_num in split_override_dict:
-        # Override found, directly return determined split
+    split_override = get_split_override(img_num=img_num)
 
-        if split_override_dict[img_num] == Split.horizontal_val_tr:
-            best_slices = vert_slices
-        elif split_override_dict[img_num] == Split.vertical_val_tr:
+    if split_override is not None:
+        # Override found, directly return determined split
+        if split_override == Split.horizontal_val_tr:
             best_slices = hori_slices
-        elif split_override_dict[img_num] == Split.horizontal_tr_val:
-            best_slices = right_vert_slices
-        elif split_override_dict[img_num] == Split.vertical_tr_val:
+        elif split_override == Split.vertical_val_tr:
+            best_slices = vert_slices
+        elif split_override == Split.horizontal_tr_val:
             best_slices = right_hori_slices
+        elif split_override == Split.vertical_tr_val:
+            best_slices = right_vert_slices
         else:
-            raise ValueError(f'Invalid choice {split_override_dict[img_num]}')
+            raise ValueError(f'Invalid choice {split_override}')
 
         logger.info(f'Override split: {img_num}.')
         return best_slices
+
+    # Else, if no override found, determine optimal splitting automatically:
 
     # Count number of particles in each subimage
     val_vert_nc = count_ccs(lab[vert_slices[0]])
     trn_vert_nc = count_ccs(lab[vert_slices[1]])
     val_hori_nc = count_ccs(lab[hori_slices[0]])
     trn_hori_nc = count_ccs(lab[hori_slices[1]])
-    vert_split_nc_ratio = val_vert_nc / (val_vert_nc + trn_vert_nc)
-    hori_split_nc_ratio = val_hori_nc / (val_hori_nc + trn_hori_nc)
+    _eps = 1e-6  # Avoid zero division if no ccs were found
+    vert_split_nc_ratio = val_vert_nc / (val_vert_nc + trn_vert_nc + _eps)
+    hori_split_nc_ratio = val_hori_nc / (val_hori_nc + trn_hori_nc + _eps)
     logger.info(f'vsr: {vert_split_nc_ratio:.2f}, hsr: {hori_split_nc_ratio:.2f}')
 
     # Choose the split that minimizes difference between particle ratio and split ratio
@@ -149,20 +145,17 @@ def split_by_slices(img: np.ndarray, slices: Tuple[Tuple[slice, slice], Tuple[sl
 
 
 def is_excluded(resmeta: pd.Series) -> bool:
-    return (not resmeta.Validation) and (not resmeta.Training)
+    return not resmeta['tr-all']
 
 
 def main():
     for entry in tqdm.tqdm(meta.itertuples(), total=len(meta)):
         img_num = int(entry.num)
         # Load original images and resources
-        res = get_image_resources(img_num=img_num, sheet_path=sheet_path, use_curated_if_available=True, only_tm=ONLY_TM)
+        res = get_image_resources(img_num=img_num, sheet_path=sheet_path, only_tm=ONLY_TM)
         if res is None:
             logger.info(f'Skipping image {img_num} because of an image resource condition.')
             continue
-        logger.info(f'Using label source {res.labelpath}{" (curated)" if res.curated else ""}')
-        if res.was_inverted:
-            logger.info(f'Image {img_num} was re-inverted.')
         if is_excluded(res.metarow):
             logger.info(f'Skipping image {img_num} because it is excluded from ML usage via meta spreadsheet.')
             continue
@@ -174,7 +167,7 @@ def main():
             continue
 
         # Split images
-        split_slices = get_best_split_slices(res.label, img_num=res.metarow.num)
+        split_slices = get_best_split_slices(res.label, img_num=int(res.metarow.num))
         val_raw, trn_raw = split_by_slices(res.raw, split_slices)
         val_lab, trn_lab = split_by_slices(res.label, split_slices)
 
