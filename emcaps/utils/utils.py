@@ -86,23 +86,22 @@ def render_skimage_overlay(img: Optional[np.ndarray], lab: np.ndarray, bg_label=
     return ov
 
 
-def get_path_prefix() -> Path:
-    if os.getenv('CLUSTER') in ['CAJAL']:
-        path_prefix = Path('/cajal/nvmescratch/users/mdraw/tum/')
-    else:
-        path_prefix = Path('~/tum/').expanduser()
+def get_path_prefix(prefix: str | Path) -> Path:
+    path_prefix = Path(prefix).expanduser()
     assert path_prefix.is_dir()
     return path_prefix
 
 
-def get_default_sheet_path() -> Path:
-    return get_path_prefix() / 'emcapsulin' / 'emcapsulin_data.xlsx'
+def get_default_sheet_path(prefix: str | Path) -> Path:
+    return get_path_prefix(prefix) / 'emcapsulin' / 'emcapsulin_data.xlsx'
 
 
+# TODO: All functions requiring a sheet_path could be refactored into methods
+#       of a "Sheet" class that knows where the sheet is located
 @lru_cache(maxsize=1024)
-def get_meta(sheet_path=None, sheet_name=0) -> pd.DataFrame:
-    if sheet_path is None:
-        sheet_path = get_default_sheet_path()
+def get_meta(sheet_path, sheet_name=0) -> pd.DataFrame:
+    # if sheet_path is None:
+    #     sheet_path = get_default_sheet_path()
     sheet = pd.read_excel(sheet_path, sheet_name=sheet_name)
     meta = sheet.copy()
     meta = meta.rename(columns={'Image ID': 'num'})
@@ -232,9 +231,9 @@ def is_for_validation(path) -> bool:
 
 
 @lru_cache(maxsize=1024)
-def get_raw_path(img_num: int, sheet_path=None) -> Path:
-    if sheet_path is None:
-        sheet_path = get_default_sheet_path()
+def get_raw_path(img_num: int, sheet_path) -> Path:
+    # if sheet_path is None:
+        # sheet_path = get_default_sheet_path()
     # meta = get_meta(sheet_path=sheet_path)
     subdir_path = sheet_path.parent / f'{img_num}'
     img_path = subdir_path / f'{img_num}.png'
@@ -242,7 +241,7 @@ def get_raw_path(img_num: int, sheet_path=None) -> Path:
 
 
 @lru_cache(maxsize=1024)
-def get_raw(img_num: int, sheet_path=None) -> np.ndarray:
+def get_raw(img_num: int, sheet_path) -> np.ndarray:
     img_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
     img = iio.imread(img_path)
     return img

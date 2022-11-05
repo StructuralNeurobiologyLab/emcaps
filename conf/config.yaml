@@ -1,0 +1,39 @@
+# Everything should land in subdirectories of ~/emc by default
+path_prefix: ${oc.env:HOME}/emc
+
+hydra:
+  run:
+    # Where to write logs and config copies
+    dir: ${path_prefix}/hydra_outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+
+
+# Version tag. Please increment when data changes
+v: v15
+# Metadata spreadsheet
+sheet_path: ${path_prefix}/emcapsulin/emcapsulin_data.xlsx
+# Where to write results of splitdataset.py
+isplit_data_path: ${path_prefix}/emcapsulin/isplitdata_${v}
+# Data selection: spreadsheet column name
+data_group: tr-all
+
+# Segmentation training
+segtrain:
+  # Where to save training results (model checkpoints, logs, ...)
+  save_root: ${path_prefix}/${v}/seg_trainings/seg_trainings_${v}_${data_group}
+
+  exp_name:
+  constraintype:
+  max_steps: 300001
+  seed: 0
+
+  # Hyperparams
+  lr: 1e-3
+  lr_stepsize: 1000
+  lr_dec: 0.99
+  batch_size: 8
+
+
+
+# General constants, not meant to be changed
+dataset_mean: [128.,]
+dataset_std: [128.,]

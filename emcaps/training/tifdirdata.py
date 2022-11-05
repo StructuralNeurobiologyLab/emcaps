@@ -2,12 +2,12 @@
 PyTorch Dataset classes for loading encapsulin segmentation and classification datasets.
 """
 
-
 import logging
+import hydra
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union, Callable
 
 import imageio.v3 as iio
 import numpy as np
@@ -19,7 +19,7 @@ from torch.utils import data
 
 from emcaps import utils
 
-logger = logging.getLogger('elektronn3log')
+logger = logging.getLogger('emcaps-tifdirdata')
 
 
 @lru_cache(maxsize=1024)
@@ -151,12 +151,12 @@ class EncSegData(data.Dataset):
             self,
             # data_root: str,
             label_names: Sequence[str],
-            valid_nums: Optional[Sequence[int]] = None,
             descr_sheet=(os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
-            data_subdirname: str = 'isplitdata_v13',
+            data_path: str = '/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v15',
             meta_filter = lambda x: x,
+            data_group: str = 'tr-all',
             train: bool = True,
-            transform=transforms.Identity(),
+            transform: transforms.Transform = transforms.Identity(),
             offset: Optional[Sequence[int]] = (0, 0),
             inp_dtype=np.float32,
             target_dtype=np.int64,
@@ -172,6 +172,7 @@ class EncSegData(data.Dataset):
         # self.data_root = data_root
         self.label_names = label_names
         self.meta_filter = meta_filter
+        self.data_group = data_group
         self.train = train
         self.transform = transform
         self.offset = offset
@@ -181,7 +182,6 @@ class EncSegData(data.Dataset):
         self.enable_inputmask = enable_inputmask
         self.ignore_far_background_distance = ignore_far_background_distance
         self.epoch_multiplier = epoch_multiplier
-        self.valid_nums = valid_nums
         self.enable_binary_seg = enable_binary_seg
         self.enable_partial_inversion_hack = enable_partial_inversion_hack
         self.dilate_targets_by = dilate_targets_by
@@ -194,27 +194,19 @@ class EncSegData(data.Dataset):
         sheet = pd.read_excel(descr_sheet[0], sheet_name=descr_sheet[1])
         self.sheet = sheet
         meta = sheet.copy()
-        meta = meta.rename(columns={' Image': 'num'})
-        meta = meta.rename(columns={'Short experimental condition': 'scond'})
+        meta = meta.rename(columns={'Image ID': 'num'})
+        meta = meta.rename(columns={'Short Experimental Condition': 'scond'})
         meta = meta.convert_dtypes()
 
         meta = self.meta_filter(meta)
 
-        # if self.train:
-        #     logger.info('\nTraining data:')
-        #     if valid_nums is None:  # Read from table
-        #         meta = meta.loc[meta['Training'] == 1]
-        #     else:  # Use list
-        #         meta = meta[~meta['num'].isin(self.valid_nums)]
-        # else:
-        #     logger.info('\nValidation data:')
-        #     if valid_nums is None:  # Read from table
-        #         meta = meta.loc[meta['Validation'] == 1]
-        #     else:  # Use list
-        #         meta = meta[meta['num'].isin(self.valid_nums)]
+        # Only select images that are marked in the selected data group
+        meta = meta.loc[meta[data_group] == 1]
 
-        self.root_path = Path(descr_sheet[0]).parent / data_subdirname
-        logger.info('Getting data from {self.root_path}')
+
+        # self.root_path = Path(descr_sheet[0]).parent / data_path
+        self.root_path = Path(data_path).expanduser()
+        logger.info(f'Getting data from {self.root_path}')
 
         # Not all images are always available
         self.available_img_nums = [

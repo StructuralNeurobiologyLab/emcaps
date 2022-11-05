@@ -1,6 +1,7 @@
 name: emcaps
 channels:
   - pytorch
+  - nvidia
   - conda-forge
   - defaults
 dependencies:

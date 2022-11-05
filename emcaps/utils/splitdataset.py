@@ -12,37 +12,20 @@ import imageio.v3 as iio
 import numpy as np
 import pandas as pd
 from skimage import measure
+from omegaconf import DictConfig, OmegaConf
+import hydra
 
 from emcaps.utils import get_meta, get_path_prefix, get_image_resources, strip_host_prefix, get_meta_row
 
 
-ONLY_TM = False
-NO_TM = False
-
-STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from output file names
-
-
-path_prefix = get_path_prefix()
-data_root = path_prefix / 'emcapsulin'
-# Image based split
-isplit_data_root = data_root / 'isplitdata_v15'
-if ONLY_TM:
-    isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_onlytm')
-if NO_TM:
-    isplit_data_root = isplit_data_root.with_name(f'{isplit_data_root.name}_notm')
-
-sheet_path = data_root / 'emcapsulin_data.xlsx'
-isplit_data_root.mkdir(exist_ok=True)
-
-meta = get_meta(sheet_path=sheet_path)
-
-
 # Set up logging
-logger = logging.getLogger('splitdataset')
-logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler(f'{isplit_data_root}/splitdataset.log')
-fh.setLevel(logging.DEBUG)
-logger.addHandler(fh)
+# logger = logging.getLogger(__name__)
+logger = logging.getLogger('emcaps-splitdataset')
+# logger.setLevel(logging.DEBUG)
+# fh = logging.FileHandler(f'{isplit_data_root}/splitdataset.log')
+# fh.setLevel(logging.DEBUG)
+# logger.addHandler(fh)
+
 
 # Split definition constants
 class Split(Enum):
@@ -52,16 +35,12 @@ class Split(Enum):
     horizontal_val_tr = auto()
 
 
-def get_split_override(img_num: int) -> Optional[Split]:
-    row = get_meta_row(img_num)
+def get_split_override(img_num: int, sheet_path) -> Optional[Split]:
+    row = get_meta_row(img_num, sheet_path=sheet_path)
     dscr = row.get('Image Split')
     if pd.isna(dscr):
         return None
     return Split[dscr]
-
-
-if ONLY_TM:
-    logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
 
 
 def count_ccs(lab):
@@ -90,13 +69,13 @@ def get_slices(sh: np.ndarray, valid_ratio: float = 0.3, from_left=True):
     return vert_slices, hori_slices
 
 
-def get_best_split_slices(lab: np.ndarray, img_num: int, valid_ratio: float = 0.3) -> Tuple[Tuple[slice, slice], Tuple[slice, slice]]:
+def get_best_split_slices(lab: np.ndarray, img_num: int, sheet_path, valid_ratio: float = 0.3) -> Tuple[Tuple[slice, slice], Tuple[slice, slice]]:
     """Determine best slices for splitting the image by considering particle ratios"""
     sh = np.array(lab.shape)
     vert_slices, hori_slices = get_slices(sh, valid_ratio=valid_ratio, from_left=True)
     right_vert_slices, right_hori_slices = get_slices(sh, valid_ratio=valid_ratio, from_left=False)
 
-    split_override = get_split_override(img_num=img_num)
+    split_override = get_split_override(img_num=img_num, sheet_path=sheet_path)
 
     if split_override is not None:
         # Override found, directly return determined split
@@ -148,7 +127,38 @@ def is_excluded(resmeta: pd.Series) -> bool:
     return not resmeta['tr-all']
 
 
-def main():
+@hydra.main(version_base=None, config_path='../../conf', config_name='config')
+def main(cfg: DictConfig) -> None:
+
+    ONLY_TM = False
+    NO_TM = False
+
+    STRIP_HOST_PREFIX = True  # If True, strip 'DRO-' and 'MICE_' prefixes from output file names
+
+    if ONLY_TM:
+        logger.info('ONLY_TM mode active. Only 1M-Tm-labeled encapsulins are considered, everything else is ignored or regarded as background.\n\n')
+
+
+    # path_prefix = get_path_prefix()
+    # data_root = path_prefix / 'emcapsulin'
+    # data_root = cfg.data_root
+    # Image based split
+    # isplit_data_root = data_root / 'isplitdata_v15'
+    output_path = Path(cfg.isplit_data_path).expanduser()
+    if ONLY_TM:
+        output_path = output_path.with_name(f'{output_path.name}_onlytm')
+    if NO_TM:
+        output_path = output_path.with_name(f'{output_path.name}_notm')
+
+    # sheet_path = data_root / 'emcapsulin_data.xlsx'
+    sheet_path = Path(cfg.sheet_path).expanduser()
+    output_path.mkdir(exist_ok=True)
+
+    meta = get_meta(sheet_path=sheet_path)
+
+
+
+
     for entry in tqdm.tqdm(meta.itertuples(), total=len(meta)):
         img_num = int(entry.num)
         # Load original images and resources
@@ -167,7 +177,7 @@ def main():
             continue
 
         # Split images
-        split_slices = get_best_split_slices(res.label, img_num=int(res.metarow.num))
+        split_slices = get_best_split_slices(res.label, img_num=int(res.metarow.num), sheet_path=cfg.sheet_path)
         val_raw, trn_raw = split_by_slices(res.raw, split_slices)
         val_lab, trn_lab = split_by_slices(res.label, split_slices)
 
@@ -176,7 +186,7 @@ def main():
         trn_lab = trn_lab.astype(np.uint8) * 255
 
         # Save newly split images
-        img_subdir = isplit_data_root / str(img_num)
+        img_subdir = output_path / str(img_num)
         img_subdir.mkdir(exist_ok=True)
         val_raw_path = img_subdir / f'{img_num}_val.png'
         trn_raw_path = img_subdir / f'{img_num}_trn.png'
