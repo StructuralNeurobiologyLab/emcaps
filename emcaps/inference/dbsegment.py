@@ -9,6 +9,8 @@ from pathlib import Path
 from os.path import expanduser as eu
 
 import numpy as np
+import hydra
+from omegaconf import DictConfig
 import imageio.v3 as iio
 import skimage
 import torch
@@ -93,49 +95,29 @@ Info:
     return metrics_dict
 
 
-def main():
+def find_vx_val_images(isplit_data_path, group_name, sheet_path):
+    """Find paths to all raw validation images of split vx"""
+    val_img_paths = []
+    for p in isplit_data_path.rglob('*_val.png'):  # Look for all validation raw images recursively
+        if utils.is_in_data_group(path_or_num=p, group_name=group_name, sheet_path=sheet_path):
+            val_img_paths.append(p)
+    return val_img_paths
 
 
-    def eul(paths):
-        """Shortcut for expanding all user paths in a list"""
-        return [os.path.expanduser(p) for p in paths]
-
-
-    # Keep this in sync with training normalization
-    dataset_mean = (128.0,)
-    dataset_std = (128.0,)
-
+@hydra.main(version_base=None, config_path='../../conf', config_name='config')
+def main(cfg: DictConfig) -> None:
 
     pre_predict_transform = transforms.Compose([
-        transforms.Normalize(mean=dataset_mean, std=dataset_std)
+        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)
     ])
 
     ENABLE_ENCTYPE_SUBDIRS = True
     ZERO_LABELS = False
 
-
-    import argparse
-    parser = argparse.ArgumentParser(description='Run inference with a trained network.')
-    parser.add_argument('--srcpath', help='Path to input file', default=None)
-    parser.add_argument('--segmenter', help='Path to segmentation model file', default=None)
-    parser.add_argument('--classifier', help='Path to classifier model file', default=None)
-    parser.add_argument('--minsize', default=60, type=int, help='Minimum size of segmented particles in pixels')
-    parser.add_argument('-s', help='Traing setting (for auto model selection)', default=None)
-    parser.add_argument('-t', default=False, action='store_true', help='enable tiled inference')
-    parser.add_argument('-c', '--constraintype', default=None, help='Constrain inference to only one encapsulin type (via v5name, e.g. `-c 1M-Qt`).')
-    parser.add_argument('-e', '--use-expert', default=False, action='store_true', help='If true, use expert models for each enc type. Else, use common model')
-    parser.add_argument('-a', type=int, default=2, choices=[0, 1, 2], help='Number of test-time augmentations to use')
-    args = parser.parse_args()
-
-    selected_enctype = args.constraintype
-    use_expert = args.use_expert
-    tta_num = args.a
-    minsize = args.minsize
-    srcpath = None
-    tr_setting = args.s
-    segmenter_path = args.segmenter
-    classifier_path = args.classifier
-
+    tta_num = cfg.dbsegment.tta_num
+    minsize = cfg.minsize
+    segmenter_path = cfg.dbsegment.segmenter
+    classifier_path = cfg.dbsegment.classifier
 
     """
     for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
@@ -145,9 +127,6 @@ def main():
 
     thresh = 127
     dt_thresh = 0.00
-
-    if tr_setting is None:
-        tr_setting = 'all'
 
     # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
     allowed_classes_for_classification = [
@@ -165,55 +144,30 @@ def main():
         for ac in allowed_classes_for_classification:
             constraint_signature = f'{constraint_signature}_{ac}'
 
-    if srcpath is None:
-        results_root = Path(f'/cajal/nvmescratch/users/mdraw/tum/results_seg_and_cls_v14_tr-{tr_setting}{constraint_signature}')
-        if selected_enctype is not None:
-            msuffix = '_expert' if use_expert else ''
-            results_root = Path(f'{str(results_root)}{msuffix}_{selected_enctype}')
-        data_root = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
+    results_root = Path(cfg.dbsegment.results_root)
 
+    img_paths = find_vx_val_images(isplit_data_path=cfg.isplit_data_path, group_name=cfg.eval_group, sheet_path=cfg.sheet_path)
 
-        class_groups_to_include = [
-            'simple_hek',
-            'dro',
-            'mice',
-            'qttm',
-            'multi',
-        ]
+    class_groups_to_include = [
+        'simple_hek',
+        'dro',
+        'mice',
+        'qttm',
+        'multi',
+    ]
+    included = []
+    for cgrp in class_groups_to_include:
+        cgrp_classes = utils.CLASS_GROUPS[cgrp]
+        # logger.info(f'Including class group {cgrp}, containing classes {cgrp_classes}')
+        included.extend(cgrp_classes)
+    DATA_SELECTION_V5NAMES = included
 
-        if selected_enctype is None:
-            included = []
-            for cgrp in class_groups_to_include:
-                cgrp_classes = utils.CLASS_GROUPS[cgrp]
-                print(f'Including class group {cgrp}, containing classes {cgrp_classes}')
-                included.extend(cgrp_classes)
-            DATA_SELECTION_V5NAMES = included
-        else:
-            DATA_SELECTION_V5NAMES = [selected_enctype]
+    for p in [results_root / scond for scond in DATA_SELECTION_V5NAMES]:
+        os.makedirs(p, exist_ok=True)
 
-
-        def find_vx_val_images(isplitpath=None):
-            """Find paths to all raw validation images of split vx"""
-            if isplitpath is None:
-                isplitpath = data_root / 'isplitdata_v13'
-            val_img_paths = []
-            for p in isplitpath.rglob('*_val.png'):  # Look for all validation raw images recursively
-                if get_v5_enctype(p) in DATA_SELECTION_V5NAMES:
-                    val_img_paths.append(p)
-            return val_img_paths
-
-        img_paths = find_vx_val_images()
-
-        for p in [results_root / scond for scond in DATA_SELECTION_V5NAMES]:
-            os.makedirs(p, exist_ok=True)
-
-        if len(DATA_SELECTION_V5NAMES) == 1:
-            v5_enctype = DATA_SELECTION_V5NAMES[0]
-            results_root = Path(f'{str(results_root)}_{v5_enctype}')
-
-    else:
-        img_paths = [srcpath]
-        results_root = Path(img_paths[0]).parent
+    if len(DATA_SELECTION_V5NAMES) == 1:
+        v5_enctype = DATA_SELECTION_V5NAMES[0]
+        results_root = Path(f'{str(results_root)}_{v5_enctype}')
 
 
     DESIRED_OUTPUTS = [
@@ -251,6 +205,7 @@ def main():
         segmenter_dict = {
             'all': '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA_lrdec99__UNet__22-10-15_20-29-15/model_step240000.pts'
         }
+        tr_setting = 'all'
         segmenter_paths = [segmenter_dict[tr_setting]]
         # segmenter_paths = [Randomizer()]  # produce random outputs instead
     else:
@@ -267,16 +222,10 @@ def main():
     for segmenter_path in segmenter_paths:
         # segmentername = os.path.basename(os.path.dirname(segmenter_path))
 
-        if args.t:
-            tile_shape = (448, 448)
-            overlap_shape = (32, 32)
-            # TODO
-            out_shape = np.array(iio.imread(img_paths[0])).shape
-            out_shape = (2, *out_shape)
-        else:
-            tile_shape = None
-            overlap_shape = None
-            out_shape = None
+        # No tiling necessary on normal images
+        tile_shape = None
+        overlap_shape = None
+        out_shape = None
 
         apply_softmax = True
         predictor = Predictor(

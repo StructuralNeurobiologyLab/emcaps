@@ -231,6 +231,15 @@ def is_for_validation(path) -> bool:
 
 
 @lru_cache(maxsize=1024)
+def is_in_data_group(path_or_num, group_name, sheet_path) -> Path:
+    metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
+    gval = metarow.get(group_name)
+    if pd.isna(gval):
+        raise ValueError(f'{group_name} not found in {sheet_path}')
+    return bool(gval)
+
+
+@lru_cache(maxsize=1024)
 def get_raw_path(img_num: int, sheet_path) -> Path:
     # if sheet_path is None:
         # sheet_path = get_default_sheet_path()
