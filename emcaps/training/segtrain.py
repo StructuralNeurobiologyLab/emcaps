@@ -17,7 +17,7 @@ import elektronn3
 import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch import optim
 from torch.nn.modules.loss import CrossEntropyLoss
 
@@ -185,7 +185,8 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Archiving training script, src folder, env info
-    Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
+    yaml_cfg = OmegaConf.to_yaml(cfg, resolve=True)
+    Backup(script_path=__file__, save_path=trainer.save_path, extra_content={'config.yaml': yaml_cfg}).archive_backup()
 
     # Start training
     trainer.run(max_steps)
