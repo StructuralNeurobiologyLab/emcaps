@@ -154,7 +154,7 @@ class EncSegData(data.Dataset):
             descr_sheet=(os.path.expanduser('/wholebrain/scratch/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx'), 'all_metadata'),
             data_path: str = '/wholebrain/scratch/mdraw/tum/Single-table_database/isplitdata_v15',
             meta_filter = lambda x: x,
-            data_group: str = 'tr-all',
+            tr_group: str = 'all',
             train: bool = True,
             transform: transforms.Transform = transforms.Identity(),
             offset: Optional[Sequence[int]] = (0, 0),
@@ -172,7 +172,7 @@ class EncSegData(data.Dataset):
         # self.data_root = data_root
         self.label_names = label_names
         self.meta_filter = meta_filter
-        self.data_group = data_group
+        self.tr_group = tr_group
         self.train = train
         self.transform = transform
         self.offset = offset
@@ -201,7 +201,7 @@ class EncSegData(data.Dataset):
         meta = self.meta_filter(meta)
 
         # Only select images that are marked in the selected data group
-        meta = meta.loc[meta[data_group] == 1]
+        meta = meta.loc[meta[tr_group] == 1]
 
 
         # self.root_path = Path(descr_sheet[0]).parent / data_path

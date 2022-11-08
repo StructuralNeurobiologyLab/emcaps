@@ -4,6 +4,7 @@ import torch
 import tqdm
 import ubelt as ub
 import logging
+import yaml
 from scipy import ndimage
 from skimage import morphology as sm
 from skimage.measure import regionprops
@@ -109,38 +110,14 @@ skimage_color_cycle = color_cycle.copy()[1:]
 # skimage_color_cycle = color_cycle.copy()
 
 
+# Load model registry
+repo_root = Path(__file__).parents[2]
+model_registry_path = repo_root / 'emcaps/model_registry.yaml'
+with open(model_registry_path) as f:
+    model_registry = yaml.load(f, Loader=yaml.FullLoader)
+segmenter_urls = model_registry['segmenter_urls']
+classifier_urls = model_registry['classifier_urls']
 
-
-segmenter_urls = {
-    'unet_all_v13': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v13_all_240k.pts',
-
-    'unet_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts',
-
-    'unet_all_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_200k.pts',
-    'unet_hek_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_160k.pts',
-    'unet_dro_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_dro_160k.pts',
-    'unet_mice_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_mice_240k.pts',
-    'unet_qttm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_qttm_240k.pts',
-    'unet_onlytm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_onlytm_160k.pts',
-    'unet_all_notm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_notm_200k.pts',
-    'unet_hek_notm_v10': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_notm_160k.pts',
-
-    'unet_hek_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_hek_160k.pts',
-    'unet_qttm_v8': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_qttmpatterns_160k.pts',
-    'unet_all_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_all_160k.pts',
-    'unet_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_hek_160k.pts',
-    'unet_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_dro_160k.pts',
-}
-classifier_urls = {
-    'effnet_m_all_v14': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v14_all_120k.pts',
-
-    'effnet_m_all_v10c': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v10c_all_80k.pts',
-
-    'effnet_m_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_hek_80k.pts',
-    'effnet_s_hek_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_hek_80k.pts',
-    'effnet_m_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_dro_80k.pts',
-    'effnet_s_dro_v7': 'https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_dro_80k.pts',
-}
 model_urls = {**segmenter_urls, **classifier_urls}
 
 

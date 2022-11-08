@@ -124,7 +124,9 @@ def split_by_slices(img: np.ndarray, slices: Tuple[Tuple[slice, slice], Tuple[sl
 
 
 def is_excluded(resmeta: pd.Series) -> bool:
-    return not resmeta['tr-all']
+    # 'all' contains every usable image. All other groups are subsets, so they can be selected in later steps.
+    # Could be made more explicit as `not (resmeta['all'] or resmeta['all2'] or ...)`
+    return not resmeta['all']
 
 
 @hydra.main(version_base=None, config_path='../../conf', config_name='config')
@@ -155,8 +157,6 @@ def main(cfg: DictConfig) -> None:
     output_path.mkdir(exist_ok=True)
 
     meta = get_meta(sheet_path=sheet_path)
-
-
 
 
     for entry in tqdm.tqdm(meta.itertuples(), total=len(meta)):

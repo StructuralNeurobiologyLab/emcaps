@@ -104,7 +104,7 @@ def main(cfg: DictConfig) -> None:
 
     train_dataset = EncSegData(
         descr_sheet=(cfg.sheet_path, SHEET_NAME),
-        data_group=cfg.data_group,
+        tr_group=cfg.tr_group,
         train=True,
         data_path=cfg.isplit_data_path,
         label_names=label_names,
@@ -116,7 +116,7 @@ def main(cfg: DictConfig) -> None:
 
     valid_dataset = EncSegData(
         descr_sheet=(cfg.sheet_path, SHEET_NAME),
-        data_group=cfg.data_group,
+        tr_group=cfg.tr_group,
         train=False,
         data_path=cfg.isplit_data_path,
         label_names=label_names,
@@ -126,7 +126,7 @@ def main(cfg: DictConfig) -> None:
         epoch_multiplier=10,
     )
 
-    logger.info(f'Selected data_group: {cfg.data_group}')
+    logger.info(f'Selected tr_group: {cfg.tr_group}')
     logger.info(f'Including images {list(train_dataset.meta.num.unique())}')
 
     # Set up optimization
@@ -161,7 +161,7 @@ def main(cfg: DictConfig) -> None:
         exp_name = ''
     timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
     exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
-    exp_name = f'{cfg.data_group}_{exp_name}'
+    exp_name = f'tr-{cfg.tr_group}_{exp_name}'
 
     # Create trainer
     trainer = Trainer(
