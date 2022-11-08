@@ -42,11 +42,22 @@ dbsegment:
   # Path to trained segmentation model
   segmenter: auto
   # Path to trained classifier model (optional)
+  #classifier: auto  # <- not yet possible because models are not ready yet
   classifier:
   # Where to write results
   results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}_ev-${ev_group}
   # Number of test-time augmentation passes to use (can be 0, 1 or 2)
   tta_num: 2
+  # Types of outputs that should be produced
+  desired_outputs:
+  - raw
+  - thresh
+  - lab
+  - overlays
+  - error_maps
+  - probmaps
+  - cls_overlays
+  - metrics
 
 # General constants, not meant to be changed
 dataset_mean: [128.,]

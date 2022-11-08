@@ -39,7 +39,7 @@ from emcaps.training.tifdirdata import EncSegData
 
 
 
-@hydra.main(version_base=None, config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     # Set up all RNG seeds
     random_seed = cfg.segtrain.seed

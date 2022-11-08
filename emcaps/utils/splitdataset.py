@@ -129,7 +129,7 @@ def is_excluded(resmeta: pd.Series) -> bool:
     return not resmeta['all']
 
 
-@hydra.main(version_base=None, config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
 
     ONLY_TM = False

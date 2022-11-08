@@ -114,7 +114,7 @@ class Randomizer(torch.nn.Module):
         return torch.rand(x.shape[0], 2, *x.shape[2:])
 
 
-@hydra.main(version_base=None, config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
 
     pre_predict_transform = transforms.Compose([
@@ -179,21 +179,11 @@ def main(cfg: DictConfig) -> None:
         v5_enctype = DATA_SELECTION_V5NAMES[0]
         results_root = Path(f'{str(results_root)}_{v5_enctype}')
 
-
-    DESIRED_OUTPUTS = [
-        'raw',
-        'thresh',
-        'lab',
-        'overlays',
-        'error_maps',
-        'probmaps',
-        'metrics',
-        'cls_overlays'
-    ]
+    DESIRED_OUTPUTS = cfg.dbsegment.desired_outputs
 
     label_name = 'encapsulins'
 
-    if segmenter_path is None:
+    if segmenter_path == 'auto':
         segmenter_path = f'unet_{cfg.tr_group}_{cfg.v}'
         logger.info(f'Using default segmenter {segmenter_path} based on other config values')
         segmenter_model = iu.get_model(segmenter_path)
@@ -207,7 +197,7 @@ def main(cfg: DictConfig) -> None:
     if not 'cls_overlays' in DESIRED_OUTPUTS:
         # Classifier not required, so we disable it and don't reference it
         classifier_path = ''
-    elif classifier_path is None:
+    elif classifier_path == 'auto':
         classifier_path = f'effnet_{cfg.tr_group}_{cfg.v}'
         logger.info(f'Using default classifier {classifier_path} based on other config values')
         segmenter_model = iu.get_model(classifier_path)
