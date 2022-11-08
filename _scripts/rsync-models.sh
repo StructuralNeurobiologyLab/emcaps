@@ -1,4 +1,25 @@
 #!/bin/bash
 
-rsync -a wb01:/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA_lrdec99__UNet__22-10-15_20-29-15/model_step240000.pts ~/tum/ptsmodels/v13/unet_v13_all_240k.pts
-rsync -a cajal:/cajal/nvmescratch/users/mdraw/tum/patch_trainings_v14_dr5__t100/erasemaskbg___EffNetV2__22-10-21_02-44-53/model_step120000.pts ~/tum/ptsmodels/v14/effnet_m_v14_all_120k.pts
+set -Eeuo pipefail
+
+# Original sources -> short names of published model checkpoints
+
+mkdir -p ~/emc/v15/ptsmodels
+
+# Segmentation models:
+
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-all/tr-all___UNet__22-11-05_20-46-58/model_step300000.pts ~/emc/v15/ptsmodels/unet_all_v15.pts
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-all_2/tr-all_2___UNet__22-11-05_20-47-00/model_step300000.pts ~/emc/v15/ptsmodels/unet_all2_v15.pts
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-all_3/tr-all_3___UNet__22-11-05_20-47-02/model_step300000.pts ~/emc/v15/ptsmodels/unet_all3_v15.pts
+
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-dro/tr-dro___UNet__22-11-05_20-47-03/model_step300000.pts ~/emc/v15/ptsmodels/unet_dro_v15.pts
+
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-hek/tr-hek___UNet__22-11-05_20-47-04/model_step300000.pts ~/emc/v15/ptsmodels/unet_hek_v15.pts
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-hek_2/tr-hek_2___UNet__22-11-05_20-47-06/model_step300000.pts ~/emc/v15/ptsmodels/unet_hek2_v15.pts
+
+rsync -a cajal:/cajal/nvmescratch/users/mdraw/emc/v15/seg_trainings/seg_trainings_v15_tr-mice/tr-mice___UNet__22-11-05_20-47-07/model_step300000.pts ~/emc/v15/ptsmodels/unet_mice_v15.pts
+
+
+# Classification models:
+
+# TODO
