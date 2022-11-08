@@ -16,7 +16,7 @@ isplit_data_path: ${path_prefix}/emcapsulin/isplitdata_${v}
 # Data selection: spreadsheet column name for training and validation
 tr_group: all
 # Optionally specify different evaluation group (-> cross-domain generalization test).
-ev_group: ${tr_group}
+ev_group: ${tr_group} # TODO: Override from Dataset Name column
 
 # Minimum particle size. Smaller connected components are removed automatically
 minsize: 60

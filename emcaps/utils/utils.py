@@ -230,13 +230,32 @@ def is_for_validation(path) -> bool:
     return row.Validation.item()
 
 
+def check_group_name(group_name: str, sheet_path: Path | str) -> None:
+    meta = get_meta(sheet_path=sheet_path)
+    # Column-based selection (all, all2, ...)
+    group_isincols = meta.get(group_name, default=False)
+    # "Dataset Name"-based selection
+    group_isindsns = group_name in meta['Dataset Name'].unique()
+    if group_isincols and group_isindsns:  # The two kinds of selection are mutually exclusive.
+        raise ValueError(
+            f'{group_name} both found as a column name and as a "Dataset Name" entry '
+            'in {sheet_path}. This should not happen. Please check the spreadsheet.'
+        )
+    if not (group_isincols or group_isindsns):
+        raise ValueError(f'{group_name} neither found in {sheet_path} as column name nor as a "Dataset Name" entry')
+
+
+# Supports both column-based selection (all, all2, ...) and "Dataset Name"-based selection
 @lru_cache(maxsize=1024)
-def is_in_data_group(path_or_num, group_name, sheet_path) -> Path:
+def is_in_data_group(path_or_num: Path | str | int, group_name: str, sheet_path: Path | str) -> bool:
+    check_group_name(group_name, sheet_path)
     metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
-    gval = metarow.get(group_name)
-    if pd.isna(gval):
-        raise ValueError(f'{group_name} not found in {sheet_path}')
-    return bool(gval)
+    # Column-based selection (all, all2, ...)
+    col_isingroup = metarow.get(group_name, default=False)
+    # "Dataset Name"-based selection
+    dsn_isingroup = metarow['Dataset Name'] == group_name
+    isingroup = col_isingroup or dsn_isingroup
+    return bool(isingroup)
 
 
 @lru_cache(maxsize=1024)
