@@ -160,34 +160,6 @@ def get_v5_enctype(path) -> str:
     return v5_enctype
 
 
-# @lru_cache(maxsize=1024)
-# def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
-#     row = get_meta_row(path)
-#     if pos is None:
-#         v5_enctype = row.scondv5
-#     else:
-#         assert isplitdata_root is not None
-#         assert role is not None
-#         region_masks = get_isplit_multiclass_regions(img_num=row.num, isplitdata_root=isplitdata_root)
-#         rmasks = region_masks[role]
-#         if not rmasks:  # No rmasks found -> expect enctype to be known simply from table name
-#             v5_enctype = row.scondv5
-#         else:
-#             scond_at_pos = '?'
-#             for scond, rmask in rmasks.items():
-#                 if rmask[pos] > 0:
-#                     scond_at_pos = scond
-#                     break
-#             v5_enctype = scond_at_pos
-
-#     if 'G_1M-Tm' in v5_enctype:
-#         print('FAIL: Deduced dual v5_enctype for one patch pos')
-#         # import IPython ; IPython.embed(); raise SystemExit
-
-#     assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
-#     return v5_enctype
-
-
 @lru_cache(maxsize=1024)
 def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
     row = get_meta_row(path)
@@ -230,12 +202,24 @@ def is_for_validation(path) -> bool:
     return row.Validation.item()
 
 
+def get_all_dataset_names(sheet_path: Path | str) -> list:
+    meta = get_meta(sheet_path=sheet_path)
+    names = meta['Dataset Name'].dropna().unique()
+    return names
+
+
+@lru_cache(maxsize=1024)
+def get_dataset_name(path_or_num: Path | str | int, sheet_path: Path | str) -> str:
+    metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
+    return metarow.get('Dataset Name', default=None)
+
+
 def check_group_name(group_name: str, sheet_path: Path | str) -> None:
     meta = get_meta(sheet_path=sheet_path)
     # Column-based selection (all, all2, ...)
     group_isincols = meta.get(group_name, default=False)
     # "Dataset Name"-based selection
-    group_isindsns = group_name in meta['Dataset Name'].unique()
+    group_isindsns = group_name in get_all_dataset_names(sheet_path=sheet_path)
     if group_isincols and group_isindsns:  # The two kinds of selection are mutually exclusive.
         raise ValueError(
             f'{group_name} both found as a column name and as a "Dataset Name" entry '

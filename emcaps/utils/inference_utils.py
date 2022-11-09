@@ -122,15 +122,15 @@ model_urls = {**segmenter_urls, **classifier_urls}
 
 
 @lru_cache()
-def get_model(variant: str) -> torch.jit.ScriptModule:
-    if variant in model_urls.keys():
-        url = model_urls[variant]
+def get_model(path_or_name: str) -> torch.jit.ScriptModule:
+    if path_or_name in model_urls.keys():
+        url = model_urls[path_or_name]
         local_path = ub.grabdata(url, appname='emcaps')
     else:
-        if (p := Path(variant).expanduser()).is_file():
+        if (p := Path(path_or_name).expanduser()).is_file():
             local_path = p
         else:
-            raise ValueError(f'Model variant {variant} not found. Valid choices are existing file paths or the following variant short names:\n{list(model_urls.keys())}')
+            raise ValueError(f'Model {path_or_name} not found. Valid choices are existing file paths or the following short names:\n{list(model_urls.keys())}')
     model = load_torchscript_model(local_path)
     return model
 

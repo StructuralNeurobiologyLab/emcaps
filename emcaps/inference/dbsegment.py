@@ -84,6 +84,10 @@ def produce_metrics(thresh, results_root, segmenter_path, classifier_path, data_
 - X_fp_error.png: map of false positive predictions w.r.t. GT labels
 - X_fn_error_overlay.jpg: map of false negative predictions w.r.t. GT labels, overlayed on raw image
 - X_fp_error_overlay.jpg: map of false positive predictions w.r.t. GT labels, overlayed on raw image
+- X_cls.jpg: Classifier-based recolorization of segmentation
+- X_overlay_cls.jpg: Classifier-based recolorization of segmentation, overlayed on raw image
+- X_cls_table.xlsx: Classification / region analysis results in tabular form
+
 Info:
 - data: {data_selection}
 - segmenter: {segmenter_path}
@@ -121,7 +125,7 @@ def main(cfg: DictConfig) -> None:
         transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)
     ])
 
-    ENABLE_ENCTYPE_SUBDIRS = True
+    ENABLE_GROUP_SUBDIRS = True
     ZERO_LABELS = False
 
     tta_num = cfg.dbsegment.tta_num
@@ -129,24 +133,11 @@ def main(cfg: DictConfig) -> None:
     segmenter_path = cfg.dbsegment.segmenter
     classifier_path = cfg.dbsegment.classifier
 
-    """
-    for ETYPE in '1M-Mx' '1M-Qt' '2M-Mx' '2M-Qt' '3M-Qt' '1M-Tm'
-        python -m inference.inference -c $ETYPE
-    end
-    """
-
     thresh = 127
     dt_thresh = 0.00
 
     # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
-    allowed_classes_for_classification = [
-        '1M-Mx',
-        '1M-Qt',
-        '2M-Mx',
-        '2M-Qt',
-        '3M-Qt',
-        '1M-Tm',
-    ]
+    allowed_classes_for_classification = cfg.dbsegment.constrain_classifier
 
     constraint_signature = ''  # Unconstrained
     if allowed_classes_for_classification != utils.CLASS_GROUPS['simple_hek']:
@@ -158,26 +149,15 @@ def main(cfg: DictConfig) -> None:
 
     img_paths = find_vx_val_images(isplit_data_path=cfg.isplit_data_path, group_name=cfg.ev_group, sheet_path=cfg.sheet_path)
 
-    class_groups_to_include = [
-        'simple_hek',
-        'dro',
-        'mice',
-        'qttm',
-        'multi',
-    ]
-    included = []
-    for cgrp in class_groups_to_include:
-        cgrp_classes = utils.CLASS_GROUPS[cgrp]
-        # logger.info(f'Including class group {cgrp}, containing classes {cgrp_classes}')
-        included.extend(cgrp_classes)
-    DATA_SELECTION_V5NAMES = included
+    # TODO: Also support simple-enctype-based grouping for metrics calculation
+    eval_group_names = utils.get_all_dataset_names(sheet_path=cfg.sheet_path)
 
-    for p in [results_root / scond for scond in DATA_SELECTION_V5NAMES]:
+    for p in [results_root / group_name for group_name in eval_group_names]:
         os.makedirs(p, exist_ok=True)
 
-    if len(DATA_SELECTION_V5NAMES) == 1:
-        v5_enctype = DATA_SELECTION_V5NAMES[0]
-        results_root = Path(f'{str(results_root)}_{v5_enctype}')
+    if len(eval_group_names) == 1:
+        group_name = eval_group_names[0]
+        results_root = Path(f'{str(results_root)}_{group_name}')
 
     DESIRED_OUTPUTS = cfg.dbsegment.desired_outputs
 
@@ -227,10 +207,10 @@ def main(cfg: DictConfig) -> None:
     m_probs = []
     m_preds = []
 
-    if ENABLE_ENCTYPE_SUBDIRS:
-        per_enctype_results = {}
-        for enctype in DATA_SELECTION_V5NAMES:
-            per_enctype_results[enctype] = {
+    if ENABLE_GROUP_SUBDIRS:
+        per_group_results = {}
+        for group_name in eval_group_names:
+            per_group_results[group_name] = {
                 'targets': [], 'preds': [], 'probs': []
             }
 
@@ -241,9 +221,9 @@ def main(cfg: DictConfig) -> None:
         out = out.numpy()
         basename = os.path.splitext(os.path.basename(img_path))[0]
 
-        if ENABLE_ENCTYPE_SUBDIRS:
-            enctype = get_v5_enctype(img_path)
-            results_path = results_root / enctype
+        if ENABLE_GROUP_SUBDIRS:
+            group_name = get_v5_enctype(img_path)
+            results_path = results_root / group_name
             results_path.mkdir(exist_ok=True)
         else:
             results_path = results_root
@@ -361,10 +341,10 @@ def main(cfg: DictConfig) -> None:
             m_pred = (cout > 0)#.reshape(-1))
             m_prob = (out[0, 1])#.reshape(-1))
 
-            if ENABLE_ENCTYPE_SUBDIRS:
-                per_enctype_results[enctype]['targets'].append(m_target)
-                per_enctype_results[enctype]['preds'].append(m_pred)
-                per_enctype_results[enctype]['probs'].append(m_prob)
+            if ENABLE_GROUP_SUBDIRS:
+                per_group_results[group_name]['targets'].append(m_target)
+                per_group_results[group_name]['preds'].append(m_pred)
+                per_group_results[group_name]['probs'].append(m_prob)
 
             m_targets.append(m_target)
             m_preds.append(m_pred)
@@ -385,32 +365,30 @@ def main(cfg: DictConfig) -> None:
             results_root=results_root,
             segmenter_path=segmenter_path,
             classifier_path=classifier_path,
-            data_selection=DATA_SELECTION_V5NAMES,
+            data_selection=eval_group_names,
             m_targets=m_targets,
             m_preds=m_preds,
             m_probs=m_probs
         )
         dfdict = {'All': [global_metrics_dict[k] for k in METRICS_KEYS]}
 
-        if ENABLE_ENCTYPE_SUBDIRS:
-            for enctype in DATA_SELECTION_V5NAMES:
-                enctype_metrics_dict = produce_metrics(
+        if ENABLE_GROUP_SUBDIRS:
+            for group_name in eval_group_names:
+                group_metrics_dict = produce_metrics(
                     thresh=thresh,
-                    results_root=results_root / enctype,
+                    results_root=results_root / group_name,
                     segmenter_path=segmenter_path,
                     classifier_path=classifier_path,
-                    data_selection=[enctype],
-                    m_targets=per_enctype_results[enctype]['targets'],
-                    m_preds=per_enctype_results[enctype]['preds'],
-                    m_probs=per_enctype_results[enctype]['probs']
+                    data_selection=[group_name],
+                    m_targets=per_group_results[group_name]['targets'],
+                    m_preds=per_group_results[group_name]['preds'],
+                    m_probs=per_group_results[group_name]['probs']
                 )
-                per_enctype_results[enctype]['metrics'] = enctype_metrics_dict
+                per_group_results[group_name]['metrics'] = group_metrics_dict
 
-                em = per_enctype_results[enctype]['metrics']
+                em = per_group_results[group_name]['metrics']
                 assert list(em.keys()) == METRICS_KEYS 
-                dfdict[enctype] = [em[k] for k in METRICS_KEYS]
-
-            # df_index = ['All'] + DATA_SELECTION_V5NAMES
+                dfdict[group_name] = [em[k] for k in METRICS_KEYS]
 
             dfmetrics = pd.DataFrame(dfdict, index=METRICS_KEYS)
             dfmetrics.to_excel(results_root / 'metrics.xlsx')

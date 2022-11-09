@@ -50,14 +50,22 @@ dbsegment:
   tta_num: 2
   # Types of outputs that should be produced
   desired_outputs:
-  - raw
-  - thresh
-  - lab
-  - overlays
-  - error_maps
-  - probmaps
-  - cls_overlays
-  - metrics
+    - raw
+    - thresh
+    - lab
+    - overlays
+    - error_maps
+    - probmaps
+    - cls_overlays
+    - metrics
+  # Constrained classification: list of allowed classes
+  constrain_classifier:
+    - 1M-Mx
+    - 1M-Qt
+    - 2M-Mx
+    - 2M-Qt
+    - 3M-Qt
+    - 1M-Tm
 
 # General constants, not meant to be changed
 dataset_mean: [128.,]
