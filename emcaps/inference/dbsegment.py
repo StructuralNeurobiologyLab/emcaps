@@ -103,11 +103,11 @@ Info:
     return metrics_dict
 
 
-def find_vx_val_images(isplit_data_path, group_name, sheet_path):
+def find_vx_val_images(isplit_data_path: Path | str, group_name: str, sheet_path: Path | str):
     """Find paths to all raw validation images of split vx"""
     val_img_paths = []
-    for p in isplit_data_path.rglob('*_val.png'):  # Look for all validation raw images recursively
-        if utils.is_in_data_group(path_or_num=p, group_name=group_name, sheet_path=sheet_path):
+    for p in Path(isplit_data_path).rglob('*_val.png'):  # Look for all validation raw images recursively
+        if group_name == 'everything' or utils.is_in_data_group(path_or_num=p, group_name=group_name, sheet_path=sheet_path):
             val_img_paths.append(p)
     return val_img_paths
 
@@ -150,7 +150,13 @@ def main(cfg: DictConfig) -> None:
     img_paths = find_vx_val_images(isplit_data_path=cfg.isplit_data_path, group_name=cfg.ev_group, sheet_path=cfg.sheet_path)
 
     # TODO: Also support simple-enctype-based grouping for metrics calculation
-    eval_group_names = utils.get_all_dataset_names(sheet_path=cfg.sheet_path)
+    if cfg.dbsegment.groupby == 'complex_enctype':
+        eval_group_names = utils.get_all_complex_enctypes(sheet_path=cfg.sheet_path)
+    elif cfg.dbsegment.groupby == 'datasetname':
+        eval_group_names = utils.get_all_dataset_names(sheet_path=cfg.sheet_path)
+    else:
+        raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
+
 
     for p in [results_root / group_name for group_name in eval_group_names]:
         os.makedirs(p, exist_ok=True)
@@ -177,13 +183,12 @@ def main(cfg: DictConfig) -> None:
     if not 'cls_overlays' in DESIRED_OUTPUTS:
         # Classifier not required, so we disable it and don't reference it
         classifier_path = ''
-    elif classifier_path == 'auto':
+
+    if classifier_path == 'auto':
         classifier_path = f'effnet_{cfg.tr_group}_{cfg.v}'
         logger.info(f'Using default classifier {classifier_path} based on other config values')
-        segmenter_model = iu.get_model(classifier_path)
-    else:
+    elif classifier_path != '':
         logger.info(f'Using classifier {classifier_path}')
-        segmenter_model = iu.get_model(classifier_path)
 
     # No tiling necessary on normal images
     tile_shape = None
@@ -222,7 +227,12 @@ def main(cfg: DictConfig) -> None:
         basename = os.path.splitext(os.path.basename(img_path))[0]
 
         if ENABLE_GROUP_SUBDIRS:
-            group_name = get_v5_enctype(img_path)
+            if cfg.dbsegment.groupby == 'complex_enctype':
+                group_name = utils.get_complex_enctype(img_path, sheet_path=cfg.sheet_path)
+            elif cfg.dbsegment.groupby == 'datasetname':
+                group_name = utils.get_dataset_name(img_path, sheet_path=cfg.sheet_path)
+            else:
+                raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
             results_path = results_root / group_name
             results_path.mkdir(exist_ok=True)
         else:
@@ -295,6 +305,8 @@ def main(cfg: DictConfig) -> None:
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
             if 'cls_overlays' in DESIRED_OUTPUTS:
+                if classifier_path == '':
+                    raise ValueError(f'classifier_path needs to be set for cls_overlays')
                 rprops, cls_relabeled = iu.compute_rprops(
                     image=raw_img,
                     lab=cout > 0,
@@ -360,6 +372,7 @@ def main(cfg: DictConfig) -> None:
 
     if 'metrics' in DESIRED_OUTPUTS:
         METRICS_KEYS = ['dsc', 'iou', 'precision', 'recall']
+        logger.info('Calculating global metrics...')
         global_metrics_dict = produce_metrics(
             thresh=thresh,
             results_root=results_root,
@@ -374,6 +387,7 @@ def main(cfg: DictConfig) -> None:
 
         if ENABLE_GROUP_SUBDIRS:
             for group_name in eval_group_names:
+                logger.info(f'Calculating metrics of group {group_name}...')
                 group_metrics_dict = produce_metrics(
                     thresh=thresh,
                     results_root=results_root / group_name,

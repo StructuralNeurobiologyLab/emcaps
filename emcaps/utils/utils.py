@@ -100,14 +100,10 @@ def get_default_sheet_path(prefix: str | Path) -> Path:
 #       of a "Sheet" class that knows where the sheet is located
 @lru_cache(maxsize=1024)
 def get_meta(sheet_path, sheet_name=0) -> pd.DataFrame:
-    # if sheet_path is None:
-    #     sheet_path = get_default_sheet_path()
     sheet = pd.read_excel(sheet_path, sheet_name=sheet_name)
     meta = sheet.copy()
     meta = meta.rename(columns={'Image ID': 'num'})
-    meta = meta.rename(columns={'Short Experimental Condition': 'scond'})
     meta = meta.convert_dtypes()
-    meta['scondv5'] = meta.scond.replace(OLDNAMES_TO_V5NAMES)
     return meta
 
 
@@ -161,6 +157,13 @@ def get_v5_enctype(path) -> str:
 
 
 @lru_cache(maxsize=1024)
+def get_complex_enctype(path_or_num: Path | str | int, sheet_path: Path | str) -> str:
+    row = get_meta_row(path_or_num, sheet_path=sheet_path)
+    enctype = row['Enc Type']
+    return enctype
+
+
+@lru_cache(maxsize=1024)
 def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
     row = get_meta_row(path)
     scondv5 = strip_host_prefix(row.scondv5)  # Don't care about organism
@@ -205,6 +208,12 @@ def is_for_validation(path) -> bool:
 def get_all_dataset_names(sheet_path: Path | str) -> list:
     meta = get_meta(sheet_path=sheet_path)
     names = meta['Dataset Name'].dropna().unique()
+    return names
+
+
+def get_all_complex_enctypes(sheet_path: Path | str) -> list:
+    meta = get_meta(sheet_path=sheet_path)
+    names = list(meta['Enc Type'].dropna().unique())
     return names
 
 

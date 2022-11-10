@@ -16,7 +16,8 @@ isplit_data_path: ${path_prefix}/emcapsulin/isplitdata_${v}
 # Data selection: spreadsheet column name for training and validation
 tr_group: all
 # Optionally specify different evaluation group (-> cross-domain generalization test).
-ev_group: ${tr_group} # TODO: Override from Dataset Name column
+# Special value "everything" means every image that belongs to any group is used.
+ev_group: everything
 
 # Minimum particle size. Smaller connected components are removed automatically
 minsize: 60
@@ -45,7 +46,8 @@ dbsegment:
   #classifier: auto  # <- not yet possible because models are not ready yet
   classifier:
   # Where to write results
-  results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}_ev-${ev_group}
+  #results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}_ev-${ev_group}
+  results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}
   # Number of test-time augmentation passes to use (can be 0, 1 or 2)
   tta_num: 2
   # Types of outputs that should be produced
@@ -56,7 +58,7 @@ dbsegment:
     - overlays
     - error_maps
     - probmaps
-    - cls_overlays
+    # - cls_overlays
     - metrics
   # Constrained classification: list of allowed classes
   constrain_classifier:
@@ -66,6 +68,7 @@ dbsegment:
     - 2M-Qt
     - 3M-Qt
     - 1M-Tm
+  groupby: complex_enctype
 
 # General constants, not meant to be changed
 dataset_mean: [128.,]

@@ -137,7 +137,7 @@ def get_model(path_or_name: str) -> torch.jit.ScriptModule:
 
 def load_torchscript_model(path: str) -> torch.jit.ScriptModule:
     model = torch.jit.load(path, map_location=DEVICE).eval().to(DTYPE)
-    model = torch.jit.optimize_for_inference(model)
+    # model = torch.jit.optimize_for_inference(model)
     return model
 
 
