@@ -43,9 +43,6 @@ logger = logging.getLogger('emcaps-dbsegment')
 
 
 def produce_metrics(thresh, results_root, segmenter_path, classifier_path, data_selection, m_targets, m_preds, m_probs):
-    # Calculate pixelwise precision and recall
-    # if m_targets.max() < 1:
-    #     import IPython ; IPython.embed(); raise SystemExit
     m_targets = np.concatenate(m_targets, axis=None)
     m_probs = np.concatenate(m_probs, axis=None)
     m_preds = np.concatenate(m_preds, axis=None)
@@ -204,7 +201,7 @@ def main(cfg: DictConfig) -> None:
         out_shape=out_shape,
         float16=True,
         transform=pre_predict_transform,
-        verbose=True,
+        # verbose=True,
         augmentations=tta_num,
         apply_softmax=apply_softmax,
     )
@@ -387,6 +384,10 @@ def main(cfg: DictConfig) -> None:
 
         if ENABLE_GROUP_SUBDIRS:
             for group_name in eval_group_names:
+                _targets = per_group_results[group_name]['targets']
+                if len(_targets) == 0 or np.concatenate(per_group_results[group_name]['targets'], axis=None).max() == 0:
+                    # No positive value found in any target -> metrics are undefined, so skip this group
+                    continue
                 logger.info(f'Calculating metrics of group {group_name}...')
                 group_metrics_dict = produce_metrics(
                     thresh=thresh,
