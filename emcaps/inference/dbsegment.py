@@ -118,13 +118,6 @@ class Randomizer(torch.nn.Module):
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
 
-    pre_predict_transform = transforms.Compose([
-        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)
-    ])
-
-    ENABLE_GROUP_SUBDIRS = True
-    ZERO_LABELS = False
-
     tta_num = cfg.dbsegment.tta_num
     minsize = cfg.minsize
     segmenter_path = cfg.dbsegment.segmenter
@@ -142,27 +135,49 @@ def main(cfg: DictConfig) -> None:
         for ac in allowed_classes_for_classification:
             constraint_signature = f'{constraint_signature}_{ac}'
 
+    pre_predict_transform = transforms.Compose([
+        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)
+    ])
+
     results_root = Path(cfg.dbsegment.results_root)
 
-    img_paths = find_vx_val_images(isplit_data_path=cfg.isplit_data_path, group_name=cfg.ev_group, sheet_path=cfg.sheet_path)
+    inp_path = cfg.inp_path
+    if inp_path is None:
+        # Use image database with metadata and human labels, enabling metrics calculation and error visualization etc.
+        use_database = True 
+        enable_zero_labels = False  # Expect labels to be available
+        img_paths = find_vx_val_images(isplit_data_path=cfg.isplit_data_path, group_name=cfg.ev_group, sheet_path=cfg.sheet_path)
 
-    # TODO: Also support simple-enctype-based grouping for metrics calculation
-    if cfg.dbsegment.groupby == 'complex_enctype':
-        eval_group_names = utils.get_all_complex_enctypes(sheet_path=cfg.sheet_path)
-    elif cfg.dbsegment.groupby == 'datasetname':
-        eval_group_names = utils.get_all_dataset_names(sheet_path=cfg.sheet_path)
+        if cfg.dbsegment.groupby == 'complex_enctype':
+            eval_group_names = utils.get_all_complex_enctypes(sheet_path=cfg.sheet_path)
+        elif cfg.dbsegment.groupby == 'dataset_name':
+            eval_group_names = utils.get_all_dataset_names(sheet_path=cfg.sheet_path)
+        else:
+            raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
+
+        for p in [results_root / group_name for group_name in eval_group_names]:
+            os.makedirs(p, exist_ok=True)
+
+        if len(eval_group_names) == 1:
+            group_name = eval_group_names[0]
+            results_root = Path(f'{str(results_root)}_{group_name}')
     else:
-        raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
+        # Custom path, can't use image database with metadata and human labels, so disable all quantitative eval features
+        use_database = False
+        enable_zero_labels = True  # Makes everything work without human labels
+        inp_path = Path(inp_path).expanduser()
+        if inp_path.is_file():
+            img_paths = [inp_path]
+            if cfg.dbsegment.relative_out_path:
+                results_root = Path(img_paths[0]).parent
+        elif inp_path.is_dir():
+            img_paths = list(inp_path.rglob('*'))
+            if cfg.dbsegment.relative_out_path:
+                results_root = inp_path.parent / f'{inp_path.name}_seg'#_tr-all'
+        else:
+            raise FileNotFoundError(f'{inp_path} not found')
 
-
-    for p in [results_root / group_name for group_name in eval_group_names]:
-        os.makedirs(p, exist_ok=True)
-
-    if len(eval_group_names) == 1:
-        group_name = eval_group_names[0]
-        results_root = Path(f'{str(results_root)}_{group_name}')
-
-    DESIRED_OUTPUTS = cfg.dbsegment.desired_outputs
+    desired_outputs = cfg.dbsegment.desired_outputs
 
     label_name = 'encapsulins'
 
@@ -177,7 +192,7 @@ def main(cfg: DictConfig) -> None:
         logger.info(f'Using segmenter {segmenter_path}')
         segmenter_model = iu.get_model(segmenter_path)
 
-    if not 'cls_overlays' in DESIRED_OUTPUTS:
+    if not 'cls_overlays' in desired_outputs:
         # Classifier not required, so we disable it and don't reference it
         classifier_path = ''
 
@@ -187,21 +202,12 @@ def main(cfg: DictConfig) -> None:
     elif classifier_path != '':
         logger.info(f'Using classifier {classifier_path}')
 
-    # No tiling necessary on normal images
-    tile_shape = None
-    overlap_shape = None
-    out_shape = None
-
     apply_softmax = True
     predictor = Predictor(
         model=segmenter_model,
         device=None,
-        tile_shape=tile_shape,
-        overlap_shape=overlap_shape,
-        out_shape=out_shape,
         float16=True,
         transform=pre_predict_transform,
-        # verbose=True,
         augmentations=tta_num,
         apply_softmax=apply_softmax,
     )
@@ -209,7 +215,7 @@ def main(cfg: DictConfig) -> None:
     m_probs = []
     m_preds = []
 
-    if ENABLE_GROUP_SUBDIRS:
+    if use_database:
         per_group_results = {}
         for group_name in eval_group_names:
             per_group_results[group_name] = {
@@ -223,10 +229,10 @@ def main(cfg: DictConfig) -> None:
         out = out.numpy()
         basename = os.path.splitext(os.path.basename(img_path))[0]
 
-        if ENABLE_GROUP_SUBDIRS:
+        if use_database:
             if cfg.dbsegment.groupby == 'complex_enctype':
                 group_name = utils.get_complex_enctype(img_path, sheet_path=cfg.sheet_path)
-            elif cfg.dbsegment.groupby == 'datasetname':
+            elif cfg.dbsegment.groupby == 'dataset_name':
                 group_name = utils.get_dataset_name(img_path, sheet_path=cfg.sheet_path)
             else:
                 raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
@@ -236,16 +242,12 @@ def main(cfg: DictConfig) -> None:
             results_path = results_root
 
         if out.shape[1] in {1, 2}:
-            if out.shape[1] == 2:  # Binary segmentation -> only export channel 1
-                cout = out[0, 1]
-                cout = (cout * 255.).astype(np.uint8)
-                cout = cout > thresh
-                # kind = f'thresh{thresh}'
-                kind = f'thresh'
-            elif out.shape[1] == 1:  # Distance transform regression
-                cout = out[0, 0]
-                cout = cout <= dt_thresh
-                kind = f'dtthresh{dt_thresh}'
+            assert out.shape[1] == 2
+            cout = out[0, 1]  # Binary segmentation -> only export channel 1
+            cout = (cout * 255.).astype(np.uint8)
+            cout = cout > thresh
+            # kind = f'thresh{thresh}'
+            kind = f'thresh'
 
             # Postprocessing:
             cout = sm.remove_small_holes(cout, 2000)
@@ -257,10 +259,10 @@ def main(cfg: DictConfig) -> None:
             # out_path = eu(f'{results_path}/{basename}_{segmentername}_{kind}.png')
             out_path = eu(f'{results_path}/{basename}_{kind}.png')
             logger.info(f'Writing inference result to {out_path}')
-            if 'thresh' in DESIRED_OUTPUTS:
+            if 'thresh' in desired_outputs:
                 iio.imwrite(out_path, cout)
 
-            if 'probmaps' in DESIRED_OUTPUTS:
+            if 'probmaps' in desired_outputs:
                 probmap = (out[0, 1] * 255.).astype(np.uint8)
                 probmap_path = eu(f'{results_path}/{basename}_probmap.jpg')
                 iio.imwrite(probmap_path, probmap)
@@ -268,24 +270,21 @@ def main(cfg: DictConfig) -> None:
             raw_img = iio.imread(img_path)
 
             # Write raw and gt labels
-            if ZERO_LABELS:
+            if enable_zero_labels:
+                # Make all-zero label image, to make handling label-free images easier below.
+                # TODO: Remove the need for zero_labels
                 lab_img = np.zeros_like(raw_img, dtype=np.uint8)
             else:
                 lab_path = f'{str(img_path)[:-4]}_{label_name}.png'
-                if not Path(lab_path).exists():
-                    lab_path = f'{img_path[:-4]}_{label_name}.tif'
                 lab_img = np.array(iio.imread(lab_path))
-                lab_img = ensure_not_inverted(lab_img > 0, verbose=True, error=False)[0].astype(np.int64)
-
-                # lab_img = sm.binary_erosion(lab_img, sm.selem.disk(5)).astype(lab_img.dtype)  # Model was trained with this target transform. Change this if training changes!
                 lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
 
-            if 'raw' in DESIRED_OUTPUTS:
+            if 'raw' in desired_outputs:
                 iio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
-            if 'lab' in DESIRED_OUTPUTS:
+            if use_database and 'lab' in desired_outputs:
                 iio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
 
-            if 'overlays' in DESIRED_OUTPUTS:
+            if 'overlays' in desired_outputs:
                 # Create overlay images
                 lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
                 pred_overlay = label2rgb(cout > 0, raw_img, bg_label=0, alpha=0.5, colors=['green'])
@@ -297,11 +296,11 @@ def main(cfg: DictConfig) -> None:
                 lab_overlay = (lab_overlay * 255.).astype(np.uint8)
                 pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-                if not ZERO_LABELS:
+                if not enable_zero_labels:
                     iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
-            if 'cls_overlays' in DESIRED_OUTPUTS:
+            if 'cls_overlays' in desired_outputs:
                 if classifier_path == '':
                     raise ValueError(f'classifier_path needs to be set for cls_overlays')
                 rprops, cls_relabeled = iu.compute_rprops(
@@ -319,7 +318,7 @@ def main(cfg: DictConfig) -> None:
 
                 iu.save_properties_to_xlsx(properties=rprops, xlsx_out_path=results_path / f'{basename}_cls_table.xlsx')
 
-            if 'error_maps' in DESIRED_OUTPUTS:
+            if use_database and 'error_maps' in desired_outputs:
                 # Create error image
                 error_img = lab_img != cout
                 error_img = (error_img.astype(np.uint8)) * 255
@@ -350,7 +349,7 @@ def main(cfg: DictConfig) -> None:
             m_pred = (cout > 0)#.reshape(-1))
             m_prob = (out[0, 1])#.reshape(-1))
 
-            if ENABLE_GROUP_SUBDIRS:
+            if use_database:
                 per_group_results[group_name]['targets'].append(m_target)
                 per_group_results[group_name]['preds'].append(m_pred)
                 per_group_results[group_name]['probs'].append(m_prob)
@@ -359,7 +358,7 @@ def main(cfg: DictConfig) -> None:
             m_preds.append(m_pred)
             m_probs.append(m_prob)
 
-            if 'argmax' in DESIRED_OUTPUTS:
+            if 'argmax' in desired_outputs:
                 # Argmax of channel probs
                 pred = np.argmax(out, 1)[0]
                 # plab = skimage.color.label2rgb(pred, bg_label=0)
@@ -367,7 +366,7 @@ def main(cfg: DictConfig) -> None:
                 out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.jpg')
                 iio.imwrite(out_path, plab)
 
-    if 'metrics' in DESIRED_OUTPUTS:
+    if use_database and 'metrics' in desired_outputs:
         METRICS_KEYS = ['dsc', 'iou', 'precision', 'recall']
         logger.info('Calculating global metrics...')
         global_metrics_dict = produce_metrics(
@@ -382,7 +381,7 @@ def main(cfg: DictConfig) -> None:
         )
         dfdict = {'All': [global_metrics_dict[k] for k in METRICS_KEYS]}
 
-        if ENABLE_GROUP_SUBDIRS:
+        if enable_group_subdirs:
             for group_name in eval_group_names:
                 _targets = per_group_results[group_name]['targets']
                 if len(_targets) == 0 or np.concatenate(per_group_results[group_name]['targets'], axis=None).max() == 0:

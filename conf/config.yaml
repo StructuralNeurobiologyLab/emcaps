@@ -40,14 +40,20 @@ segtrain:
 
 # Full dataset batch inference
 dbsegment:
+  # Custom image source path override for testing (outside of the main image database).
+  #    Can be a path to an image or to a directory of images.
+  inp_path:
+  # If true and inp_path is set, override results_root path to a path next to inp_path
+  relative_out_path: true
   # Path to trained segmentation model
   segmenter: auto
   # Path to trained classifier model (optional)
   #classifier: auto  # <- not yet possible because models are not ready yet
   classifier:
+  #groupby: complex_enctype
+  groupby: dataset_name
   # Where to write results
-  #results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}_ev-${ev_group}
-  results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}
+  results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}_groupby-${.groupby}
   # Number of test-time augmentation passes to use (can be 0, 1 or 2)
   tta_num: 2
   # Types of outputs that should be produced
@@ -68,7 +74,6 @@ dbsegment:
     - 2M-Qt
     - 3M-Qt
     - 1M-Tm
-  groupby: complex_enctype
 
 # General constants, not meant to be changed
 dataset_mean: [128.,]
