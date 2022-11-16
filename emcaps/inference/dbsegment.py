@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 from os.path import expanduser as eu
+import random
 
 import numpy as np
 import hydra
@@ -100,6 +101,10 @@ Info:
     return metrics_dict
 
 
+def is_empty(targets) -> bool:
+    # No positive value found in any target -> metrics are undefined, so skip this group
+    return len(targets) == 0 or np.concatenate(targets, axis=None).max() == 0
+
 def find_vx_val_images(isplit_data_path: Path | str, group_name: str, sheet_path: Path | str):
     """Find paths to all raw validation images of split vx"""
     val_img_paths = []
@@ -117,14 +122,17 @@ class Randomizer(torch.nn.Module):
 
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
+    _hydra_cwd = hydra.core.hydra_config.HydraConfig.get()['run']['dir']
+    logger.info(f'Writing logs and config to {_hydra_cwd}')
+    # (Path(cfg.dbsegment.results_root) / '.hydra_outputs').symlink_to(_hydra_cwd)
 
     tta_num = cfg.dbsegment.tta_num
     minsize = cfg.minsize
     segmenter_path = cfg.dbsegment.segmenter
     classifier_path = cfg.dbsegment.classifier
+    thresh = cfg.dbsegment.thresh
 
-    thresh = 127
-    dt_thresh = 0.00
+    METRICS_KEYS = ['dsc', 'iou', 'precision', 'recall']
 
     # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
     allowed_classes_for_classification = cfg.dbsegment.constrain_classifier
@@ -141,26 +149,15 @@ def main(cfg: DictConfig) -> None:
 
     results_root = Path(cfg.dbsegment.results_root)
 
-    inp_path = cfg.inp_path
+    inp_path = cfg.dbsegment.inp_path
     if inp_path is None:
         # Use image database with metadata and human labels, enabling metrics calculation and error visualization etc.
         use_database = True 
         enable_zero_labels = False  # Expect labels to be available
         img_paths = find_vx_val_images(isplit_data_path=cfg.isplit_data_path, group_name=cfg.ev_group, sheet_path=cfg.sheet_path)
 
-        if cfg.dbsegment.groupby == 'complex_enctype':
-            eval_group_names = utils.get_all_complex_enctypes(sheet_path=cfg.sheet_path)
-        elif cfg.dbsegment.groupby == 'dataset_name':
-            eval_group_names = utils.get_all_dataset_names(sheet_path=cfg.sheet_path)
-        else:
-            raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
-
-        for p in [results_root / group_name for group_name in eval_group_names]:
-            os.makedirs(p, exist_ok=True)
-
-        if len(eval_group_names) == 1:
-            group_name = eval_group_names[0]
-            results_root = Path(f'{str(results_root)}_{group_name}')
+        all_dataset_names = utils.get_unique_entries_under(column_name='Dataset Name', sheet_path=cfg.sheet_path)
+        all_image_types = utils.get_unique_entries_under(column_name='Image Type', sheet_path=cfg.sheet_path)
     else:
         # Custom path, can't use image database with metadata and human labels, so disable all quantitative eval features
         use_database = False
@@ -173,10 +170,13 @@ def main(cfg: DictConfig) -> None:
         elif inp_path.is_dir():
             img_paths = list(inp_path.rglob('*'))
             if cfg.dbsegment.relative_out_path:
-                results_root = inp_path.parent / f'{inp_path.name}_seg'#_tr-all'
+                results_root = inp_path.parent / f'{inp_path.name}_seg_{cfg.tr_group}'
         else:
             raise FileNotFoundError(f'{inp_path} not found')
 
+
+    results_root.mkdir(exist_ok=True)
+    logger.info(f'Writing outputs to {results_root}')
     desired_outputs = cfg.dbsegment.desired_outputs
 
     label_name = 'encapsulins'
@@ -211,17 +211,21 @@ def main(cfg: DictConfig) -> None:
         augmentations=tta_num,
         apply_softmax=apply_softmax,
     )
-    m_targets = []
-    m_probs = []
-    m_preds = []
 
+    dfdict = {mkey: {} for mkey in METRICS_KEYS}
     if use_database:
-        per_group_results = {}
-        for group_name in eval_group_names:
-            per_group_results[group_name] = {
-                'targets': [], 'preds': [], 'probs': []
-            }
+        # Base level: Initialize with 'All' aggregate key, populate more specific fields below
+        per_group_results = {'All': {'targets': [], 'preds': [], 'probs': []}}
+        # "Dataset Name"-level: Initialize with 'All' aggregate key, populate more specific fields below
+        for dataset_name in all_dataset_names:
+            per_group_results[dataset_name] = {'All': {'targets': [], 'preds': [], 'probs': []}}
+            dfdict[dataset_name] = {mkey: {} for mkey in METRICS_KEYS}
+            # "Image Type"-level
+            for image_type in all_image_types:
+                per_group_results[dataset_name][image_type] = {'targets': [], 'preds': [], 'probs': []}
+                # dfdict[dataset_name][image_type] = {}
 
+    # img_paths = random.sample(img_paths, 5)  # Uncomment to test a small sample
     assert len(img_paths) > 0
     for img_path in img_paths:
         inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
@@ -230,13 +234,9 @@ def main(cfg: DictConfig) -> None:
         basename = os.path.splitext(os.path.basename(img_path))[0]
 
         if use_database:
-            if cfg.dbsegment.groupby == 'complex_enctype':
-                group_name = utils.get_complex_enctype(img_path, sheet_path=cfg.sheet_path)
-            elif cfg.dbsegment.groupby == 'dataset_name':
-                group_name = utils.get_dataset_name(img_path, sheet_path=cfg.sheet_path)
-            else:
-                raise ValueError(f'{cfg.dbsegment.groupby=} not a valid choice.')
-            results_path = results_root / group_name
+            dataset_name = utils.get_image_entry(img_path, column_name='Dataset Name', sheet_path=cfg.sheet_path)
+            image_type = utils.get_image_entry(img_path, column_name='Image Type', sheet_path=cfg.sheet_path)
+            results_path = results_root / dataset_name
             results_path.mkdir(exist_ok=True)
         else:
             results_path = results_root
@@ -301,7 +301,7 @@ def main(cfg: DictConfig) -> None:
                 iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
             if 'cls_overlays' in desired_outputs:
-                if classifier_path == '':
+                if classifier_path == '' or classifier_path is None:
                     raise ValueError(f'classifier_path needs to be set for cls_overlays')
                 rprops, cls_relabeled = iu.compute_rprops(
                     image=raw_img,
@@ -350,13 +350,17 @@ def main(cfg: DictConfig) -> None:
             m_prob = (out[0, 1])#.reshape(-1))
 
             if use_database:
-                per_group_results[group_name]['targets'].append(m_target)
-                per_group_results[group_name]['preds'].append(m_pred)
-                per_group_results[group_name]['probs'].append(m_prob)
-
-            m_targets.append(m_target)
-            m_preds.append(m_pred)
-            m_probs.append(m_prob)
+                per_group_results[dataset_name][image_type]['targets'].append(m_target)
+                per_group_results[dataset_name][image_type]['preds'].append(m_pred)
+                per_group_results[dataset_name][image_type]['probs'].append(m_prob)
+                # Aggregate over all image_types: Fill into 'All' bucket regardless of image_type
+                per_group_results[dataset_name]['All']['targets'].append(m_target)
+                per_group_results[dataset_name]['All']['preds'].append(m_pred)
+                per_group_results[dataset_name]['All']['probs'].append(m_prob)
+                # Aggregate over all dataset_names and all image_types: Fill everything into 'All' bucket
+                per_group_results['All']['targets'].append(m_target)
+                per_group_results['All']['preds'].append(m_pred)
+                per_group_results['All']['probs'].append(m_prob)
 
             if 'argmax' in desired_outputs:
                 # Argmax of channel probs
@@ -367,45 +371,73 @@ def main(cfg: DictConfig) -> None:
                 iio.imwrite(out_path, plab)
 
     if use_database and 'metrics' in desired_outputs:
-        METRICS_KEYS = ['dsc', 'iou', 'precision', 'recall']
+        # Initialize metric value storage
+        dfdict = {}
+        for mkey in METRICS_KEYS:
+            dfdict[mkey] = {}
+            for dataset_name in all_dataset_names:
+                dfdict[mkey][dataset_name] = {}
+
         logger.info('Calculating global metrics...')
+        # 1. Global metrics (All), aggregate over all images, regardless of dataset_name and image_type
         global_metrics_dict = produce_metrics(
             thresh=thresh,
             results_root=results_root,
             segmenter_path=segmenter_path,
             classifier_path=classifier_path,
-            data_selection=eval_group_names,
-            m_targets=m_targets,
-            m_preds=m_preds,
-            m_probs=m_probs
+            data_selection=all_dataset_names,
+            m_targets=per_group_results['All']['targets'],
+            m_preds=per_group_results['All']['preds'],
+            m_probs=per_group_results['All']['probs']
         )
-        dfdict = {'All': [global_metrics_dict[k] for k in METRICS_KEYS]}
+        assert list(global_metrics_dict.keys()) == METRICS_KEYS
 
-        if enable_group_subdirs:
-            for group_name in eval_group_names:
-                _targets = per_group_results[group_name]['targets']
-                if len(_targets) == 0 or np.concatenate(per_group_results[group_name]['targets'], axis=None).max() == 0:
-                    # No positive value found in any target -> metrics are undefined, so skip this group
+        for mkey, mval in global_metrics_dict.items():
+            dfdict[mkey]['All'] = mval
+
+        # 2. Per dataset_name: first, aggregate over all images of one dataset_name, regardless of image_type
+        for dataset_name in all_dataset_names:
+            if is_empty(per_group_results[dataset_name]['All']['targets']):
                     continue
-                logger.info(f'Calculating metrics of group {group_name}...')
-                group_metrics_dict = produce_metrics(
+            logger.info(f'Calculating metrics of group {dataset_name}...')
+            dataset_name_metrics_dict = produce_metrics(
+                thresh=thresh,
+                results_root=results_root / dataset_name,
+                segmenter_path=segmenter_path,
+                classifier_path=classifier_path,
+                data_selection=f'{dataset_name}',
+                m_targets=per_group_results[dataset_name]['All']['targets'],
+                m_preds=per_group_results[dataset_name]['All']['preds'],
+                m_probs=per_group_results[dataset_name]['All']['probs']
+            )
+            for mkey, mval in dataset_name_metrics_dict.items():
+                dfdict[mkey][dataset_name]['All'] = mval
+
+
+            # 3. Per dataset_name and image_type (nested).
+            for image_type in all_image_types:
+                if is_empty(per_group_results[dataset_name][image_type]['targets']):
+                    continue
+                logger.info(f'Calculating metrics of group {dataset_name} > {image_type}...')
+                image_type_metrics_dict = produce_metrics(
                     thresh=thresh,
-                    results_root=results_root / group_name,
+                    results_root=results_root / dataset_name,
                     segmenter_path=segmenter_path,
                     classifier_path=classifier_path,
-                    data_selection=[group_name],
-                    m_targets=per_group_results[group_name]['targets'],
-                    m_preds=per_group_results[group_name]['preds'],
-                    m_probs=per_group_results[group_name]['probs']
+                    data_selection=f'{dataset_name} > {[image_type]}',
+                    m_targets=per_group_results[dataset_name][image_type]['targets'],
+                    m_preds=per_group_results[dataset_name][image_type]['preds'],
+                    m_probs=per_group_results[dataset_name][image_type]['probs']
                 )
-                per_group_results[group_name]['metrics'] = group_metrics_dict
+                for mkey, mval in image_type_metrics_dict.items():
+                    dfdict[mkey][dataset_name][image_type] = mval
 
-                em = per_group_results[group_name]['metrics']
-                assert list(em.keys()) == METRICS_KEYS 
-                dfdict[group_name] = [em[k] for k in METRICS_KEYS]
-
-            dfmetrics = pd.DataFrame(dfdict, index=METRICS_KEYS)
-            dfmetrics.to_excel(results_root / 'metrics.xlsx')
+        for mkey, mdict in dfdict.items():
+            mdf = pd.DataFrame.from_dict(mdict)
+            mdf = mdf.reindex(columns=sorted(mdf.columns))  # Sort alphabetically so "All" is first
+            mdf = mdf.round(2)  # Round everything to 2 decimal places
+            mdf.to_excel(results_root / f'metrics_{mkey}.xlsx')
+            mdf.to_html(results_root / f'metrics_{mkey}.html')
 
 if __name__ == '__main__':
     main()

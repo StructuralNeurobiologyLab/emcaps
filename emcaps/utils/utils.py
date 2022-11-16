@@ -217,10 +217,22 @@ def get_all_complex_enctypes(sheet_path: Path | str) -> list:
     return names
 
 
+def get_unique_entries_under(column_name: str, sheet_path: Path | str) -> list:
+    meta = get_meta(sheet_path=sheet_path)
+    unique_rows = list(meta[column_name].dropna().unique())
+    return unique_rows
+
+
 @lru_cache(maxsize=1024)
 def get_dataset_name(path_or_num: Path | str | int, sheet_path: Path | str) -> str:
     metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
     return metarow.get('Dataset Name', default=None)
+
+
+@lru_cache(maxsize=1024)
+def get_image_entry(path_or_num: Path | str | int, column_name: str, sheet_path: Path | str) -> str:
+    metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
+    return metarow.get(column_name, default=None)
 
 
 def check_group_name(group_name: str, sheet_path: Path | str) -> None:

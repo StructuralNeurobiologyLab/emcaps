@@ -1,14 +1,15 @@
 # Everything should land in subdirectories of ~/emc by default
 path_prefix: ${oc.env:HOME}/emc
 
+# Version tag. Please increment when data changes
+v: v15
+
 hydra:
   run:
     # Where to write logs and config copies
-    dir: ${path_prefix}/hydra_outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
+    dir: ${path_prefix}/${v}/hydra_outputs/${hydra.job.name}/${now:%Y-%m-%d_%H-%M-%S}
 
 
-# Version tag. Please increment when data changes
-v: v15
 # Metadata spreadsheet
 sheet_path: ${path_prefix}/emcapsulin/emcapsulin_data.xlsx
 # Where to write results of splitdataset.py
@@ -49,11 +50,11 @@ dbsegment:
   segmenter: auto
   # Path to trained classifier model (optional)
   #classifier: auto  # <- not yet possible because models are not ready yet
-  classifier:
-  #groupby: complex_enctype
-  groupby: dataset_name
+  classifier: effnet_m_all_v14  # TODO: Temporarily use v14 classifier until v15 is ready
+  # Threshold for segmentation foreground vs. background decision. Can be between 0 and 255 (127 means ~ 50%)
+  thresh: 127
   # Where to write results
-  results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}_groupby-${.groupby}
+  results_root: ${path_prefix}/${v}/seg_results/seg_results_${v}_tr-${tr_group}
   # Number of test-time augmentation passes to use (can be 0, 1 or 2)
   tta_num: 2
   # Types of outputs that should be produced
