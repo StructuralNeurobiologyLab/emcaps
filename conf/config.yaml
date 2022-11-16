@@ -40,7 +40,7 @@ segtrain:
   batch_size: 8
 
 # Full dataset batch inference
-dbsegment:
+segment:
   # Custom image source path override for testing (outside of the main image database).
   #    Can be a path to an image or to a directory of images.
   inp_path:

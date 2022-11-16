@@ -18,6 +18,7 @@ classifiers = [
 dynamic = ["version", "dependencies"]
 
 [project.scripts]
+emcaps-segtrain = "emcaps.training.segtrain:main"
 emcaps-segment = "emcaps.inference.segment:main"
 emcaps-encari = "emcaps.analysis.encari:main"
 
