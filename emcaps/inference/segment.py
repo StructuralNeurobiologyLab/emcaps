@@ -241,134 +241,133 @@ def main(cfg: DictConfig) -> None:
         else:
             results_path = results_root
 
-        if out.shape[1] in {1, 2}:
-            assert out.shape[1] == 2
-            cout = out[0, 1]  # Binary segmentation -> only export channel 1
-            cout = (cout * 255.).astype(np.uint8)
-            cout = cout > thresh
-            # kind = f'thresh{thresh}'
-            kind = f'thresh'
+        assert out.shape[1] == 2
+        cout = out[0, 1]  # Binary segmentation -> only export channel 1
+        cout = (cout * 255.).astype(np.uint8)
+        cout = cout > thresh
+        # kind = f'thresh{thresh}'
+        kind = f'thresh'
 
-            # Postprocessing:
-            cout = sm.remove_small_holes(cout, 2000)
-            cout = sm.remove_small_objects(cout, minsize)
+        # Postprocessing:
+        cout = sm.remove_small_holes(cout, 2000)
+        cout = sm.remove_small_objects(cout, minsize)
 
-            # Make iio.imwrite-able
-            cout = cout.astype(np.uint8) * 255
+        # Make iio.imwrite-able
+        cout = cout.astype(np.uint8) * 255
 
-            # out_path = eu(f'{results_path}/{basename}_{segmentername}_{kind}.png')
-            out_path = eu(f'{results_path}/{basename}_{kind}.png')
-            logger.info(f'Writing inference result to {out_path}')
-            if 'thresh' in desired_outputs:
-                iio.imwrite(out_path, cout)
+        # out_path = eu(f'{results_path}/{basename}_{segmentername}_{kind}.png')
+        out_path = eu(f'{results_path}/{basename}_{kind}.png')
+        logger.info(f'Writing inference result to {out_path}')
+        if 'thresh' in desired_outputs:
+            iio.imwrite(out_path, cout)
 
-            if 'probmaps' in desired_outputs:
-                probmap = (out[0, 1] * 255.).astype(np.uint8)
-                probmap_path = eu(f'{results_path}/{basename}_probmap.jpg')
-                iio.imwrite(probmap_path, probmap)
+        if 'probmaps' in desired_outputs:
+            probmap = (out[0, 1] * 255.).astype(np.uint8)
+            probmap_path = eu(f'{results_path}/{basename}_probmap.jpg')
+            iio.imwrite(probmap_path, probmap)
 
-            raw_img = iio.imread(img_path)
+        raw_img = iio.imread(img_path)
 
-            # Write raw and gt labels
-            if enable_zero_labels:
-                # Make all-zero label image, to make handling label-free images easier below.
-                # TODO: Remove the need for zero_labels
-                lab_img = np.zeros_like(raw_img, dtype=np.uint8)
-            else:
-                lab_path = f'{str(img_path)[:-4]}_{label_name}.png'
-                lab_img = np.array(iio.imread(lab_path))
-                lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
+        # Write raw and gt labels
+        if enable_zero_labels:
+            # Make all-zero label image, to make handling label-free images easier below.
+            # TODO: Remove the need for zero_labels
+            lab_img = np.zeros_like(raw_img, dtype=np.uint8)
+        else:
+            lab_path = f'{str(img_path)[:-4]}_{label_name}.png'
+            lab_img = np.array(iio.imread(lab_path))
+            lab_img = ((lab_img > 0) * 255).astype(np.uint8)  # Binarize (binary training specific!)
 
-            if 'raw' in desired_outputs:
-                iio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
-            if use_database and 'lab' in desired_outputs:
-                iio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
+        if 'raw' in desired_outputs:
+            iio.imwrite(eu(f'{results_path}/{basename}_raw.jpg'), raw_img)
+        if use_database and 'lab' in desired_outputs:
+            iio.imwrite(eu(f'{results_path}/{basename}_lab.png'), lab_img)
 
-            if 'overlays' in desired_outputs:
-                # Create overlay images
-                lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
-                pred_overlay = label2rgb(cout > 0, raw_img, bg_label=0, alpha=0.5, colors=['green'])
-                # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
-                raw_img_01 = raw_img.astype(np.float64) / 255.
-                lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
-                pred_overlay[cout == 0, :] = raw_img_01[cout == 0, None]
-                # Convert from [0, 1] float to [0, 255] uint8 for imageio
-                lab_overlay = (lab_overlay * 255.).astype(np.uint8)
-                pred_overlay = (pred_overlay * 255.).astype(np.uint8)
+        if 'overlays' in desired_outputs:
+            # Create overlay images
+            lab_overlay = label2rgb(lab_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['red'])
+            pred_overlay = label2rgb(cout > 0, raw_img, bg_label=0, alpha=0.5, colors=['green'])
+            # Redraw raw image onto overlays where they were blended with 0, to restore original brightness
+            raw_img_01 = raw_img.astype(np.float64) / 255.
+            lab_overlay[lab_img == 0, :] = raw_img_01[lab_img == 0, None]
+            pred_overlay[cout == 0, :] = raw_img_01[cout == 0, None]
+            # Convert from [0, 1] float to [0, 255] uint8 for imageio
+            lab_overlay = (lab_overlay * 255.).astype(np.uint8)
+            pred_overlay = (pred_overlay * 255.).astype(np.uint8)
 
-                if not enable_zero_labels:
-                    iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
-                iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
+            if not enable_zero_labels:
+                iio.imwrite(eu(f'{results_path}/{basename}_overlay_lab.jpg'), lab_overlay)
+            iio.imwrite(eu(f'{results_path}/{basename}_overlay_pred.jpg'), pred_overlay)
 
-            if 'cls_overlays' in desired_outputs:
-                if classifier_path == '' or classifier_path is None:
-                    raise ValueError(f'classifier_path needs to be set for cls_overlays')
-                rprops, cls_relabeled = iu.compute_rprops(
-                    image=raw_img,
-                    lab=cout > 0,
-                    classifier_variant=classifier_path,
-                    return_relabeled_seg=True,
-                    allowed_classes=allowed_classes_for_classification,
-                    minsize=minsize
-                )
-                cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
-                iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
-                cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
-                iio.imwrite(eu(f'{results_path}/{basename}_cls.png'), cls)
+        if 'cls_overlays' in desired_outputs:
+            if classifier_path == '' or classifier_path is None:
+                raise ValueError(f'classifier_path needs to be set for cls_overlays')
+            rprops, cls_relabeled = iu.compute_rprops(
+                image=raw_img,
+                lab=cout > 0,
+                classifier_variant=classifier_path,
+                return_relabeled_seg=True,
+                allowed_classes=allowed_classes_for_classification,
+                minsize=minsize
+            )
+            cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+            iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
+            cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+            iio.imwrite(eu(f'{results_path}/{basename}_cls.png'), cls)
 
-                iu.save_properties_to_xlsx(properties=rprops, xlsx_out_path=results_path / f'{basename}_cls_table.xlsx')
+            iu.save_properties_to_xlsx(properties=rprops, xlsx_out_path=results_path / f'{basename}_cls_table.xlsx')
 
-            if use_database and 'error_maps' in desired_outputs:
-                # Create error image
-                error_img = lab_img != cout
-                error_img = (error_img.astype(np.uint8)) * 255
-                iio.imwrite(eu(f'{results_path}/{basename}_error.png'), error_img)
+        if use_database and 'error_maps' in desired_outputs:
+            # Create error image
+            error_img = lab_img != cout
+            error_img = (error_img.astype(np.uint8)) * 255
+            iio.imwrite(eu(f'{results_path}/{basename}_error.png'), error_img)
 
-                # Create false positive (fp) image
-                fp_error_img = (lab_img == 0) & (cout > 0)
-                fp_error_img = (fp_error_img.astype(np.uint8)) * 255
-                iio.imwrite(eu(f'{results_path}/{basename}_fp_error.png'), fp_error_img)
-                # Create false positive (fp) image overlay
-                fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
-                fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
-                fp_overlay = (fp_overlay * 255.).astype(np.uint8)
-                iio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.jpg'), fp_overlay)
+            # Create false positive (fp) image
+            fp_error_img = (lab_img == 0) & (cout > 0)
+            fp_error_img = (fp_error_img.astype(np.uint8)) * 255
+            iio.imwrite(eu(f'{results_path}/{basename}_fp_error.png'), fp_error_img)
+            # Create false positive (fp) image overlay
+            fp_overlay = label2rgb(fp_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
+            fp_overlay[fp_error_img == 0, :] = raw_img_01[fp_error_img == 0, None]
+            fp_overlay = (fp_overlay * 255.).astype(np.uint8)
+            iio.imwrite(eu(f'{results_path}/{basename}_fp_error_overlay.jpg'), fp_overlay)
 
-                # Create false negative (fn) image
-                fn_error_img = (lab_img > 0) & (cout == 0)
-                fn_error_img = (fn_error_img.astype(np.uint8)) * 255
-                iio.imwrite(eu(f'{results_path}/{basename}_fn_error.png'), fn_error_img)
-                # Create false negative (fn) image overlay
-                fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
-                fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
-                fn_overlay = (fn_overlay * 255.).astype(np.uint8)
-                iio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)
+            # Create false negative (fn) image
+            fn_error_img = (lab_img > 0) & (cout == 0)
+            fn_error_img = (fn_error_img.astype(np.uint8)) * 255
+            iio.imwrite(eu(f'{results_path}/{basename}_fn_error.png'), fn_error_img)
+            # Create false negative (fn) image overlay
+            fn_overlay = label2rgb(fn_error_img > 0, raw_img, bg_label=0, alpha=0.5, colors=['magenta'])
+            fn_overlay[fn_error_img == 0, :] = raw_img_01[fn_error_img == 0, None]
+            fn_overlay = (fn_overlay * 255.).astype(np.uint8)
+            iio.imwrite(eu(f'{results_path}/{basename}_fn_error_overlay.jpg'), fn_overlay)
 
 
-            m_target = (lab_img > 0)#.reshape(-1)
-            m_pred = (cout > 0)#.reshape(-1))
-            m_prob = (out[0, 1])#.reshape(-1))
+        m_target = (lab_img > 0)#.reshape(-1)
+        m_pred = (cout > 0)#.reshape(-1))
+        m_prob = (out[0, 1])#.reshape(-1))
 
-            if use_database:
-                per_group_results[dataset_name][image_type]['targets'].append(m_target)
-                per_group_results[dataset_name][image_type]['preds'].append(m_pred)
-                per_group_results[dataset_name][image_type]['probs'].append(m_prob)
-                # Aggregate over all image_types: Fill into 'All' bucket regardless of image_type
-                per_group_results[dataset_name]['All']['targets'].append(m_target)
-                per_group_results[dataset_name]['All']['preds'].append(m_pred)
-                per_group_results[dataset_name]['All']['probs'].append(m_prob)
-                # Aggregate over all dataset_names and all image_types: Fill everything into 'All' bucket
-                per_group_results['All']['targets'].append(m_target)
-                per_group_results['All']['preds'].append(m_pred)
-                per_group_results['All']['probs'].append(m_prob)
+        if use_database:
+            per_group_results[dataset_name][image_type]['targets'].append(m_target)
+            per_group_results[dataset_name][image_type]['preds'].append(m_pred)
+            per_group_results[dataset_name][image_type]['probs'].append(m_prob)
+            # Aggregate over all image_types: Fill into 'All' bucket regardless of image_type
+            per_group_results[dataset_name]['All']['targets'].append(m_target)
+            per_group_results[dataset_name]['All']['preds'].append(m_pred)
+            per_group_results[dataset_name]['All']['probs'].append(m_prob)
+            # Aggregate over all dataset_names and all image_types: Fill everything into 'All' bucket
+            per_group_results['All']['targets'].append(m_target)
+            per_group_results['All']['preds'].append(m_pred)
+            per_group_results['All']['probs'].append(m_prob)
 
-            if 'argmax' in desired_outputs:
-                # Argmax of channel probs
-                pred = np.argmax(out, 1)[0]
-                # plab = skimage.color.label2rgb(pred, bg_label=0)
-                plab = skimage.color.label2rgb(pred, colors=['red', 'green', 'blue', 'purple', 'brown', 'magenta'], bg_label=0)
-                out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.jpg')
-                iio.imwrite(out_path, plab)
+        if 'argmax' in desired_outputs:
+            # Argmax of channel probs
+            pred = np.argmax(out, 1)[0]
+            # plab = skimage.color.label2rgb(pred, bg_label=0)
+            plab = skimage.color.label2rgb(pred, colors=['red', 'green', 'blue', 'purple', 'brown', 'magenta'], bg_label=0)
+            out_path = eu(f'{results_path}/{basename}_argmax_{modelname}.jpg')
+            iio.imwrite(out_path, plab)
 
     if use_database and 'metrics' in desired_outputs:
         # Initialize metric value storage
@@ -398,7 +397,7 @@ def main(cfg: DictConfig) -> None:
         # 2. Per dataset_name: first, aggregate over all images of one dataset_name, regardless of image_type
         for dataset_name in all_dataset_names:
             if is_empty(per_group_results[dataset_name]['All']['targets']):
-                    continue
+                continue
             logger.info(f'Calculating metrics of group {dataset_name}...')
             dataset_name_metrics_dict = produce_metrics(
                 thresh=thresh,
