@@ -101,7 +101,7 @@ We are using a common configuration system for the runnable code, based on [Hydr
 A central default config file with explanatory comments is located at `conf/conf.yaml`.
 It is written to be as automatic and minimal as possible, but it can still be necessary to change some of the values for experiments or adapting to a different system.
 
-For the syntax of such yaml-based config files please refer to the OmegaConf docs on [Access and manipulation](https://omegaconf.readthedocs.io/en/2.2_branch/usage.html#access-and-manipulation) and [variable interpolation](https://omegaconf.readthedocs.io/en/2.2_branch/usage.html#variable-interpolation)
+For the syntax of such yaml-based config files please refer to the OmegaConf docs on [access and manipulation](https://omegaconf.readthedocs.io/en/2.2_branch/usage.html#access-and-manipulation) and [variable interpolation](https://omegaconf.readthedocs.io/en/2.2_branch/usage.html#variable-interpolation)
 
 For running hydra-enabled code with custom configuration you can either point to a different config file with the `-cp` [CLI flag](https://hydra.cc/docs/1.2/advanced/hydra-command-line-flags/) or change config values directly on the CLI using [Hydra's override syntax](https://hydra.cc/docs/1.2/advanced/override_grammar/basic/)
 
@@ -123,7 +123,7 @@ It is not yet fully implemented (TODO) for
 
 ## Dataset
 
-If you want to train own models and/or do quantitative evaluation on the official data, please find the data [here](https://TODO) (TODO: Insert official data link here)
+If you want to train own models and/or do quantitative evaluation on the official data, please find the data [here](https://drive.google.com/drive/folders/1S-dwZx0kHY3HuIiAXMyFlezsfOJmwYut?usp=share_link) (TODO: Insert official data link here) and extract it to `~/emc/emcapsulin`.
 
 
 
