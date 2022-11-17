@@ -76,6 +76,11 @@ segment:
     - 3M-Qt
     - 1M-Tm
 
+# EMcapsulin patch dataset creation based on segmentation
+patchifyseg:
+  thresh: 100
+
+
 # General constants, not meant to be changed
 dataset_mean: [128.,]
 dataset_std: [128.,]

@@ -106,49 +106,24 @@ np.random.seed(0)
 
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
-    # Keep this in sync with training normalization
-    dataset_mean = (128.0,)
-    dataset_std = (128.0,)
-
-
     pre_predict_transform = transforms.Compose([
-        transforms.Normalize(mean=dataset_mean, std=dataset_std)
+        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)
     ])
+    thresh = cfg.patchifyseg.thresh
 
-    thresh = 100  # slightly lower than 50%
-    # thresh = 80  # even lower
-
+    # TODO: Move these constants to cfg
     N_EVAL_SAMPLES = 30
-
-    # NEGATIVE_SAMPLING = True
-    NEGATIVE_SAMPLING = False
-    N_NEG_PATCHES_PER_IMAGE = 100
-
-    # EC_REGION_RADIUS = 14
-    # EC_REGION_RADIUS = 18
     EC_REGION_RADIUS = 24
-
     # Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
     EC_REGION_ODD_PLUS1 = 1
-
     EC_MIN_AREA = 60
     EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
-
-
     USE_GT = False
     # USE_GT = True
-
     FILL_HOLES = True
     DILATE_MASKS_BY = 5
-
     MIN_CIRCULARITY = 0.8
-
-    USE_EXTRA_TM_MODEL = False
-
-    DRO_MODE = False
-
     ALL_VALIDATION = False
-
 
     class_groups_to_include = [
         'simple_hek',
@@ -170,7 +145,6 @@ def main(cfg: DictConfig) -> None:
         img_path = lp.with_stem(lp.stem.removesuffix('_encapsulins'))
         img_paths.append(img_path)
 
-    _tmextra_str = '_tmex' if USE_EXTRA_TM_MODEL else ''
     patch_out_path: str = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_v14_dr{DILATE_MASKS_BY}')
 
     if USE_GT:
@@ -186,8 +160,9 @@ def main(cfg: DictConfig) -> None:
     for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg', f'{patch_out_path}/cmax']:
         os.makedirs(p, exist_ok=True)
 
+    # TODO: Integrate with hydra logger
     # Set up logging
-    logger = logging.getLogger('patchifyseg')
+    logger = logging.getLogger('emcaps-patchifyseg')
     logger.setLevel(logging.DEBUG)
     fh = logging.FileHandler(f'{patch_out_path}/patchify.log')
     fh.setLevel(logging.DEBUG)
@@ -208,16 +183,6 @@ def main(cfg: DictConfig) -> None:
     DATA_SELECTION = included
 
     apply_softmax = True
-    if USE_EXTRA_TM_MODEL:
-        tm_predictor = Predictor(
-            model='/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v10_onlytm/GA_onlytm__UNet__22-09-24_03-32-39/model_step160000.pts',
-            device='cuda',
-            float16=True,
-            transform=pre_predict_transform,
-            augmentations=3 if apply_softmax else None,
-            apply_softmax=apply_softmax,
-        )
-
 
     patchmeta = []
 
@@ -267,11 +232,7 @@ def main(cfg: DictConfig) -> None:
                 label = iio.imread(label_path).astype(np.int64)
                 mask = label
             else:
-                # Use extra model for TmEnc (?)
-                if USE_EXTRA_TM_MODEL and enctype == '1M-Tm':
-                    out = tm_predictor.predict(inp)
-                else:
-                    out = predictor.predict(inp)
+                out = predictor.predict(inp)
                 out = out.numpy()
 
                 assert out.shape[1] == 2
@@ -281,7 +242,6 @@ def main(cfg: DictConfig) -> None:
 
             if FILL_HOLES:
                 mask = ndimage.binary_fill_holes(mask).astype(mask.dtype)
-
 
             img_num = imgmeta.num
 
@@ -295,7 +255,6 @@ def main(cfg: DictConfig) -> None:
             cc, n_comps = ndimage.label(mask)
 
             rprops = measure.regionprops(cc, raw)
-
 
             for rp in tqdm.tqdm(rprops, position=1, leave=False, desc='Patches'):
                 centroid = np.round(rp.centroid).astype(np.int64)  # Note: This centroid is in the global coordinate frame
