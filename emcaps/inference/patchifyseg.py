@@ -30,6 +30,7 @@ from elektronn3.data import transforms
 
 from emcaps.utils.patch_utils import measure_outer_disk_radius, concentric_average, concentric_max
 from emcaps import utils
+from emcaps.utils import inference_utils as iu
 
 
 def eul(paths):
@@ -60,29 +61,9 @@ def image_grid(imgs, rows, cols, enable_grid_lines=True, text_color=255):
     return grid
 
 
-# Based on https://napari.org/tutorials/segmentation/annotate_segmentation.html
-def calculate_circularity(perimeter, area):
-    """Calculate the circularity of the region
-
-    Parameters
-    ----------
-    perimeter : float
-        the perimeter of the region
-    area : float
-        the area of the region
-
-    Returns
-    -------
-    circularity : float
-        The circularity of the region as defined by 4*pi*area / perimeter^2
-    """
-    circularity = 4 * np.pi * area / (perimeter ** 2)
-
-    return circularity
-
 
 class PatchMeta(NamedTuple):
-    # patch_id: int
+    # patch_id: int  # Auto-assigned as row number index from pandas
     patch_fname: str
     img_num: int
     enctype: str
@@ -113,17 +94,16 @@ def main(cfg: DictConfig) -> None:
 
     # TODO: Move these constants to cfg
     N_EVAL_SAMPLES = 30
-    EC_REGION_RADIUS = 24
+    EC_REGION_RADIUS = cfg.patchifyseg.ec_region_radius
+    EC_MIN_AREA = cfg.minsize
+    EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
+    USE_GT = cfg.patchifyseg.use_gt
+    DILATE_MASKS_BY = cfg.patchifyseg.dilate_masks_by
+    MIN_CIRCULARITY = cfg.patchifyseg.min_circularity
+    ALL_VALIDATION = cfg.patchifyseg.all_validation
+
     # Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
     EC_REGION_ODD_PLUS1 = 1
-    EC_MIN_AREA = 60
-    EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2
-    USE_GT = False
-    # USE_GT = True
-    FILL_HOLES = True
-    DILATE_MASKS_BY = 5
-    MIN_CIRCULARITY = 0.8
-    ALL_VALIDATION = False
 
     class_groups_to_include = [
         'simple_hek',
@@ -134,27 +114,17 @@ def main(cfg: DictConfig) -> None:
     ]
 
     # root_path = Path('/wholebrain/scratch/mdraw/tum/Single-table_database/')
-    sheet_path = Path('/cajal/nvmescratch/users/mdraw/tum/Single-table_database/Image_annotation_for_ML_single_table.xlsx')
-    isplitdata_root = Path('/cajal/nvmescratch/users/mdraw/tum/Single-table_database/isplitdata_v14/')
-
-
+    sheet_path = Path(cfg.sheet_path)
+    isplitdata_root = Path(cfg.isplit_data_path)
 
     img_paths = []
-    for lp in isplitdata_root.rglob('*_encapsulins.png'):
+    for lp in isplitdata_root.rglob(f'*_{cfg.label_name}.png'):
         # Indirectly find img paths via label paths: raw can be always found by stripping the "_encapsulins" substring
-        img_path = lp.with_stem(lp.stem.removesuffix('_encapsulins'))
+        img_path = lp.with_stem(lp.stem.removesuffix(f'_{cfg.label_name}'))
         img_paths.append(img_path)
 
-    patch_out_path: str = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_v14_dr{DILATE_MASKS_BY}')
-
-    if USE_GT:
-        patch_out_path = f'{patch_out_path}__gt'
-    else:
-        patch_out_path = f'{patch_out_path}__t{thresh}'
-
-    model_paths = eul([
-        '/wholebrain/scratch/mdraw/tum/mxqtsegtrain2_trainings_v13/GA_lrdec99__UNet__22-10-15_20-29-15/model_step240000.pts'
-    ])
+    patch_out_path: str = os.path.expanduser(cfg.patchifyseg.patch_out_path)
+    model_path = [Path(cfg.patchifyseg.model_path)]
 
     # Create output directories
     for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg', f'{patch_out_path}/cmax']:
@@ -182,41 +152,25 @@ def main(cfg: DictConfig) -> None:
         included.extend(utils.CLASS_GROUPS[cgrp])
     DATA_SELECTION = included
 
-    apply_softmax = True
-
     patchmeta = []
 
     patch_id = 0  # Incremented below for each patch written to disk
 
     for model_path in model_paths:
-        modelname = os.path.basename(os.path.dirname(model_path))
-
-        apply_softmax = True
         predictor = Predictor(
             model=model_path,
-            device='cuda',
+            device=None,
             float16=True,
             transform=pre_predict_transform,
-            augmentations=3 if apply_softmax else None,
-            apply_softmax=apply_softmax,
+            augmentations=cfg.patchifyseg.tta_num,
+            apply_softmax=True,
         )
 
         for img_path in tqdm.tqdm(img_paths, position=0, desc='Images', dynamic_ncols=True):
             logger.debug(str(img_path))
 
-            # TODO: Get info from path, load image, store train-test info
-
             imgmeta = utils.get_meta_row(img_path, sheet_path=sheet_path)
-
             enctype = imgmeta.scondv5
-
-            full_scond = imgmeta.scond
-            host = 'hek'  # default to HEK
-            if 'MICE' in full_scond:
-                host = 'mice'
-            elif 'DRO' in full_scond:
-                host = 'dro'
-
             if pd.isna(enctype) or enctype not in DATA_SELECTION:
                 logger.debug(f'enctype {enctype} skipped')
                 continue
@@ -228,7 +182,7 @@ def main(cfg: DictConfig) -> None:
             inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
             raw = inp[0][0]
             if USE_GT:
-                label_path = img_path.with_name(f'{img_path.stem}_encapsulins.png')
+                label_path = img_path.with_name(f'{img_path.stem}_{cfg.label_name}.png')
                 label = iio.imread(label_path).astype(np.int64)
                 mask = label
             else:
@@ -240,13 +194,12 @@ def main(cfg: DictConfig) -> None:
                 cout = (cout * 255.).astype(np.uint8)
                 mask = cout > thresh
 
-            if FILL_HOLES:
-                mask = ndimage.binary_fill_holes(mask).astype(mask.dtype)
+            mask = ndimage.binary_fill_holes(mask).astype(mask.dtype)
 
             img_num = imgmeta.num
 
             if ALL_VALIDATION:
-                is_validation = True  #DRO
+                is_validation = True
             else:
                 is_validation = '_val' in img_path.stem
             role = 'val' if is_validation else 'trn'
@@ -263,7 +216,7 @@ def main(cfg: DictConfig) -> None:
                     continue  # Too small or too big (-> background component?) to be a normal particle
                 circularity = np.nan
                 if MIN_CIRCULARITY > 0:
-                    circularity = calculate_circularity(rp.perimeter, rp.area)
+                    circularity = iu.calculate_circularity(rp.perimeter, rp.area)
                     if circularity < MIN_CIRCULARITY:
                         logger.info(f'Skipping: circularity {circularity} below {MIN_CIRCULARITY}')
                         continue  # Not circular enough (probably a false merger)
@@ -291,7 +244,6 @@ def main(cfg: DictConfig) -> None:
                 # For some reason mask[xslice, yslice] does not always contain nonzero values, but cc at the same slice does.
                 # So we rebuild the mask at the region slice by comparing cc to 0
                 mask_patch = cc[xslice, yslice] > 0
-
 
                 # Eliminate coinciding masks from other particles that can overlap with this region (this can happen because we slice the mask_patch from the global mask)
                 _mask_patch_cc, _ = ndimage.label(mask_patch)
@@ -325,15 +277,13 @@ def main(cfg: DictConfig) -> None:
                 nobg_patch = raw_patch.copy()
                 nobg_patch[mask_patch == 0] = 0
 
-                # # Concentric average image
+                # Concentric average image
                 cavg_patch = concentric_average(raw_patch)
-                # cmax_patch = concentric_max(raw_patch)
 
                 raw_patch_fname = f'{patch_out_path}/raw/raw_patch_{patch_id:06d}.png'
                 mask_patch_fname = f'{patch_out_path}/mask/mask_patch_{patch_id:06d}.png'
                 nobg_patch_fname = f'{patch_out_path}/nobg/nobg_patch_{patch_id:06d}.png'
                 cavg_patch_fname = f'{patch_out_path}/cavg/cavg_patch_{patch_id:06d}.png'
-                # cmax_patch_fname = f'{patch_out_path}/cmax/cmax_patch_{patch_id:06d}.png'
 
                 patchmeta.append(PatchMeta(
                     # patch_id=patch_id,
@@ -357,7 +307,6 @@ def main(cfg: DictConfig) -> None:
                 iio.imwrite(mask_patch_fname, mask_patch.astype(np.uint8) * 255)
                 iio.imwrite(nobg_patch_fname, nobg_patch.astype(np.uint8))
                 iio.imwrite(cavg_patch_fname, cavg_patch.astype(np.uint8))
-                # iio.imwrite(cmax_patch_fname, cmax_patch.astype(np.uint8))
                 patch_id += 1
 
 

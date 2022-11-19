@@ -220,26 +220,31 @@ def compute_rprops(
     lab,
     classifier_variant,
     minsize=60,
-    maxsize=1000,
+    maxsize=None,
     noborder=False,
     min_circularity=0.8,
     inplace_relabel=False,
     allowed_classes=utils.CLASS_GROUPS['simple_hek'],
-    return_relabeled_seg=False
-):
+    return_relabeled_seg=False,
+    dilate_masks_by=5,
+    ec_region_radius=24,
 
+):
     # Code mainly redundant with / copied from patchifyseg. TODO: Refactor into shared function
 
-    DILATE_MASKS_BY = 5
-    EC_REGION_RADIUS = 24
     # Add 1 to high region coordinate in order to arrive at an odd number of pixels in each dimension
     EC_REGION_ODD_PLUS1 = 1
+
+    DILATE_MASKS_BY = dilate_masks_by
+    EC_REGION_RADIUS = ec_region_radius
+
     PATCH_WIDTH = EC_REGION_RADIUS * 2 + EC_REGION_ODD_PLUS1
     PATCH_SHAPE = (PATCH_WIDTH, PATCH_WIDTH)
     EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2 if maxsize is None else maxsize
     EC_MIN_AREA = minsize
     EC_MAX_AREA = maxsize
     MIN_CIRCULARITY = min_circularity
+
     raw = image
 
     check_image(raw, normalized=False)
@@ -247,6 +252,7 @@ def compute_rprops(
     # remove artifacts connected to image border
     if noborder:
         lab = clear_border(lab)
+    lab = ndimage.binary_fill_holes(lab).astype(lab.dtype)
     cleared = sm.remove_small_objects(lab, minsize)
 
     # label image regions

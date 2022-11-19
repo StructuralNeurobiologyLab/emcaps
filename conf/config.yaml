@@ -23,7 +23,7 @@ ev_group: everything
 # Minimum particle size. Smaller connected components are removed automatically
 minsize: 60
 
-# Segmentation training
+## Segmentation training
 segtrain:
   # Where to save training results (model checkpoints, logs, ...)
   save_root: ${path_prefix}/${v}/seg_trainings/seg_trainings_${v}_tr-${tr_group}
@@ -39,7 +39,7 @@ segtrain:
   lr_dec: 0.99
   batch_size: 8
 
-# Full dataset batch inference
+## Full dataset batch inference
 segment:
   # Custom image source path override for testing (outside of the main image database).
   #    Can be a path to an image or to a directory of images.
@@ -76,11 +76,28 @@ segment:
     - 3M-Qt
     - 1M-Tm
 
-# EMcapsulin patch dataset creation based on segmentation
+## EMcapsulin patch dataset creation based on segmentation
 patchifyseg:
+  # Where to write output patch dataset
+  patch_out_path: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}
+  # Threshold for segmentation foreground vs. background decision. Can be between 0 and 255 (127 means ~ 50%)
   thresh: 100
+  # Radius of the disk footprint by which the binary segmentation will be dilated before processing patches (postprocessing to increase covered area)
+  dilate_masks_by: 5
+  # Minimum circularity measure for segmented particle shapes (4*pi*area / perimeter^2). Value can be between 0 and 1. High values mean more strict filtering. Value 1 will filter out everything that does not have a perfect circle shape. 0 disables filtering.
+  min_circularity: 0.8
+  # Maximum expected radius of particles (in pixels). Determines the patch size around the particle centroid: patch size is (ec_region_radius * 2 + 1)^2
+  ec_region_radius: 24
+  # Number of test-time augmentation passes to use (can be 0, 1 or 2)
+  tta_num: 2
+
+  # If true, use human-annotated GT labels from isplit_data_path instead of doing automatic segmentation on the fly based on a neural network model
+  use_gt: false
+  # Treat all images as validation images, regardless of name
+  all_validation: false
 
 
-# General constants, not meant to be changed
+## General constants, not meant to be changed
 dataset_mean: [128.,]
 dataset_std: [128.,]
+label_name: encapsulins

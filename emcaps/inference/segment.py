@@ -179,7 +179,7 @@ def main(cfg: DictConfig) -> None:
     logger.info(f'Writing outputs to {results_root}')
     desired_outputs = cfg.segment.desired_outputs
 
-    label_name = 'encapsulins'
+    label_name = cfg.label_name
 
     if segmenter_path == 'auto':
         segmenter_path = f'unet_{cfg.tr_group}_{cfg.v}'
