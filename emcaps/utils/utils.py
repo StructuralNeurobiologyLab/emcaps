@@ -10,7 +10,7 @@ import tempfile
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Sequence
+from typing import Dict, Iterable, Optional, Tuple, Sequence
 
 import imageio.v3 as iio
 import numpy as np
@@ -164,38 +164,32 @@ def get_complex_enctype(path_or_num: Path | str | int, sheet_path: Path | str) -
 
 
 @lru_cache(maxsize=1024)
-def get_isplit_enctype(path, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
-    row = get_meta_row(path)
-    scondv5 = strip_host_prefix(row.scondv5)  # Don't care about organism
-    v5_enctype = '?'
-    # if row.num == 199:
-        # import IPython ; IPython.embed(); raise SystemExit
-    if scondv5 in CLASS_GROUPS['simple_hek'] or pos is None:
-        # If scondv5 is simple, the only enctype there can be scondv5 itself.
-        # If no pos is supplied, just one type is expected (position-independent)
-        return scondv5
-    else:  # Find specific enctype of encapsulin at position pos
-        assert isplitdata_root is not None
-        assert role is not None
-        # Prefer region masks because they cover more area
-        elabs = get_isplit_per_enctype_regmasks(img_num=row.num, isplitdata_root=isplitdata_root)[role]
-        if not elabs:  # No regmask found -> Look for enctype-specific label map instead
-            elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)[role]
-            if not elabs:  # Still nothing found
-                return '?'
-        # Masks or labels found -> Get enctype at pos
-        # enctype_at_pos = scondv5
-        enctype_at_pos = '?'
-        for enctype, elab in elabs.items():
-            if elab[pos] > 0:
-                enctype_at_pos = enctype
-                break
-        v5_enctype = enctype_at_pos
+def get_isplit_enctype(path, sheet_path: Path | str, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
+    row = get_meta_row(path, sheet_path=sheet_path)
+    enctype = row['Enc Type']
+    if enctype in CLASS_GROUPS['simple_hek'] or pos is None:
+        # 1. If enctype is simple (no combination), the enctype is already known from the image metadata.
+        # 2. If no pos is supplied, just one type is expected (position-independent).
+        return enctype
 
-    # if 'G_1M-Tm' in v5_enctype or 'and' in v5_enctype:
-    #     logger.error(f'FAIL: Deduced dual v5_enctype for one patch pos ({path=}, {pos=}, {isplitdata_root=}, {role=}')
-    # assert v5_enctype in CLASS_NAMES.values(), f'{v5_enctype} not in {CLASS_NAMES.values()}'
-    return v5_enctype
+    # Else (complex case): find specific enctype of encapsulin at position pos
+    assert isplitdata_root is not None
+    assert role is not None
+    # Prefer region masks because they cover more area
+    elabs = get_isplit_per_enctype_regmasks(img_num=row.num, isplitdata_root=isplitdata_root)[role]
+    if not elabs:  # No regmask found -> Look for enctype-specific label map instead
+        elabs = get_isplit_per_enctype_labels(img_num=row.num, isplitdata_root=isplitdata_root)[role]
+        if not elabs:  # Still nothing found
+            return '?'
+    # Masks or labels found -> Get enctype at pos
+    # enctype_at_pos = scondv5
+    enctype_at_pos = '?'
+    for enctype, elab in elabs.items():
+        if elab[pos] > 0:
+            enctype_at_pos = enctype
+            break
+
+    return enctype_at_pos
 
 
 @lru_cache(maxsize=1024)
@@ -238,9 +232,9 @@ def get_image_entry(path_or_num: Path | str | int, column_name: str, sheet_path:
 def check_group_name(group_name: str, sheet_path: Path | str) -> None:
     meta = get_meta(sheet_path=sheet_path)
     # Column-based selection (all, all2, ...)
-    group_isincols = meta.get(group_name, default=False)
+    group_isincols = group_name in meta.columns
     # "Dataset Name"-based selection
-    group_isindsns = group_name in get_all_dataset_names(sheet_path=sheet_path)
+    group_isindsns = bool(group_name in get_all_dataset_names(sheet_path=sheet_path))
     if group_isincols and group_isindsns:  # The two kinds of selection are mutually exclusive.
         raise ValueError(
             f'{group_name} both found as a column name and as a "Dataset Name" entry '
@@ -314,7 +308,7 @@ class ImageResources:
     regmasks: Optional[Dict[str, np.ndarray]] = None
     rawpath: Optional[Path] = None
     labelpath: Optional[Path] = None
-    enctypes_present: Optional[Sequence[str]] = None
+    enctypes_present: Optional[Iterable[str]] = None
 
 
 # @lru_cache(maxsize=1024)
@@ -371,9 +365,7 @@ def get_image_resources(img_num, sheet_path=None, only_tm=False, no_tm=False):
 
     relevant_class_names = CLASS_NAMES.values()
 
-    enctype = metarow.scondv5
-    # enctype = strip_host_prefix(enctype)
-    full_scond = metarow.scond
+    enctype = metarow['Enc Type']
 
     if only_tm:
         if '1M-Tm' not in enctype:
@@ -396,24 +388,26 @@ def get_image_resources(img_num, sheet_path=None, only_tm=False, no_tm=False):
         raw = None
     label_path = raw_path.with_stem(f'{raw_path.stem}_label_enc')
     # Look for improved labels in "curated" subdir. If nothing is found, use regular label file.
-    enctypes_present = []
+    enctypes_present = set()
     label = None
     per_enctype_labels = {}  # Collect individual labels where only one enctype is labeled
     if label_path.is_file():
         label = iio.imread(label_path)
         label = label > 0  # Binarize
-        per_enctype_labels[enctype] = label
-        enctypes_present.append(enctype)
+        if enctype in CLASS_GROUPS['simple_hek']:
+            # Register if enctype is simple/atomic. If complex, the sub-enctypes are registered in the loop below instead.
+            per_enctype_labels[enctype] = label
+            enctypes_present.add(enctype)
 
     # Handle multiple label files (multiple classes in one source image)
     # Look for multiple label files, which have a different naming pattern.
     # Filter the list of potential label file name candidates by their existence as a file.
-    for scond in relevant_class_names:
-        for stem_pattern in [f'{raw_path.stem}_{scond}', f'{raw_path.stem}_label_enc_{scond}']:
+    for cand in relevant_class_names:
+        for stem_pattern in [f'{raw_path.stem}_{cand}', f'{raw_path.stem}_label_enc_{cand}']:
             if (m_path := raw_path.with_stem(stem_pattern)).is_file():
                 m_label = iio.imread(m_path) > 0
-                enctypes_present.append(scond)
-                per_enctype_labels[scond] = m_label
+                enctypes_present.add(cand)
+                per_enctype_labels[cand] = m_label
                 if label is None:
                     label = m_label
                 else:
@@ -421,11 +415,11 @@ def get_image_resources(img_num, sheet_path=None, only_tm=False, no_tm=False):
 
     reg_masks = {}
     # Retrieve multiclass masks that define class-regions ("cell"), if they exist.
-    for scond in CLASS_NAMES.values():
-        for stem_pattern in [f'{raw_path.stem}_label_cell_{scond}']:
+    for cand in CLASS_NAMES.values():
+        for stem_pattern in [f'{raw_path.stem}_label_cell_{cand}']:
             if (reg_path := raw_path.with_stem(stem_pattern)).is_file():
                 reg_label = iio.imread(reg_path) > 0
-                reg_masks[scond] = reg_label
+                reg_masks[cand] = reg_label
 
 
     roimask = None  # TODO. Not implemented yet 

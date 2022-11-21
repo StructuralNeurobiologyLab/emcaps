@@ -114,12 +114,6 @@ def find_vx_val_images(isplit_data_path: Path | str, group_name: str, sheet_path
     return val_img_paths
 
 
-class Randomizer(torch.nn.Module):
-    """Test model for producing correctly shaped random outputs in range [0, 1]"""
-    def forward(self, x):
-        return torch.rand(x.shape[0], 2, *x.shape[2:])
-
-
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     _hydra_cwd = hydra.core.hydra_config.HydraConfig.get()['run']['dir']
@@ -187,7 +181,7 @@ def main(cfg: DictConfig) -> None:
         segmenter_model = iu.get_model(segmenter_path)
     elif segmenter_path == 'randomizer':
         logger.info('Using randomizer test model')
-        segmenter_model = Randomizer()  # Produce random outputs
+        segmenter_model = iu.Randomizer()  # Produce random outputs
     else:
         logger.info(f'Using segmenter {segmenter_path}')
         segmenter_model = iu.get_model(segmenter_path)

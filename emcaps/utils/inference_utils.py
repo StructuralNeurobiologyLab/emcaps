@@ -121,6 +121,12 @@ classifier_urls = model_registry['classifier_urls']
 model_urls = {**segmenter_urls, **classifier_urls}
 
 
+class Randomizer(torch.nn.Module):
+    """Test model for producing correctly shaped random outputs in range [0, 1]"""
+    def forward(self, x):
+        return torch.rand(x.shape[0], 2, *x.shape[2:])
+
+
 @lru_cache()
 def get_model(path_or_name: str) -> torch.jit.ScriptModule:
     if path_or_name in model_urls.keys():

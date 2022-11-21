@@ -85,6 +85,7 @@ torch.backends.cudnn.benchmark = True
 np.random.seed(0)
 
 
+
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     pre_predict_transform = transforms.Compose([
@@ -121,13 +122,15 @@ def main(cfg: DictConfig) -> None:
     for lp in isplitdata_root.rglob(f'*_{cfg.label_name}.png'):
         # Indirectly find img paths via label paths: raw can be always found by stripping the "_encapsulins" substring
         img_path = lp.with_stem(lp.stem.removesuffix(f'_{cfg.label_name}'))
-        img_paths.append(img_path)
+        # Only include images that can be found in cfg.tr_group, to stay consistent with segmentation training/validation
+        if utils.is_in_data_group(path_or_num=img_path, group_name=cfg.tr_group, sheet_path=sheet_path):
+            img_paths.append(img_path)
 
     patch_out_path: str = os.path.expanduser(cfg.patchifyseg.patch_out_path)
-    model_path = Path(cfg.patchifyseg.model_path)
+    segmenter = cfg.patchifyseg.segmenter
 
     # Create output directories
-    for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg', f'{patch_out_path}/cmax']:
+    for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg']:
         os.makedirs(p, exist_ok=True)
 
     # TODO: Integrate with hydra logger
@@ -137,9 +140,27 @@ def main(cfg: DictConfig) -> None:
     fh = logging.FileHandler(f'{patch_out_path}/patchify.log')
     fh.setLevel(logging.DEBUG)
     logger.addHandler(fh)
-    # sh = logging.StreamHandler()
-    # sh.setLevel(logging.INFO)
-    # logger.addHandler(sh)
+
+    if segmenter == 'auto':
+        segmenter = f'unet_{cfg.tr_group}_{cfg.v}'
+        logger.info(f'Using default segmenter {segmenter} based on other config values')
+        segmenter_model = iu.get_model(segmenter)
+    elif segmenter == 'randomizer':
+        logger.info('Using randomizer test model')
+        segmenter_model = iu.Randomizer()  # Produce random outputs
+    else:
+        logger.info(f'Using segmenter {segmenter}')
+        segmenter_model = iu.get_model(segmenter)
+
+    predictor = Predictor(
+        model=segmenter_model,
+        device=None,
+        float16=True,
+        transform=pre_predict_transform,
+        augmentations=cfg.patchifyseg.tta_num,
+        apply_softmax=True,
+    )
+
 
     logger.info(f'Using data from {isplitdata_root}')
     logger.info(f'Using meta spreadsheet {sheet_path}')
@@ -156,27 +177,10 @@ def main(cfg: DictConfig) -> None:
 
     patch_id = 0  # Incremented below for each patch written to disk
 
-    predictor = Predictor(
-        model=str(model_path),
-        device=None,
-        float16=True,
-        transform=pre_predict_transform,
-        augmentations=cfg.patchifyseg.tta_num,
-        apply_softmax=True,
-    )
-
     for img_path in tqdm.tqdm(img_paths, position=0, desc='Images', dynamic_ncols=True):
         logger.debug(str(img_path))
 
         imgmeta = utils.get_meta_row(img_path, sheet_path=sheet_path)
-        enctype = imgmeta.scondv5
-        if pd.isna(enctype) or enctype not in DATA_SELECTION:
-            logger.debug(f'enctype {enctype} skipped')
-            continue
-        # if DRO_MODE:  # TODO: use different, more precise flag
-        # enctype = enctype.replace('DRO-', '')  # drop DRO because we want to treat DRO the same as HEK here  #DRO
-        # enctype = enctype.replace('MICE_', '')  # do the same for MICE_
-        enctype = utils.strip_host_prefix(enctype)
 
         inp = np.array(iio.imread(img_path), dtype=np.float32)[None][None]  # (N=1, C=1, H, W)
         raw = inp[0][0]
@@ -231,8 +235,7 @@ def main(cfg: DictConfig) -> None:
             yslice = slice(lo[1], hi[1])
 
             # Get enctype for specific position (for supporting multi-class images)
-            enctype = utils.get_isplit_enctype(path=img_path, pos=tuple(centroid), isplitdata_root=isplitdata_root, role=role)
-            # TODO: Test below condition
+            enctype = utils.get_isplit_enctype(path=img_path, sheet_path=sheet_path, pos=tuple(centroid), isplitdata_root=isplitdata_root, role=role)
 
             if enctype == '?':
                 logger.info(f'Skipping patch, can\'t determine local enctype: image {img_num=}, {role=}, pos={centroid}')

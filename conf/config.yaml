@@ -14,7 +14,7 @@ hydra:
 sheet_path: ${path_prefix}/emcapsulin/emcapsulin_data.xlsx
 # Where to write results of splitdataset.py
 isplit_data_path: ${path_prefix}/emcapsulin/isplitdata_${v}
-# Data selection: spreadsheet column name for training and validation
+# Data selection: spreadsheet column name for training and validation subsets
 tr_group: all
 # Optionally specify different evaluation group (-> cross-domain generalization test).
 # Special value "everything" means every image that belongs to any group is used.
@@ -80,6 +80,8 @@ segment:
 patchifyseg:
   # Where to write output patch dataset
   patch_out_path: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}
+  # Path to trained segmentation model
+  segmenter: auto
   # Threshold for segmentation foreground vs. background decision. Can be between 0 and 255 (127 means ~ 50%)
   thresh: 100
   # Radius of the disk footprint by which the binary segmentation will be dilated before processing patches (postprocessing to increase covered area)
@@ -98,6 +100,6 @@ patchifyseg:
 
 
 ## General constants, not meant to be changed
-dataset_mean: [128.,]
-dataset_std: [128.,]
-label_name: encapsulins
+dataset_mean: [128.,]  # For normalization. Not the actual mean.
+dataset_std: [128.,]  # For normalization. Not the actual std.
+label_name: encapsulins  # File name suffix of label files
