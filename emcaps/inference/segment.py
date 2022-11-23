@@ -368,6 +368,7 @@ def main(cfg: DictConfig) -> None:
         dfdict = {}
         for mkey in METRICS_KEYS:
             dfdict[mkey] = {}
+            dfdict[mkey]['All'] = {}
             for dataset_name in all_dataset_names:
                 dfdict[mkey][dataset_name] = {}
 
@@ -386,7 +387,7 @@ def main(cfg: DictConfig) -> None:
         assert list(global_metrics_dict.keys()) == METRICS_KEYS
 
         for mkey, mval in global_metrics_dict.items():
-            dfdict[mkey]['All'] = mval
+            dfdict[mkey]['All']['All'] = mval
 
         # 2. Per dataset_name: first, aggregate over all images of one dataset_name, regardless of image_type
         for dataset_name in all_dataset_names:
