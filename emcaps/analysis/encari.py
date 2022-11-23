@@ -98,7 +98,6 @@ def make_seg_widget(
     segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all_v13',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
-    assign_unique_instance_ids: bool = False,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
@@ -110,9 +109,6 @@ def make_seg_widget(
         # Postprocessing:
         pred = sm.remove_small_holes(pred, 2000)
         pred = sm.remove_small_objects(pred, minsize)
-
-        if assign_unique_instance_ids:
-            pred, _ = ndimage.label(pred)
 
         meta = dict(
             name='segmentation',
