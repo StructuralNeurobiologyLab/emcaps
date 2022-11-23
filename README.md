@@ -92,7 +92,7 @@ Requires the outputs of `patchifyseg` (see above).
 
 Requires the outputs of `patchifyseg` (see above).
 
-    $ python3 -m emcaps.inference.patchmodel_eval
+    $ python3 -m emcaps.inference.patcheval
 
 
 ## Configuration system
@@ -116,9 +116,7 @@ Currently the common configuration system is implemented for
 
 It is not yet fully implemented (TODO) for
 
-- `emcaps.inference.patchifyseg`
-- `emcaps.training.patchtrain`
-- `emcaps.inference.patchmodel_eval`
+- `emcaps.inference.patcheval`
 
 
 ## Dataset
