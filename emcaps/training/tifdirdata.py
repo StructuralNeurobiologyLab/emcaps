@@ -45,7 +45,7 @@ class EncPatchData(data.Dataset):
     def __init__(
             self,
             # data_root: str,
-            descr_sheet: Tuple[Union[str, Path], str],
+            descr_sheet: Tuple[Union[str, Path], str | int],
             train: bool = True,
             transform=transforms.Identity(),
             inp_dtype=np.float32,

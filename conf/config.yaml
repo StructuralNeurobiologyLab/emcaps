@@ -98,6 +98,23 @@ patchifyseg:
   # Treat all images as validation images, regardless of name
   all_validation: false
 
+## EMcapsulin patch classification training
+patchtrain:
+  # Where to find the patch dataset to train on
+  patch_ds_sheet: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}/patchmeta_traintest.xlsx
+  # Where to save training results (model checkpoints, logs, ...)
+  save_root: ${path_prefix}/${v}/patch_trainings/patch_trainings_${v}_tr-${tr_group}
+
+  exp_name:
+  constraintype:
+  max_steps: 120001
+  seed: 0
+
+  # Hyperparams
+  lr: 1e-3
+  lr_stepsize: 1000
+  lr_dec: 0.9
+  batch_size: 128
 
 ## General constants, not meant to be changed
 dataset_mean: [128.,]  # For normalization. Not the actual mean.

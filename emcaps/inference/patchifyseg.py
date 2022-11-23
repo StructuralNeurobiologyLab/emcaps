@@ -133,7 +133,6 @@ def main(cfg: DictConfig) -> None:
     for p in [patch_out_path, f'{patch_out_path}/raw', f'{patch_out_path}/mask', f'{patch_out_path}/samples', f'{patch_out_path}/nobg', f'{patch_out_path}/cavg']:
         os.makedirs(p, exist_ok=True)
 
-    # TODO: Integrate with hydra logger
     # Set up logging
     logger = logging.getLogger('emcaps-patchifyseg')
     logger.setLevel(logging.DEBUG)

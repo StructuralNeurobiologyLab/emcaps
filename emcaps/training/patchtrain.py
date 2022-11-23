@@ -18,9 +18,7 @@ Uses a patch dataset that can be created by inference/patchifyseg.py
 
 """
 
-import argparse
 import datetime
-import os
 import random
 import logging
 
@@ -50,24 +48,8 @@ from emcaps import utils
 
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
-    parser.add_argument('-n', '--exp-name', default=None, help='Manually set experiment name')
-    parser.add_argument(
-        '-m', '--max-steps', type=int, default=120_001,
-        help='Maximum number of training steps to perform.'
-    )
-    parser.add_argument(
-        '-r', '--resume', metavar='PATH',
-        help='Path to pretrained model state dict from which to resume training.'
-    )
-    parser.add_argument('--seed', type=int, default=0, help='Base seed for all RNGs.')
-    parser.add_argument(
-        '--deterministic', action='store_true',
-        help='Run in fully deterministic mode (at the cost of execution speed).'
-    )
-    args = parser.parse_args()
-
     # Set up all RNG seeds, set level of determinism
-    random_seed = args.seed
+    random_seed = cfg.patchtrain.seed
     torch.manual_seed(random_seed)
     np.random.seed(random_seed)
     random.seed(random_seed)
@@ -83,11 +65,8 @@ def main(cfg: DictConfig) -> None:
     if NEGATIVE_SAMPLING:
         assert not ERASE_MASK_BG
 
-
-
-
-    _dscr = 'v14_dr5__t100'
-    descr_sheet = (os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patches_{_dscr}/patchmeta_traintest.xlsx'), 'Sheet1')
+    SHEET_NAME = 0  # index of sheet
+    descr_sheet = (cfg.patchtrain.patch_ds_sheet, SHEET_NAME)
 
     in_channels = 1
     out_channels = 8
@@ -98,25 +77,17 @@ def main(cfg: DictConfig) -> None:
 
 
     # USER PATHS
-    save_root = os.path.expanduser(f'/cajal/nvmescratch/users/mdraw/tum/patch_trainings_{_dscr}')
+    save_root = cfg.patchtrain.save_root
 
-    max_steps = args.max_steps
-    lr = 1e-3
-    lr_stepsize = 1000
-    lr_dec = 0.9
-    batch_size = 128
-
-
-    if args.resume is not None:  # Load pretrained network params
-        model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
-
-    dataset_mean = (128.0,) * in_channels
-    dataset_std = (128.0,) * in_channels
-
+    max_steps = cfg.patchtrain.max_steps
+    lr = cfg.patchtrain.lr
+    lr_stepsize = cfg.patchtrain.lr_stepsize
+    lr_dec = cfg.patchtrain.lr_dec
+    batch_size = cfg.patchtrain.batch_size
 
     # Transformations to be applied to samples before feeding them to the network
     common_transforms = [
-        transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
+        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std, inplace=False),
         transforms.RandomFlip(ndim_spatial=2),
     ]
 
@@ -163,44 +134,9 @@ def main(cfg: DictConfig) -> None:
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
-
-    # # Set to True to perform Cyclical LR range test instead of normal training
-    # #  (see https://arxiv.org/abs/1506.01186, sec. 3.3).
-    # do_lr_range_test = False
-    # if do_lr_range_test:
-    #     # Begin with a very small lr and double it every 450 steps.
-    #     for grp in optimizer.param_groups:
-    #         grp['lr'] = 1e-7
-    #     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, 450, 2)
-    # else:
-    #     lr_sched = torch.optim.lr_scheduler.CyclicLR(
-    #         optimizer,
-    #         base_lr=1e-5,
-    #         max_lr=5e-4,
-    #         step_size_up=4_000,
-    #         step_size_down=4_000,
-    #         cycle_momentum=True if 'momentum' in optimizer.defaults else False
-    #     )
-
     # Validation metrics
-
-    # class _ClassError:
-    #     def __init__(self, kind: Literal['mx', 'qt']):
-    #         self.kind = kind
-
-    #     def __call__(self, target: torch.Tensor, out: torch.Tensor):
-    #         pred = torch.argmax(out, 1)
-    #         true_mx_but_pred_qt = torch.mean(target == 0 & pred == 1) * 100.
-    #         true_qt_but_pred_mx = torch.mean(target == 1 & pred == 0) * 100.
-    #         if self.kind == 'mx':
-    #             return true_mx_but_pred_qt
-    #         elif self.kind == 'qt':
-    #             return true_qt_but_pred_mx
-
-
+    # TODO: Live confusion matrix generation and tracking would be cool
     valid_metrics = {}
-
     for evaluator in [metrics.Accuracy, metrics.Precision, metrics.Recall]:
         for c in range(out_channels):
             valid_metrics[f'val_{evaluator.name}_{utils.CLASS_NAMES[c]}'] = evaluator(c)
@@ -213,19 +149,12 @@ def main(cfg: DictConfig) -> None:
         'transform': valid_transform,
     }
 
-    exp_name = args.exp_name
+    exp_name = cfg.segtrain.exp_name
     if exp_name is None:
         exp_name = ''
     timestamp = datetime.datetime.now().strftime('%y-%m-%d_%H-%M-%S')
     exp_name = f'{exp_name}__{model.__class__.__name__ + "__" + timestamp}'
-    if ERASE_MASK_BG:
-        exp_name = f'erasemaskbg_{exp_name}'
-    if NEGATIVE_SAMPLING:
-        exp_name = f'negsample_{exp_name}'
-    if ERASE_DISK_MASK_RADIUS > 0:
-        exp_name = f'erasemaskbg_disk_r{ERASE_DISK_MASK_RADIUS}_{exp_name}'
-
-    # exp_name = f'maskonly_{exp_name}'
+    exp_name = f'tr-{cfg.tr_group}_{exp_name}'
 
     # Create trainer
     trainer = Trainer(
@@ -236,7 +165,7 @@ def main(cfg: DictConfig) -> None:
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batch_size=batch_size,
-        num_workers=16,
+        num_workers=8,
         save_root=save_root,
         exp_name=exp_name,
         inference_kwargs=inference_kwargs,
