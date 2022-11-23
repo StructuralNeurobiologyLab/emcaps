@@ -7,8 +7,6 @@ Supports majority votes.
 
 """
 
-import argparse
-import os
 import random
 from typing import Literal
 from pathlib import Path
@@ -33,53 +31,24 @@ from elektronn3.data import transforms
 from elektronn3.inference import Predictor
 
 from emcaps.analysis.cf_matrix import plot_confusion_matrix
+from emcaps.utils import CLASS_NAMES, CLASS_IDS
+from emcaps.utils import inference_utils as iu
 
 
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
-    parser = argparse.ArgumentParser(description='Evaluate a network.')
-    parser.add_argument(
-        '-m', '--model-path', metavar='PATH',
-        help='Path to pretrained model which to use.',
-        # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6_notm_nodro/erasemaskbg_notm_dr5_M_ra__EffNetV2__22-05-16_01-56-49/model_step80000.pt'  # best without Tm, for patches_v6_dr5
-        # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v6e/erasemaskbg_S__EffNetV2__22-05-20_17-02-05/model_step80000.pts'  # best with Tm, for patches_v6e_dr5
-
-        # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trdro_evdro_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-15-30/model_final.pts'  # Best for DRO v7
-        # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_trhek_evhek_dr5/M_erasemaskbg___EffNetV2__22-06-03_16-25-11/model_final.pts',  # Best for HEK v7
-        default='/wholebrain/scratch/mdraw/tum/patch_trainings_v10c_tr-gt_ev-all_dr5__gt/erasemaskbg___EffNetV2__22-10-07_03-33-09/model_step80000.pts', # Best for ALL v10c (human gt patches)
-
-        # default='/wholebrain/scratch/mdraw/tum/patch_trainings_v7_tr-hgt_ev-dro_gdr5__gt/erasemaskbg___EffNetV2__22-06-07_12-13-56/model_final.pts'  # Human GT -> DRO
-    )
-    parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument(
-        '-n', '--nmaxsamples', type=int, default=0,
-        help='Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).'
-    )
-    parser.add_argument(
-        '-r', '--rdraws', type=int, default=1000,
-        help='Number of independent draws for majority vote.'
-    )
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
-    args = parser.parse_args()
-
-
     # Set up all RNG seeds, set level of determinism
-    random_seed = 0
+    random_seed = cfg.patchtrain.seed
     torch.manual_seed(random_seed)
     np.random.seed(random_seed)
     random.seed(random_seed)
 
+    logger = logging.getLogger('emcaps-patcheval')
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Running on device: {device}')
 
-
     CM_SHOW_PERCENTAGES = True
-
-    out_channels = 8
-
-    from emcaps.utils import CLASS_NAMES, CLASS_IDS
-
-
     ENABLE_BINARY_1M = False  # restrict to only binary classification into 1M-Qt vs 1M-Mx
     ENABLE_TM = True  # Enable 1M-Tm type in evaluation
 
@@ -93,26 +62,12 @@ def main(cfg: DictConfig) -> None:
 
     # USER PATHS
 
-    if os.getenv('CLUSTER') == 'WHOLEBRAIN':
-        path_prefix = Path('/wholebrain/scratch/mdraw/tum/').expanduser()
-    else:
-        path_prefix = Path('~/tum/').expanduser()
-
-    # patches_root = path_prefix / 'patches_v6d_generalization_dro_dr5/'
-    # patches_root = path_prefix / 'patches_v6_notm_nodro_dr5/'
-    # patches_root = path_prefix / 'patches_v6_dr5/'
-    patches_root = path_prefix / 'patches_v6e_dr5/'
-
-    # patches_root = path_prefix / 'patches_v7_trhek_evdro_dr5'
-    # patches_root = path_prefix / 'patches_v7_trdro_evdro_dr5'
-
-
-    dataset_mean = (128.0,)
-    dataset_std = (128.0,)
+    sheet_path = Path(cfg.patcheval.patch_ds_sheet)
+    patches_root = sheet_path.parent
 
     # Transformations to be applied to samples before feeding them to the network
     common_transforms = [
-        transforms.Normalize(mean=dataset_mean, std=dataset_std, inplace=False),
+        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std, inplace=False),
     ]
     valid_transform = common_transforms + []
     valid_transform = transforms.Compose(valid_transform)
@@ -120,16 +75,21 @@ def main(cfg: DictConfig) -> None:
 
     # SAMPLES_PER_IMG = 'all'
     # SAMPLES_PER_IMG = 1
-    MAX_SAMPLES_PER_GROUP = args.nmaxsamples
-
-
+    MAX_SAMPLES_PER_GROUP = cfg.patcheval.max_samples
 
     # GROUPKEY = 'img_num'
     GROUPKEY = 'enctype'
-
+    
+    classifier_path = cfg.patcheval.classifier
+    if classifier_path == 'auto':
+        classifier_path = f'effnet_{cfg.tr_group}_{cfg.v}'
+        logger.info(f'Using default classifier {classifier_path} based on other config values')
+    elif classifier_path != '':
+        logger.info(f'Using classifier {classifier_path}')
+    classifier = iu.get_model(classifier_path)
 
     predictor = Predictor(
-        model=os.path.expanduser(args.model_path),
+        model=classifier,
         device=device,
         # float16=True,
         transform=valid_transform,
@@ -137,8 +97,7 @@ def main(cfg: DictConfig) -> None:
         # apply_argmax=True,
     )
 
-    # meta = pd.read_excel(f'{patches_root}/patchmeta_traintest_v5names.xlsx', sheet_name='Sheet1', index_col=0)
-    meta = pd.read_excel(f'{patches_root}/patchmeta_traintest.xlsx', sheet_name='Sheet1', index_col=0)
+    meta = pd.read_excel(sheet_path, 0 index_col=0)
 
     vmeta = meta.loc[meta.validation == True]
 
@@ -153,7 +112,7 @@ def main(cfg: DictConfig) -> None:
     # qtp = vmeta.loc[vmeta.enctype == '1M-Qt'].sample(387).index
     # vmeta = vmeta.loc[(vmeta.index.isin(qtp)) | (vmeta.enctype == '1M-Mx')]
 
-    print('\n== Patch selection ==')
+    logger.info('\n== Patch selection ==')
 
     all_targets = []
     all_preds = []
@@ -172,17 +131,11 @@ def main(cfg: DictConfig) -> None:
             subseq_splits.append(range(k, k + MAX_SAMPLES_PER_GROUP))
 
     if MAX_SAMPLES_PER_GROUP > 1:
-        splits = [None] * args.rdraws  # do random sampling
+        splits = [None] * cfg.patcheval.rdraws  # do random sampling
     else:
         splits = subseq_splits
 
     # splits = range(min_group_samples)  # iterate over all individuals
-
-
-    if args.verbose:
-        _print = print
-    else:
-        def _print(*args, **kwargs): pass
 
 
     def evaluate(vmeta, groupkey, split=None):
@@ -196,7 +149,7 @@ def main(cfg: DictConfig) -> None:
         # img_targets = {k: [] for k in CLASS_IDS.keys()}
         # img_target_labels = {k: [] for k in CLASS_IDS.keys()}
 
-        _print(f'Grouping by {groupkey}')
+        logger.info(f'Grouping by {groupkey}')
         for group in vmeta[groupkey].unique():
             # For each group instance:
             gvmeta = vmeta.loc[vmeta[groupkey] == group]
@@ -204,7 +157,7 @@ def main(cfg: DictConfig) -> None:
             target_label = gvmeta.iloc[0].enctype
             target = CLASS_IDS[target_label]
 
-            _print(f'Group {group} yields {gvmeta.shape[0]} patches.')
+            logger.info(f'Group {group} yields {gvmeta.shape[0]} patches.')
 
             group_preds[group] = []
             group_pred_labels[group] = []
@@ -218,8 +171,8 @@ def main(cfg: DictConfig) -> None:
                     gvmeta = gvmeta.iloc[split:split+1]
                 else:
                     gvmeta = gvmeta.iloc[split]
-                _print(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_GROUP}, we now have:')
-                _print(f'Group {group} yields {gvmeta.shape[0]} patches.')
+                logger.info(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_GROUP}, we now have:')
+                logger.info(f'Group {group} yields {gvmeta.shape[0]} patches.')
 
 
             preds = []
@@ -254,7 +207,6 @@ def main(cfg: DictConfig) -> None:
                 group_targets[group] = target
                 group_target_labels[group] = target_label
 
-
                 all_targets.append(target)
                 all_preds.append(pred)
 
@@ -279,11 +231,10 @@ def main(cfg: DictConfig) -> None:
             #     group_correct_ratios[k] = 0.
             group_majority_pred_names[k] = CLASS_NAMES[group_majority_preds[k]]
 
-        _print('\n\n==  Patch classification ==\n')
+        logger.info('\n\n==  Patch classification ==\n')
         for group in group_preds.keys():
-            _print(f'Group {group}\nTrue class: {group_target_labels[group]}\nPredicted classes: {group_pred_labels[group]}\n-> Majority vote result: {group_majority_pred_names[group]}')
+            logger.info(f'Group {group}\nTrue class: {group_target_labels[group]}\nPredicted classes: {group_pred_labels[group]}\n-> Majority vote result: {group_majority_pred_names[group]}')
             # print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')  # Broken
-
 
 
         if False:  # Sanity check: Calculate confusion matrix entries myself

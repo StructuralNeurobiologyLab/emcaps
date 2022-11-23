@@ -116,6 +116,16 @@ patchtrain:
   lr_dec: 0.9
   batch_size: 128
 
+
+## EMcapsulin patch classification evaluation
+patcheval:
+  # Where to find the patch dataset to evaluate
+  patch_ds_sheet: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}/patchmeta_traintest.xlsx
+  # Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).
+  max_samples: 0
+  # Number of independent draws for majority vote.
+  rdraws: 1000
+
 ## General constants, not meant to be changed
 dataset_mean: [128.,]  # For normalization. Not the actual mean.
 dataset_std: [128.,]  # For normalization. Not the actual std.
