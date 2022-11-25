@@ -98,7 +98,7 @@ def get_default_sheet_path(prefix: str | Path) -> Path:
 
 # TODO: All functions requiring a sheet_path could be refactored into methods
 #       of a "Sheet" class that knows where the sheet is located
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_meta(sheet_path, sheet_name=0) -> pd.DataFrame:
     sheet = pd.read_excel(sheet_path, sheet_name=sheet_name)
     meta = sheet.copy()
@@ -118,7 +118,7 @@ def clean_int(text: str) -> int:
 
 
 # Also works for numbers
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_meta_row(path_or_num, *args, **kwargs) -> pd.Series:
     meta = get_meta(*args, **kwargs)
     if isinstance(path_or_num, Path):
@@ -136,7 +136,7 @@ def get_meta_row(path_or_num, *args, **kwargs) -> pd.Series:
     return row
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_old_enctype(path) -> str:
     row = get_meta_row(path)
     # old_enctype = row.scond.item()
@@ -145,7 +145,7 @@ def get_old_enctype(path) -> str:
     return old_enctype
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_v5_enctype(path) -> str:
     # old_enctype = get_old_enctype(path)
     # v5_enctype = OLDNAMES_TO_V5NAMES[old_enctype]
@@ -156,14 +156,14 @@ def get_v5_enctype(path) -> str:
     return v5_enctype
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_complex_enctype(path_or_num: Path | str | int, sheet_path: Path | str) -> str:
     row = get_meta_row(path_or_num, sheet_path=sheet_path)
     enctype = row['Enc Type']
     return enctype
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_isplit_enctype(path, sheet_path: Path | str, pos: Optional[Tuple[int]] = None, isplitdata_root=None, role=None) -> str:
     row = get_meta_row(path, sheet_path=sheet_path)
     enctype = row['Enc Type']
@@ -192,7 +192,7 @@ def get_isplit_enctype(path, sheet_path: Path | str, pos: Optional[Tuple[int]] =
     return enctype_at_pos
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def is_for_validation(path) -> bool:
     row = get_meta_row(path)
     raise NotImplementedError
@@ -217,13 +217,13 @@ def get_unique_entries_under(column_name: str, sheet_path: Path | str) -> list:
     return unique_rows
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_dataset_name(path_or_num: Path | str | int, sheet_path: Path | str) -> str:
     metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
     return metarow.get('Dataset Name', default=None)
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_image_entry(path_or_num: Path | str | int, column_name: str, sheet_path: Path | str) -> str:
     metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
     return metarow.get(column_name, default=None)
@@ -245,7 +245,7 @@ def check_group_name(group_name: str, sheet_path: Path | str) -> None:
 
 
 # Supports both column-based selection (all, all2, ...) and "Dataset Name"-based selection
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def is_in_data_group(path_or_num: Path | str | int, group_name: str, sheet_path: Path | str) -> bool:
     check_group_name(group_name, sheet_path)
     metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)
@@ -257,7 +257,7 @@ def is_in_data_group(path_or_num: Path | str | int, group_name: str, sheet_path:
     return bool(isingroup)
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_raw_path(img_num: int, sheet_path) -> Path:
     # if sheet_path is None:
         # sheet_path = get_default_sheet_path()
@@ -267,14 +267,14 @@ def get_raw_path(img_num: int, sheet_path) -> Path:
     return img_path
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_raw(img_num: int, sheet_path) -> np.ndarray:
     img_path = get_raw_path(img_num=img_num, sheet_path=sheet_path)
     img = iio.imread(img_path)
     return img
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def read_image(path: Path) -> np.ndarray:
     img = iio.imread(path)
     return img
@@ -311,7 +311,7 @@ class ImageResources:
     enctypes_present: Optional[Iterable[str]] = None
 
 
-# @lru_cache(maxsize=1024)
+# @lru_cache(maxsize=8192)
 # def get_isplit_multiclass_regions(img_num: int, isplitdata_root: Path):
 #     region_masks = {'trn': {}, 'val': {}}
 #     ipath = isplitdata_root / f'{img_num}'
@@ -323,7 +323,7 @@ class ImageResources:
 #                 region_masks[role][scond] = rmask
 #     return region_masks
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_isplit_per_enctype_labels(img_num: int, isplitdata_root: Path) -> Dict[str, Dict[str, np.ndarray]]:
     elabs = {'trn': {}, 'val': {}}
     ipath = isplitdata_root / f'{img_num}'
@@ -336,7 +336,7 @@ def get_isplit_per_enctype_labels(img_num: int, isplitdata_root: Path) -> Dict[s
     return elabs
 
 
-@lru_cache(maxsize=1024)
+@lru_cache(maxsize=8192)
 def get_isplit_per_enctype_regmasks(img_num: int, isplitdata_root: Path) -> Dict[str, Dict[str, np.ndarray]]:
     rmasks = {'trn': {}, 'val': {}}
     ipath = isplitdata_root / f'{img_num}'
@@ -348,7 +348,7 @@ def get_isplit_per_enctype_regmasks(img_num: int, isplitdata_root: Path) -> Dict
                 rmasks[role][scond] = rmask
     return rmasks
 
-# @lru_cache(maxsize=1024)
+# @lru_cache(maxsize=8192)
 # def get_isplit_per_enctype_regmasks_or_labels(img_num: int, isplitdata_root: Path):
 #     regmasks = get_isplit_per_enctype_regmasks(img_num=img_num, isplitdata_root=isplitdata_root)
 
