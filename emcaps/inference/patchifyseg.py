@@ -67,6 +67,7 @@ class PatchMeta(NamedTuple):
     patch_fname: str
     img_num: int
     enctype: str
+    dataset_name: str
     centroid_x: int
     centroid_y: int
     corner_x: int
@@ -199,6 +200,7 @@ def main(cfg: DictConfig) -> None:
         mask = ndimage.binary_fill_holes(mask).astype(mask.dtype)
 
         img_num = imgmeta.num
+        dataset_name = imgmeta.get('Dataset Name', '')
 
         if ALL_VALIDATION:
             is_validation = True
@@ -290,6 +292,7 @@ def main(cfg: DictConfig) -> None:
                 # patch_id=patch_id,
                 patch_fname=os.path.basename(raw_patch_fname),
                 img_num=img_num,
+                dataset_name=dataset_name,
                 enctype=enctype,
                 centroid_y=centroid[0],
                 centroid_x=centroid[1],

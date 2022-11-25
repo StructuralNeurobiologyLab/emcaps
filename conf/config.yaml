@@ -121,10 +121,15 @@ patchtrain:
 patcheval:
   # Where to find the patch dataset to evaluate
   patch_ds_sheet: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}/patchmeta_traintest.xlsx
+  # Path to trained classifier model for evaluation
+  classifier: effnet_m_all_v14 # TODO
   # Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).
   max_samples: 0
   # Number of independent draws for majority vote.
   rdraws: 1000
+  # Number of test-time augmentation passes to use (can be 0, 1 or 2)
+  tta_num: 2
+
 
 ## General constants, not meant to be changed
 dataset_mean: [128.,]  # For normalization. Not the actual mean.

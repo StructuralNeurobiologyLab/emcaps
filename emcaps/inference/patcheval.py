@@ -31,8 +31,20 @@ from elektronn3.data import transforms
 from elektronn3.inference import Predictor
 
 from emcaps.analysis.cf_matrix import plot_confusion_matrix
-from emcaps.utils import CLASS_NAMES, CLASS_IDS
+from emcaps import utils
 from emcaps.utils import inference_utils as iu
+
+
+def attach_dataset_name_column(patch_meta: pd.DataFrame, src_sheet_path: Path | str, inplace: bool = False) -> pd.DataFrame:
+    """Get missing dataset name column from the orginal meta sheet, matching patch img_num to source image num"""
+    if not inplace:
+        patch_meta = patch_meta.copy()
+    src_meta = utils.get_meta(sheet_path=src_sheet_path)  # Get image level meta information
+    # There is probably some way to vectorize this but raw iteration is fast enough...
+    for row in patch_meta.itertuples():
+        dn = src_meta.loc[src_meta.num == row.img_num, 'Dataset Name'].item()
+        patch_meta.at[row.Index, 'dataset_name'] = dn
+    return patch_meta
 
 
 @hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
@@ -49,21 +61,13 @@ def main(cfg: DictConfig) -> None:
     print(f'Running on device: {device}')
 
     CM_SHOW_PERCENTAGES = True
-    ENABLE_BINARY_1M = False  # restrict to only binary classification into 1M-Qt vs 1M-Mx
-    ENABLE_TM = True  # Enable 1M-Tm type in evaluation
 
-    CLASS_NAMES_IN_USE = list(CLASS_NAMES.values())[2:]
-
-    if not ENABLE_TM:
-        CLASS_NAMES_IN_USE = CLASS_NAMES_IN_USE[:-1]
-
-    if ENABLE_BINARY_1M:
-        CLASS_NAMES_IN_USE = CLASS_NAMES_IN_USE[:2]
+    CLASS_NAMES_IN_USE = utils.CLASS_GROUPS['simple_hek']
 
     # USER PATHS
 
-    sheet_path = Path(cfg.patcheval.patch_ds_sheet)
-    patches_root = sheet_path.parent
+    ds_sheet_path = Path(cfg.patcheval.patch_ds_sheet)
+    patches_root = ds_sheet_path.parent
 
     # Transformations to be applied to samples before feeding them to the network
     common_transforms = [
@@ -73,13 +77,10 @@ def main(cfg: DictConfig) -> None:
     valid_transform = transforms.Compose(valid_transform)
 
 
-    # SAMPLES_PER_IMG = 'all'
-    # SAMPLES_PER_IMG = 1
     MAX_SAMPLES_PER_GROUP = cfg.patcheval.max_samples
 
-    # GROUPKEY = 'img_num'
     GROUPKEY = 'enctype'
-    
+
     classifier_path = cfg.patcheval.classifier
     if classifier_path == 'auto':
         classifier_path = f'effnet_{cfg.tr_group}_{cfg.v}'
@@ -95,30 +96,28 @@ def main(cfg: DictConfig) -> None:
         transform=valid_transform,
         apply_softmax=True,
         # apply_argmax=True,
+        augmentations=cfg.patcheval.tta_num,
     )
 
-    meta = pd.read_excel(sheet_path, 0 index_col=0)
+    meta = pd.read_excel(ds_sheet_path, 0, index_col=0)
 
     vmeta = meta.loc[meta.validation == True]
 
     # vmeta = vmeta.loc[vmeta.img_num == 136]  # TEST
 
-    # vmeta = vmeta.loc[vmeta.enctype != '1M-Tm']
+    if not 'dataset_name' in vmeta.columns:
+        # Workaroud until 'dataset_name' is always present in patch meta: Populate from image-level source meta sheet
+        vmeta = attach_dataset_name_column(vmeta, src_sheet_path=cfg.sheet_path)
 
-    # assert vmeta.loc[vmeta.img_num.isin(range(90, 94+1))].enctype.unique() == '1M-Qt'  # Ensure v7 labeling
-    # vmeta.loc[vmeta.img_num.isin(range(90, 94+1)), 'enctype'] = '1M-Qt'  # Relabel wrong images
-    # assert vmeta.loc[vmeta.img_num.isin(range(90, 94+1))].enctype.unique() == '1M-Qt'
 
-    # qtp = vmeta.loc[vmeta.enctype == '1M-Qt'].sample(387).index
-    # vmeta = vmeta.loc[(vmeta.index.isin(qtp)) | (vmeta.enctype == '1M-Mx')]
+    # dataset_name = ...
+    # ds_vmeta = vmeta.loc[vmeta.dataset_name == dataset_name]
 
     logger.info('\n== Patch selection ==')
 
     all_targets = []
     all_preds = []
 
-
-    # min_group_samples = min((vmeta[GROUPKEY].isin([g])).shape[0] for g in vmeta[GROUPKEY].unique())
     min_group_samples = np.inf
     for g in vmeta[GROUPKEY].unique():
         min_group_samples = min(min_group_samples, (vmeta.loc[vmeta[GROUPKEY] == g]).shape[0])
@@ -144,18 +143,13 @@ def main(cfg: DictConfig) -> None:
         group_targets = {}
         group_target_labels = {}
 
-        # img_preds = {k: [] for k in CLASS_IDS.keys()}
-        # img_pred_labels = {k: [] for k in CLASS_IDS.keys()}
-        # img_targets = {k: [] for k in CLASS_IDS.keys()}
-        # img_target_labels = {k: [] for k in CLASS_IDS.keys()}
-
         logger.info(f'Grouping by {groupkey}')
         for group in vmeta[groupkey].unique():
             # For each group instance:
             gvmeta = vmeta.loc[vmeta[groupkey] == group]
             assert len(gvmeta.enctype.unique() == 1)
             target_label = gvmeta.iloc[0].enctype
-            target = CLASS_IDS[target_label]
+            target = utils.CLASS_IDS[target_label]
 
             logger.info(f'Group {group} yields {gvmeta.shape[0]} patches.')
 
@@ -185,13 +179,9 @@ def main(cfg: DictConfig) -> None:
                 patch = iio.imread(nobg_fpath).astype(np.float32)[None][None]
 
                 out = predictor.predict(patch)
-                if ENABLE_BINARY_1M:
-                    # Slice the 2 classes of interest, do argmax between them and restore class ID
-                    pred = out[0, 2:4].argmax(0).item() + 2
-                else:
-                    pred = out[0].argmax(0).item()
+                pred = out[0].argmax(0).item()
 
-                pred_label = CLASS_NAMES[pred]
+                pred_label = utils.CLASS_NAMES[pred]
 
                 preds.append(pred)
                 targets.append(target)
@@ -200,9 +190,6 @@ def main(cfg: DictConfig) -> None:
 
                 group_preds[group].append(pred)
                 group_pred_labels[group].append(pred_label)
-
-                # group_targets[group].append(target)
-                # group_target_labels[group].append(target_label)
 
                 group_targets[group] = target
                 group_target_labels[group] = target_label
@@ -213,35 +200,22 @@ def main(cfg: DictConfig) -> None:
             preds = np.array(preds)
             targets = np.array(targets)
 
-            # print(group_pred_labels)
-            # print(group_target_labels)
-            # print(group_preds)
-            # print(group_targets)
-
-
         group_majority_preds = {}
         group_majority_pred_names = {}
-        group_correct_ratios = {}
         for k, v in group_preds.items():
             group_majority_preds[k] = np.argmax(np.bincount(v))
-            # TODO: This is broken!
-            # if pred in v:
-            #     group_correct_ratios[k] = np.bincount(v)[pred] / len(v)
-            # else:  # target does not appear in predicted values -> 0 correct
-            #     group_correct_ratios[k] = 0.
-            group_majority_pred_names[k] = CLASS_NAMES[group_majority_preds[k]]
+            group_majority_pred_names[k] = utils.CLASS_NAMES[group_majority_preds[k]]
 
         logger.info('\n\n==  Patch classification ==\n')
         for group in group_preds.keys():
             logger.info(f'Group {group}\nTrue class: {group_target_labels[group]}\nPredicted classes: {group_pred_labels[group]}\n-> Majority vote result: {group_majority_pred_names[group]}')
-            # print(f'-> Fraction of correct predictions: {img_correct_ratios[i] * 100:.1f}%\n')  # Broken
 
 
         if False:  # Sanity check: Calculate confusion matrix entries myself
             for a in range(2, 8):
                 for b in range(2, 8):
                     v = np.sum((targets == a) & (preds == b))
-                    print(f'T: {CLASS_NAMES[a]}, P: {CLASS_NAMES[b]} -> {v}')
+                    print(f'T: {utils.CLASS_NAMES[a]}, P: {utils.CLASS_NAMES[b]} -> {v}')
 
         group_targets_list = []
         group_majority_preds_list = []
@@ -293,25 +267,16 @@ def main(cfg: DictConfig) -> None:
 
 
     plt.tight_layout()
-    plt.savefig(f'{patches_root}/{"bin_" if ENABLE_BINARY_1M else ""}patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
-
-    # cma = ConfusionMatrixDisplay.from_predictions(target_labels, pred_labels, labels=SHORT_CLASS_NAMES[2:], normalize='pred', xticks_rotation='vertical', ax=ax)
-    # cma.figure_.savefig(f'{patches_root}/patch_confusion_matrix.pdf')
-
-    # predictions = pd.DataFrame.from_dict(img_majority_preds, orient='index', columns=['class', 'confidence'])
-
-    # predictions = predictions.sort_index().convert_dtypes()
-    # predictions.to_excel(f'{patches_root}/samples_nnpredictions.xlsx', index_label='patch_id', float_format='%.2f')
+    plt.savefig(f'{patches_root}/patch_confusion_matrix_n{repr_max_samples}.pdf', bbox_inches='tight')
 
     # TODO: Save predictions
 
+    # predictions = pd.DataFrame.from_dict(img_majority_preds, orient='index', columns=['class', 'confidence'])
+    # predictions = predictions.sort_index().convert_dtypes()
+    # predictions.to_excel(f'{patches_root}/samples_nnpredictions.xlsx', index_label='patch_id', float_format='%.2f')
+
+
     # import IPython ; IPython.embed(); raise SystemExit
 
-    # label_names = [
-    #     '1xMT3-MxEnc',
-    #     '1xMT3-QtEnc',
-    #     '2xMT3-MxEnc',
-    #     '2xMT3-QtEnc',
-    #     '3xMT3-QtEnc',
-    #     '1xTmEnc-BC2',
-    # ]
+if __name__ == '__main__':
+    main()
