@@ -252,7 +252,6 @@ def compute_rprops(
     PATCH_SHAPE = (PATCH_WIDTH, PATCH_WIDTH)
     EC_MAX_AREA = (2 * EC_REGION_RADIUS)**2 if maxsize is None else maxsize
     EC_MIN_AREA = minsize
-    EC_MAX_AREA = maxsize
     MIN_CIRCULARITY = min_circularity
 
     raw = image

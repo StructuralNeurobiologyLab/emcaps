@@ -27,13 +27,13 @@ segmenter_urls:
 
 classifier_urls:
   # Current
-  effnet_all_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_v15_all.pts
-  effnet_all2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_v15_all2.pts
-  effnet_all3_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_v15_all3.pts
+  effnet_all_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_all_v15.pts
+  effnet_all2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_all2_v15.pts
+  effnet_all3_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_all3_v15.pts
   effnet_dro_v15: NA
   effnet_dro2_v15: NA
-  effnet_hek_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_v15_hek.pts
-  effnet_hek2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_v15_hek2.pts
+  effnet_hek_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_hek_v15.pts
+  effnet_hek2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_hek2_v15.pts
   effnet_mice_v15: NA
 
   # Old

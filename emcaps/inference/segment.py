@@ -169,7 +169,7 @@ def main(cfg: DictConfig) -> None:
             raise FileNotFoundError(f'{inp_path} not found')
 
 
-    results_root.mkdir(exist_ok=True)
+    results_root.mkdir(exist_ok=True, parents=True)
     logger.info(f'Writing outputs to {results_root}')
     desired_outputs = cfg.segment.desired_outputs
 
