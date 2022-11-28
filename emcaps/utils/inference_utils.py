@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
@@ -18,9 +19,9 @@ from emcaps import utils
 
 
 # Set up logging
-logger = logging.getLogger('encari')
+logger = logging.getLogger('emcaps-iu')
 logger.setLevel(logging.DEBUG)
-fh = logging.FileHandler(f'{utils.TMPPATH}/encari.log')
+fh = logging.FileHandler(f'{utils.TMPPATH}/emcaps-iu.log')
 fh.setLevel(logging.DEBUG)
 logger.addHandler(fh)
 
@@ -127,10 +128,13 @@ class Randomizer(torch.nn.Module):
         return torch.rand(x.shape[0], 2, *x.shape[2:])
 
 
-@lru_cache()
-def get_model(path_or_name: str) -> torch.jit.ScriptModule:
+@lru_cache(maxsize=32)
+def get_model(path_or_name: str) -> Optional[torch.jit.ScriptModule]:
     if path_or_name in model_urls.keys():
         url = model_urls[path_or_name]
+        if url == 'NA':  # not available
+            # logger.info(f'Model {url} is not available.')
+            return None
         local_path = ub.grabdata(url, appname='emcaps')
     else:
         if (p := Path(path_or_name).expanduser()).is_file():

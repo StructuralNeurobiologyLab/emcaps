@@ -47,7 +47,7 @@ segment:
   # If true and inp_path is set, override results_root path to a path next to inp_path
   relative_out_path: true
   # Path to trained segmentation model
-  segmenter: auto
+  segmenter: unet_${tr_group}_${v}
   # Path to trained classifier model (optional)
   #classifier: auto  # <- not yet possible because models are not ready yet
   classifier: effnet_${tr_group}_${v}
@@ -65,7 +65,7 @@ segment:
     - overlays
     - error_maps
     - probmaps
-    # - cls_overlays
+    - cls_overlays
     - metrics
   # Constrained classification: list of allowed classes
   constrain_classifier:
@@ -81,7 +81,7 @@ patchifyseg:
   # Where to write output patch dataset
   patch_out_path: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}
   # Path to trained segmentation model
-  segmenter: auto
+  segmenter: unet_${tr_group}_${v}
   # Threshold for segmentation foreground vs. background decision. Can be between 0 and 255 (127 means ~ 50%)
   thresh: 100
   # Radius of the disk footprint by which the binary segmentation will be dilated before processing patches (postprocessing to increase covered area)
