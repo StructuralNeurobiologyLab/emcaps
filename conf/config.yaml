@@ -50,7 +50,7 @@ segment:
   segmenter: auto
   # Path to trained classifier model (optional)
   #classifier: auto  # <- not yet possible because models are not ready yet
-  classifier: effnet_m_all_v14  # TODO: Temporarily use v14 classifier until v15 is ready
+  classifier: effnet_${tr_group}_${v}
   # Threshold for segmentation foreground vs. background decision. Can be between 0 and 255 (127 means ~ 50%)
   thresh: 127
   # Where to write results
@@ -122,13 +122,11 @@ patcheval:
   # Where to find the patch dataset to evaluate
   patch_ds_sheet: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}/patchmeta_traintest.xlsx
   # Path to trained classifier model for evaluation
-  classifier: effnet_m_all_v14 # TODO
+  classifier: effnet_${tr_group}_${v}
   # Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).
-  max_samples: 0
+  max_samples: 1
   # Number of independent draws for majority vote.
   rdraws: 1000
-  # Number of test-time augmentation passes to use (can be 0, 1 or 2)
-  tta_num: 2
 
 
 ## General constants, not meant to be changed

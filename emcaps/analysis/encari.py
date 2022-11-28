@@ -95,7 +95,7 @@ def get_default_overlay_output_path() -> str:
 def make_seg_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
-    segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all_v13',
+    segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all_v15',
     threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
 ) -> FunctionWorker[LayerDataTuple]:
@@ -129,7 +129,7 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     image: ImageData,
     labels: LabelsData,
-    classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_m_all_v14',
+    classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_all_v15',
     allowed_classes: Annotated[list[str], {'choices': utils.CLASS_GROUPS['simple_hek'], 'allow_multiple': True}] = utils.CLASS_GROUPS['simple_hek'],
     minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,

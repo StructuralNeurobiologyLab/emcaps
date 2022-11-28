@@ -96,7 +96,6 @@ def main(cfg: DictConfig) -> None:
         transform=valid_transform,
         apply_softmax=True,
         # apply_argmax=True,
-        augmentations=cfg.patcheval.tta_num,
     )
 
     meta = pd.read_excel(ds_sheet_path, 0, index_col=0)
@@ -109,11 +108,12 @@ def main(cfg: DictConfig) -> None:
         # Workaroud until 'dataset_name' is always present in patch meta: Populate from image-level source meta sheet
         vmeta = attach_dataset_name_column(vmeta, src_sheet_path=cfg.sheet_path)
 
-    for dataset_name in vmeta.dataset_name.unique():
+    dataset_names = vmeta.dataset_name.unique()
+    for _i, dataset_name in enumerate(dataset_names):
         # Metadata filtered to only include validation patches that belong to one "Dataset Name"
         dvmeta = vmeta.loc[vmeta.dataset_name == dataset_name]
 
-        logger.info('\n== Patch selection ==')
+        logger.info(f'\n== Patch selection: {dataset_name}  ({_i} / {len(dataset_names)}) ==')
 
         all_targets = []
         all_preds = []
@@ -178,6 +178,8 @@ def main(cfg: DictConfig) -> None:
                     raw_fname = patch_entry.patch_fname
                     nobg_fpath = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
                     patch = iio.imread(nobg_fpath).astype(np.float32)[None][None]
+
+                    # TODO: Use iu.classify_patch() instead. Mind the normalization.
 
                     out = predictor.predict(patch)
                     pred = out[0].argmax(0).item()
