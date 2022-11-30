@@ -56,6 +56,10 @@ The following steps require a local copy of the [official dataset](#dataset) or 
 
 ### Splitting labeled image dataset into training and validation images and normalizing the data format
 
+    $ emcaps-splitdataset
+
+or
+
     $ python3 -m emcaps.utils.splitdataset
 
 ### Training new segmentation models
@@ -80,17 +84,29 @@ or
 
 Based on segmentation (from a model or human annotation), extract particle-centered image patches and store them as separate files in addition to metadata. The resulting patch dataset can be used for training models for patch-based classification. In addition, A random sample of the validation patches is prepared for evaluation of human and model-based classification evaluation.
 
+    $ emcaps-patchifyseg
+
+or
+
     $ python3 -m emcaps.inference.patchifyseg
 
 ### Training new patch classifiers
 
 Requires the outputs of `patchifyseg` (see above).
 
+    $ emcaps-patchtrain
+
+or
+
     $ python3 -m emcaps.training.patchtrain
 
 ### Quantitative evaluation of patch classification results
 
 Requires the outputs of `patchifyseg` (see above).
+
+    $ emcaps-patcheval
+
+or
 
     $ python3 -m emcaps.inference.patcheval
 
@@ -104,19 +120,6 @@ It is written to be as automatic and minimal as possible, but it can still be ne
 For the syntax of such yaml-based config files please refer to the OmegaConf docs on [access and manipulation](https://omegaconf.readthedocs.io/en/2.2_branch/usage.html#access-and-manipulation) and [variable interpolation](https://omegaconf.readthedocs.io/en/2.2_branch/usage.html#variable-interpolation)
 
 For running hydra-enabled code with custom configuration you can either point to a different config file with the `-cp` [CLI flag](https://hydra.cc/docs/1.2/advanced/hydra-command-line-flags/) or change config values directly on the CLI using [Hydra's override syntax](https://hydra.cc/docs/1.2/advanced/override_grammar/basic/)
-
-
-### Coverage
-
-Currently the common configuration system is implemented for
-
-- `emcaps.utils.splitdataset`
-- `emcaps.training.segtrain`
-- `emcaps.inference.segment`
-
-It is not yet fully implemented (TODO) for
-
-- `emcaps.inference.patcheval`
 
 
 ## Dataset

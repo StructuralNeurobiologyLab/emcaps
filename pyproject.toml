@@ -18,8 +18,11 @@ classifiers = [
 dynamic = ["version", "dependencies"]
 
 [project.scripts]
+emcaps-splitdataset = "emcaps.utils.splitdataset:main"
 emcaps-segtrain = "emcaps.training.segtrain:main"
 emcaps-segment = "emcaps.inference.segment:main"
+emcaps-patchifyseg = "emcaps.inference.patchifyseg:main"
+emcaps-patcheval = "emcaps.inference.patcheval:main"
 emcaps-encari = "emcaps.analysis.encari:main"
 
 [tool.setuptools]
