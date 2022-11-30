@@ -47,7 +47,7 @@ def attach_dataset_name_column(patch_meta: pd.DataFrame, src_sheet_path: Path | 
     return patch_meta
 
 
-@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     # Set up all RNG seeds, set level of determinism
     random_seed = cfg.patchtrain.seed

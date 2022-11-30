@@ -87,7 +87,7 @@ np.random.seed(0)
 
 
 
-@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     pre_predict_transform = transforms.Compose([
         transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)

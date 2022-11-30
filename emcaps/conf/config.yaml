@@ -127,6 +127,17 @@ patcheval:
   max_samples: 1
   # Number of independent draws for majority vote.
   rdraws: 1000
+  # Where to write eval outputs. Default: Write directly into the patch ds path
+  eval_out_path: ${patchifyseg.patch_out_path}
+
+  # Constrained classification: list of allowed classes
+  constrain_classifier:
+    - 1M-Mx
+    - 1M-Qt
+    - 2M-Mx
+    - 2M-Qt
+    - 3M-Qt
+    - 1M-Tm
 
 
 ## General constants, not meant to be changed

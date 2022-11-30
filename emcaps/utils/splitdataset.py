@@ -129,7 +129,7 @@ def is_excluded(resmeta: pd.Series) -> bool:
     return not resmeta['all']
 
 
-@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     _hydra_cwd = hydra.core.hydra_config.HydraConfig.get()['run']['dir']
     logger.info(f'Writing logs and config to {_hydra_cwd}')

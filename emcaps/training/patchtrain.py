@@ -46,7 +46,7 @@ from emcaps.models.effnetv2 import effnetv2_m
 from emcaps import utils
 
 
-@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     # Set up all RNG seeds, set level of determinism
     random_seed = cfg.patchtrain.seed

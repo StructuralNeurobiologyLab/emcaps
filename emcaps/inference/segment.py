@@ -114,7 +114,7 @@ def find_vx_val_images(isplit_data_path: Path | str, group_name: str, sheet_path
     return val_img_paths
 
 
-@hydra.main(version_base='1.2', config_path='../../conf', config_name='config')
+@hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     _hydra_cwd = hydra.core.hydra_config.HydraConfig.get()['run']['dir']
     logger.info(f'Writing logs and config to {_hydra_cwd}')
