@@ -123,12 +123,12 @@ patcheval:
   patch_ds_sheet: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}/patchmeta_traintest.xlsx
   # Path to trained classifier model for evaluation
   classifier: effnet_${tr_group}_${v}
-  # Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 0).
+  # Maximum of patch samples per image for majority vote. 0 means no limit (all patches are used). (default: 1).
   max_samples: 1
   # Number of independent draws for majority vote.
   rdraws: 1000
   # Where to write eval outputs. Default: Write directly into the patch ds path
-  eval_out_path: ${patchifyseg.patch_out_path}
+  eval_out_path: ${patchifyseg.patch_out_path}/eval
 
   # Constrained classification: list of allowed classes
   constrain_classifier:

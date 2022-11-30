@@ -25,7 +25,8 @@ def plot_confusion_matrix(cf,
                           rotatelabels=True,
                           sum_stats=True,
                           cmap='Blues',
-                          ax=None):
+                          ax=None,
+                          eps=1e-9):
     '''
     This function will make a pretty plot of an sklearn Confusion Matrix cm using a Seaborn heatmap visualization.
 
@@ -74,13 +75,17 @@ def plot_confusion_matrix(cf,
     else:
         group_counts = blanks
 
+    cfsum = float(np.sum(cf) + eps)  # Add 1e-9 against zero-division
+    cfsum1 = cf.sum(axis=1, keepdims=True) + eps
+    cfsum0 = cf.sum(axis=0, keepdims=True) + eps
+
     if percent:
         if normalize == 'true':
-            group_percentages = ["{0:.2%}".format(value) for value in (cf / cf.sum(axis=1, keepdims=True)).flatten()]
+            group_percentages = ["{0:.2%}".format(value) for value in (cf / cfsum1).flatten()]
         elif normalize == 'pred':
-            group_percentages = ["{0:.2%}".format(value) for value in (cf / cf.sum(axis=0, keepdims=True)).flatten()]
+            group_percentages = ["{0:.2%}".format(value) for value in (cf / cfsum0).flatten()]
         elif normalize == 'all':
-            group_percentages = ["{0:.2%}".format(value) for value in cf.flatten()/np.sum(cf)]
+            group_percentages = ["{0:.2%}".format(value) for value in cf.flatten() / cfsum]
     else:
         group_percentages = blanks
 
@@ -91,7 +96,7 @@ def plot_confusion_matrix(cf,
     # CODE TO GENERATE SUMMARY STATISTICS & TEXT FOR SUMMARY STATS
     if sum_stats:
         #Accuracy is sum of diagonal divided by total observations
-        accuracy  = np.trace(cf) / float(np.sum(cf))
+        accuracy  = np.trace(cf) / cfsum
 
         #if it is a binary confusion matrix, show some more stats
         stats_text = "\n\nAccuracy={:0.3f}".format(accuracy)

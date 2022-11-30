@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-
-
 """
 Evaluates a patch classifier model trained by training/patchtrain.py
 Supports majority votes.
 
+Example sage (fish loop):
+```
+for g in all all2 all3 hek hek2
+    emcaps-patcheval tr_group=$g patcheval.rdraws=1000 patcheval.max_samples=1
+end
+```
 """
 
 import random
@@ -35,7 +39,9 @@ from emcaps import utils
 from emcaps.utils import inference_utils as iu
 
 
-def attach_dataset_name_column(patch_meta: pd.DataFrame, src_sheet_path: Path | str, inplace: bool = False) -> pd.DataFrame:
+def attach_dataset_name_column(
+    patch_meta: pd.DataFrame, src_sheet_path: Path | str, inplace: bool = False
+) -> pd.DataFrame:
     """Get missing dataset name column from the orginal meta sheet, matching patch img_num to source image num"""
     if not inplace:
         patch_meta = patch_meta.copy()
@@ -55,48 +61,32 @@ def main(cfg: DictConfig) -> None:
     np.random.seed(random_seed)
     random.seed(random_seed)
 
+    eval_path = Path(cfg.patcheval.eval_out_path)
+    eval_path.mkdir(parents=True, exist_ok=True)
+
     logger = logging.getLogger('emcaps-patcheval')
+    fh = logging.FileHandler(f'{eval_path}/patcheval.log')
+    fh.setLevel(logging.DEBUG)
+    logger.addHandler(fh)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f'Running on device: {device}')
+    logger.info(f'Running on device: {device}')
 
-    CM_SHOW_PERCENTAGES = True
+    constrain_classifier = cfg.patcheval.constrain_classifier
+    classifier_path = cfg.patcheval.classifier
+    logger.info(f'Using classifier {classifier_path}')
+    logger.info(f'Constraining classifier to classes:\n  {constrain_classifier}')
 
-    CLASS_NAMES_IN_USE = utils.CLASS_GROUPS['simple_hek']
+    CLASS_NAMES_IN_USE = utils.CLASS_GROUPS['simple_hek']  # TODO: Dynamic population from constrain_classifier
+    cm_labels = range(2, 8)
 
     # USER PATHS
-
     ds_sheet_path = Path(cfg.patcheval.patch_ds_sheet)
-    patches_root = ds_sheet_path.parent
-
-    # Transformations to be applied to samples before feeding them to the network
-    common_transforms = [
-        transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std, inplace=False),
-    ]
-    valid_transform = common_transforms + []
-    valid_transform = transforms.Compose(valid_transform)
-
+    patches_path = ds_sheet_path.parent
 
     MAX_SAMPLES_PER_GROUP = cfg.patcheval.max_samples
 
     GROUPKEY = 'enctype'
-
-    classifier_path = cfg.patcheval.classifier
-    if classifier_path == 'auto':
-        classifier_path = f'effnet_{cfg.tr_group}_{cfg.v}'
-        logger.info(f'Using default classifier {classifier_path} based on other config values')
-    elif classifier_path != '':
-        logger.info(f'Using classifier {classifier_path}')
-    classifier = iu.get_model(classifier_path)
-
-    predictor = Predictor(
-        model=classifier,
-        device=device,
-        # float16=True,
-        transform=valid_transform,
-        apply_softmax=True,
-        # apply_argmax=True,
-    )
 
     meta = pd.read_excel(ds_sheet_path, 0, index_col=0)
 
@@ -120,7 +110,10 @@ def main(cfg: DictConfig) -> None:
 
         min_group_samples = np.inf
         for g in dvmeta[GROUPKEY].unique():
-            min_group_samples = min(min_group_samples, (dvmeta.loc[dvmeta[GROUPKEY] == g]).shape[0])
+            min_group_samples = min(
+                min_group_samples,
+                (dvmeta.loc[dvmeta[GROUPKEY] == g]).shape[0]
+            )
 
         if MAX_SAMPLES_PER_GROUP == 0:
             subseq_splits = [None]  # TODO: [None] has ambiguous meaning below
@@ -136,7 +129,6 @@ def main(cfg: DictConfig) -> None:
 
         # splits = range(min_group_samples)  # iterate over all individuals
 
-
         def evaluate(dvmeta, groupkey, split=None):
             """Perform eval on one split. Usually groupkey is enctype."""
             group_preds = {}
@@ -144,7 +136,7 @@ def main(cfg: DictConfig) -> None:
             group_targets = {}
             group_target_labels = {}
 
-            logger.info(f'Grouping by {groupkey}')
+            logger.debug(f'Grouping by {groupkey}')
             for group in dvmeta[groupkey].unique():
                 # For each group instance:
                 gdvmeta = dvmeta.loc[dvmeta[groupkey] == group]
@@ -152,7 +144,7 @@ def main(cfg: DictConfig) -> None:
                 target_label = gdvmeta.iloc[0].enctype
                 target = utils.CLASS_IDS[target_label]
 
-                logger.info(f'Group {group} yields {gdvmeta.shape[0]} patches.')
+                logger.debug(f'Group {group} yields {gdvmeta.shape[0]} patches.')
 
                 group_preds[group] = []
                 group_pred_labels[group] = []
@@ -163,12 +155,11 @@ def main(cfg: DictConfig) -> None:
                     if split is None:  # Randomly sample only MAX_SAMPLES_PER_GROUP patches
                         gdvmeta = gdvmeta.sample(min(gdvmeta.shape[0], MAX_SAMPLES_PER_GROUP))
                     elif isinstance(split, int):
-                        gdvmeta = gdvmeta.iloc[split:split+1]
+                        gdvmeta = gdvmeta.iloc[split:split + 1]
                     else:
                         gdvmeta = gdvmeta.iloc[split]
-                    logger.info(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_GROUP}, we now have:')
-                    logger.info(f'Group {group} yields {gdvmeta.shape[0]} patches.')
-
+                    logger.debug(f'-> After reducing to a maximum of {MAX_SAMPLES_PER_GROUP}, we now have:')
+                    logger.debug(f'Group {group} yields {gdvmeta.shape[0]} patches.')
 
                 preds = []
                 targets = []
@@ -176,13 +167,10 @@ def main(cfg: DictConfig) -> None:
                 target_labels = []
                 for patch_entry in gdvmeta.itertuples():
                     raw_fname = patch_entry.patch_fname
-                    nobg_fpath = patches_root / 'nobg' / raw_fname.replace('raw', 'nobg')
-                    patch = iio.imread(nobg_fpath).astype(np.float32)[None][None]
+                    nobg_fpath = patches_path / 'nobg' / raw_fname.replace('raw', 'nobg')
+                    patch = iio.imread(nobg_fpath).astype(np.float32)
 
-                    # TODO: Use iu.classify_patch() instead. Mind the normalization.
-
-                    out = predictor.predict(patch)
-                    pred = out[0].argmax(0).item()
+                    pred = iu.classify_patch(patch, classifier_variant=classifier_path, allowed_classes=constrain_classifier)
 
                     pred_label = utils.CLASS_NAMES[pred]
 
@@ -209,16 +197,15 @@ def main(cfg: DictConfig) -> None:
                 group_majority_preds[k] = np.argmax(np.bincount(v))
                 group_majority_pred_names[k] = utils.CLASS_NAMES[group_majority_preds[k]]
 
-            logger.info('\n\n==  Patch classification ==\n')
+            logger.debug('\n\n==  Patch classification ==\n')
             for group in group_preds.keys():
-                logger.info(f'Group {group}\nTrue class: {group_target_labels[group]}\nPredicted classes: {group_pred_labels[group]}\n-> Majority vote result: {group_majority_pred_names[group]}')
-
+                logger.debug(f'Group {group}\nTrue class: {group_target_labels[group]}\nPredicted classes: {group_pred_labels[group]}\n-> Majority vote result: {group_majority_pred_names[group]}')
 
             if False:  # Sanity check: Calculate confusion matrix entries myself
                 for a in range(2, 8):
                     for b in range(2, 8):
                         v = np.sum((targets == a) & (preds == b))
-                        print(f'T: {utils.CLASS_NAMES[a]}, P: {utils.CLASS_NAMES[b]} -> {v}')
+                        logger.debug(f'T: {utils.CLASS_NAMES[a]}, P: {utils.CLASS_NAMES[b]} -> {v}')
 
             group_targets_list = []
             group_majority_preds_list = []
@@ -228,57 +215,48 @@ def main(cfg: DictConfig) -> None:
 
             return group_targets_list, group_majority_preds_list
 
-
         full_group_targets = []
         full_group_majority_preds = []
 
-
-        for split in tqdm(splits):
+        for split in tqdm(splits, dynamic_ncols=True):
             split_group_targets, split_group_majority_preds = evaluate(dvmeta, groupkey=GROUPKEY, split=split)
             full_group_targets.extend(split_group_targets)
             full_group_majority_preds.extend(split_group_majority_preds)
-
 
         all_preds = np.stack(all_preds)
         all_targets = np.stack(all_targets)
         instance_n_correct = np.sum(all_targets == all_preds)
         instance_n_total = all_targets.shape[0]
         instance_avg_accuracy = instance_n_correct / instance_n_total
-        print(f'Instance-level average accuracy: {instance_avg_accuracy * 100:.2f}%')
+        logger.info(f'Instance-level average accuracy: {instance_avg_accuracy * 100:.2f}%')
 
         full_group_targets = np.stack(full_group_targets)
         full_group_majority_preds = np.stack(full_group_majority_preds)
         group_n_correct = np.sum(full_group_targets == full_group_majority_preds)
         group_n_total = full_group_targets.shape[0]
         group_avg_accuracy = group_n_correct / group_n_total
-        print(f'Group-level average accuracy: {group_avg_accuracy * 100:.2f}%')
+        logger.info(f'Group-level average accuracy: {group_avg_accuracy * 100:.2f}%')
 
-
-        cm = confusion_matrix(full_group_targets, full_group_majority_preds)
+        cm = confusion_matrix(full_group_targets, full_group_majority_preds, labels=cm_labels)
 
         fig, ax = plt.subplots(tight_layout=True, figsize=(7, 5.5))
 
         repr_max_samples = MAX_SAMPLES_PER_GROUP if MAX_SAMPLES_PER_GROUP > 0 else 'all'
 
-        if CM_SHOW_PERCENTAGES:
-            cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
-            # ax.set_title(f'Majority vote for N = {repr_max_samples} patches per image (top: count, bottom: percentages normalized over true labels)\n')
-            ax.set_title(f'Confusion matrix for N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\nAvg. accuracy: {group_avg_accuracy * 100:.2f}%\n')
-        else:
-            cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=False)
-            ax.set_title(f'Confusion matrix for N = {repr_max_samples} (absolute counts)\n')
-
+        cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
+        ax.set_title(f'Confusion matrix for N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\nAvg. accuracy: {group_avg_accuracy * 100:.2f}%\n')
 
         plt.tight_layout()
-        plt.savefig(f'{patches_root}/patch_cm_{dataset_name}_n{repr_max_samples}.pdf', bbox_inches='tight')
+        plt.savefig(f'{eval_path}/patch_cm_{dataset_name}_n{repr_max_samples}.pdf', bbox_inches='tight')
 
         # TODO: Save predictions
 
         # predictions = pd.DataFrame.from_dict(img_majority_preds, orient='index', columns=['class', 'confidence'])
         # predictions = predictions.sort_index().convert_dtypes()
-        # predictions.to_excel(f'{patches_root}/samples_nnpredictions.xlsx', index_label='patch_id', float_format='%.2f')
+        # predictions.to_excel(f'{eval_path}/samples_nnpredictions.xlsx', index_label='patch_id', float_format='%.2f')
 
         # import IPython ; IPython.embed(); raise SystemExit
+
 
 if __name__ == '__main__':
     main()
