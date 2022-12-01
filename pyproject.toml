@@ -24,6 +24,7 @@ emcaps-segment = "emcaps.inference.segment:main"
 emcaps-patchifyseg = "emcaps.inference.patchifyseg:main"
 emcaps-patcheval = "emcaps.inference.patcheval:main"
 emcaps-encari = "emcaps.analysis.encari:main"
+emcaps-averagepatches = "emcaps.analysis.averagepatches:main"
 
 [tool.setuptools]
 packages = ["emcaps"]

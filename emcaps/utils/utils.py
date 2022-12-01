@@ -223,6 +223,20 @@ def get_dataset_name(path_or_num: Path | str | int, sheet_path: Path | str) -> s
     return metarow.get('Dataset Name', default=None)
 
 
+def attach_dataset_name_column(
+    patch_meta: pd.DataFrame, src_sheet_path: Path | str, inplace: bool = False
+) -> pd.DataFrame:
+    """Get missing dataset name column from the orginal meta sheet, matching patch img_num to source image num"""
+    if not inplace:
+        patch_meta = patch_meta.copy()
+    src_meta = get_meta(sheet_path=src_sheet_path)  # Get image level meta information
+    # There is probably some way to vectorize this but raw iteration is fast enough...
+    for row in patch_meta.itertuples():
+        dn = src_meta.loc[src_meta.num == row.img_num, 'Dataset Name'].item()
+        patch_meta.at[row.Index, 'dataset_name'] = dn
+    return patch_meta
+
+
 @lru_cache(maxsize=8192)
 def get_image_entry(path_or_num: Path | str | int, column_name: str, sheet_path: Path | str) -> str:
     metarow = get_meta_row(path_or_num=path_or_num, sheet_path=sheet_path)

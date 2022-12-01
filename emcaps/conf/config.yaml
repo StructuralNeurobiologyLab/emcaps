@@ -140,6 +140,23 @@ patcheval:
     - 1M-Tm
 
 
+## Average image creation from patches
+averagepatches:
+  # Where to find the patch dataset in which to look for images to average
+  patch_ds_sheet: ${path_prefix}/${v}/patches/patches_${v}_tr_${tr_group}/patchmeta_traintest.xlsx
+  # Optional. If specified, restrict patche sampling to this one dataset name
+  dataset_name: single_class_HEK
+  # If true, sample by source image. Else, sample per enctype. Default: false
+  by_img: false
+  # Number of patches to randomly sample for averaging
+  max_num_patches_per_avg: 100
+  # If true, exclude patches that were reserved for training.
+  exclude_train_data: true
+  # If true, exclude patches that were reserved for validation.
+  exclude_validation_data: false
+
+  seed: 0
+
 ## General constants, not meant to be changed
 dataset_mean: [128.,]  # For normalization. Not the actual mean.
 dataset_std: [128.,]  # For normalization. Not the actual std.

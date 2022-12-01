@@ -111,6 +111,17 @@ or
     $ python3 -m emcaps.inference.patcheval
 
 
+### Rendering average images of patch collections and grouping patches by EMcapsulin types
+
+Requires the outputs of `patchifyseg` (see above).
+
+    $ emcaps-averagepatches
+
+or
+
+    $ python3 -m emcaps.analysis.averagepatches
+
+
 ## Configuration system
 
 We are using a common configuration system for the runnable code, based on [Hydra](https://hydra.cc/docs/1.2/intro/) and [OmegaConf](https://omegaconf.readthedocs.io/en/2.2_branch/).

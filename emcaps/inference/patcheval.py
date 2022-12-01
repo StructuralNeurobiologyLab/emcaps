@@ -39,20 +39,6 @@ from emcaps import utils
 from emcaps.utils import inference_utils as iu
 
 
-def attach_dataset_name_column(
-    patch_meta: pd.DataFrame, src_sheet_path: Path | str, inplace: bool = False
-) -> pd.DataFrame:
-    """Get missing dataset name column from the orginal meta sheet, matching patch img_num to source image num"""
-    if not inplace:
-        patch_meta = patch_meta.copy()
-    src_meta = utils.get_meta(sheet_path=src_sheet_path)  # Get image level meta information
-    # There is probably some way to vectorize this but raw iteration is fast enough...
-    for row in patch_meta.itertuples():
-        dn = src_meta.loc[src_meta.num == row.img_num, 'Dataset Name'].item()
-        patch_meta.at[row.Index, 'dataset_name'] = dn
-    return patch_meta
-
-
 @hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     # Set up all RNG seeds, set level of determinism
@@ -96,12 +82,17 @@ def main(cfg: DictConfig) -> None:
 
     if not 'dataset_name' in vmeta.columns:
         # Workaroud until 'dataset_name' is always present in patch meta: Populate from image-level source meta sheet
-        vmeta = attach_dataset_name_column(vmeta, src_sheet_path=cfg.sheet_path)
+        vmeta = utils.attach_dataset_name_column(vmeta, src_sheet_path=cfg.sheet_path)
 
-    dataset_names = vmeta.dataset_name.unique()
+    dataset_names = vmeta.dataset_name.unique().tolist()
+    # Prepend special dataset name that instructs to use all datasets
+    dataset_names = ['all_datasets'] + dataset_names
     for _i, dataset_name in enumerate(dataset_names):
-        # Metadata filtered to only include validation patches that belong to one "Dataset Name"
-        dvmeta = vmeta.loc[vmeta.dataset_name == dataset_name]
+        if dataset_name == 'all_datasets':  #  Use all datasets
+            # dvmeta = vmeta.loc[vmeta.dataset_name.isin(dataset_names)]
+            dvmeta = vmeta.copy()  # Keep all rows
+        else:  # Metadata filtered to only include validation patches that belong to one "Dataset Name"
+            dvmeta = vmeta.loc[vmeta.dataset_name == dataset_name]
 
         logger.info(f'\n== Patch selection: {dataset_name}  ({_i} / {len(dataset_names)}) ==')
 
@@ -244,7 +235,7 @@ def main(cfg: DictConfig) -> None:
         repr_max_samples = MAX_SAMPLES_PER_GROUP if MAX_SAMPLES_PER_GROUP > 0 else 'all'
 
         cma = plot_confusion_matrix(cm, categories=CLASS_NAMES_IN_USE, normalize='true', cmap='viridis', sum_stats=False, ax=ax, cbar=False, percent=True)
-        ax.set_title(f'Confusion matrix for N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\nAvg. accuracy: {group_avg_accuracy * 100:.2f}%\n')
+        ax.set_title(f'Confusion matrix for {dataset_name}, N = {repr_max_samples} (top: count, bottom: percentages normalized over true labels)\nAvg. accuracy: {group_avg_accuracy * 100:.2f}%\n')
 
         plt.tight_layout()
         plt.savefig(f'{eval_path}/patch_cm_{dataset_name}_n{repr_max_samples}.pdf', bbox_inches='tight')
