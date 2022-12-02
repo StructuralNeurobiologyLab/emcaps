@@ -11,7 +11,4 @@ fi
 # Config settings, comma-separated
 TR_GROUP=all,all2,all3,hek,hek2
 
-for g in all all2 all3 hek hek2 dro mice
-do
-    emcaps-segment --multirun tr_group=${TR_GROUP} segment.inp_path=$1
-done
+emcaps-segment --multirun tr_group=${TR_GROUP} segment.inp_path=$1
