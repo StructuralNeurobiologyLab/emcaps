@@ -2,13 +2,6 @@
 """
 Evaluates a patch classifier model trained by training/patchtrain.py
 Supports majority votes.
-
-Example sage (fish loop):
-```
-for g in all all2 all3 hek hek2
-    emcaps-patcheval tr_group=$g patcheval.rdraws=1000 patcheval.max_samples=1
-end
-```
 """
 
 import random
