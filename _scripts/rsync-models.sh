@@ -1,6 +1,9 @@
 #!/bin/bash
 set -Eeuo pipefail
 
+# This script is not meant to be used in practice. It's just executable documentation
+# and documents where the published models are originally obtained from internally.
+
 # Original sources -> short names of published model checkpoints
 
 mkdir -p ~/emc/v15/ptsmodels

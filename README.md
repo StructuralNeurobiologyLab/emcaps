@@ -80,6 +80,8 @@ or
 
     $ python3 -m emcaps.inference.segment
 
+For a usage example featuring config sweeps, see `_scripts/seg_cls_test.sh`
+
 ### Producing a patch dataset based on image segmentation
 
 Based on segmentation (from a model or human annotation), extract particle-centered image patches and store them as separate files in addition to metadata. The resulting patch dataset can be used for training models for patch-based classification. In addition, A random sample of the validation patches is prepared for evaluation of human and model-based classification evaluation.
@@ -110,6 +112,7 @@ or
 
     $ python3 -m emcaps.inference.patcheval
 
+For a usage example featuring config sweeps, see `_scripts/patcheval.sh`
 
 ### Rendering average images of patch collections and grouping patches by EMcapsulin types
 
