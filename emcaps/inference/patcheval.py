@@ -47,7 +47,14 @@ def main(cfg: DictConfig) -> None:
     np.random.seed(random_seed)
     random.seed(random_seed)
 
+    all_enctypes = utils.CLASS_GROUPS['simple_hek']
+    constrain_classifier = cfg.patcheval.constrain_classifier
     eval_path = Path(cfg.patcheval.eval_out_path)
+    if cfg.patcheval.use_constraint_suffix and not constrain_classifier == all_enctypes:
+        suffix = '__constrained_to'
+        for c in constrain_classifier:
+            suffix = f'{suffix}_{c}'
+        eval_path = eval_path.with_name(f'{eval_path.name}_{suffix}')
     eval_path.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger('emcaps-patcheval')
@@ -58,12 +65,11 @@ def main(cfg: DictConfig) -> None:
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f'Running on device: {device}')
 
-    constrain_classifier = cfg.patcheval.constrain_classifier
     classifier_path = cfg.patcheval.classifier
     logger.info(f'Using classifier {classifier_path}')
     logger.info(f'Constraining classifier to classes:\n  {constrain_classifier}')
 
-    CLASS_NAMES_IN_USE = utils.CLASS_GROUPS['simple_hek']  # TODO: Dynamic population from constrain_classifier
+    CLASS_NAMES_IN_USE = all_enctypes  # TODO: Dynamic population from constrain_classifier
     cm_labels = range(2, 8)
 
     # USER PATHS

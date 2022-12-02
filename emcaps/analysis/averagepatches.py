@@ -80,7 +80,7 @@ def main(cfg: DictConfig) -> None:
     avg_output_dir.mkdir(exist_ok=True)
     raw_by_enctype_dir = patches_root / f'by_enctype_raw{path_suffix}'
     raw_by_enctype_dir.mkdir(exist_ok=True)
-    logger.debug(OmegaConf.to_yaml(cfg, resolve=True))
+    logger.info(OmegaConf.to_yaml(cfg.averagepatches, resolve=True))
     logger.info(f'Writing to {avg_output_dir} and {raw_by_enctype_dir}')
 
     if cfg.averagepatches.exclude_train_data:

@@ -129,6 +129,8 @@ patcheval:
   rdraws: 1000
   # Where to write eval outputs. Default: Write directly into the patch ds path
   eval_out_path: ${patchifyseg.patch_out_path}/eval
+  # If true, automatically add a constraint descriptor suffix to the final component of eval_out_path if not all classes are selected. If false, eval_out_path is not changed
+  use_constraint_suffix: false
 
   # Constrained classification: list of allowed classes
   constrain_classifier:
