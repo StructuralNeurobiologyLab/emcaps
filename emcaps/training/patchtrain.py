@@ -12,7 +12,7 @@
 
 
 """
-Demo of a 2D semantic segmentation on TUM ML data v2, distinguishing QtEnc from MxEnc particles on patch basis.
+EMcapsulin patch-based classification training.
 
 Uses a patch dataset that can be created by inference/patchifyseg.py
 

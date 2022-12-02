@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
@@ -59,8 +59,8 @@ def main(cfg: DictConfig) -> None:
     logger.info(f'Running on device: {device}')
 
     classifier_path = cfg.patcheval.classifier
-    logger.info(f'Using classifier {classifier_path}')
-    logger.info(f'Constraining classifier to classes:\n  {constrain_classifier}')
+
+    logger.info(f'Config:\n{OmegaConf.to_yaml(cfg.patcheval, resolve=True)}\n')
 
     CLASS_NAMES_IN_USE = all_enctypes  # TODO: Dynamic population from constrain_classifier
     cm_labels = range(2, 8)
