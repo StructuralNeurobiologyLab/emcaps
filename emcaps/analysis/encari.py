@@ -263,8 +263,8 @@ def main():
     viewer = napari.Viewer(title='EMcapsulin demo')
 
     if ipaths == ['test136']:
-        eip = Path('~/tum/Single-table_database/136/136.tif').expanduser()
-        ilp = Path('~/tum/Single-table_database/136/136_encapsulins.tif').expanduser()
+        eip = Path('~/emc/emcapsulin/136/136.png').expanduser()
+        ilp = Path('~/emc/emcapsulin/136/136_label_enc_3M-Qt.png').expanduser()
         eimg = iio.imread(eip)[600:900, 600:900].copy()
         elab = iio.imread(ilp)[600:900, 600:900].copy() > 0
         viewer.add_image(eimg, name='img')

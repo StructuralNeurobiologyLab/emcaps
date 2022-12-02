@@ -166,7 +166,7 @@ def segment(image: np.ndarray, thresh: float, segmenter_variant: str) -> np.ndar
         out = seg_model(img)
         # pred = torch.argmax(out, dim=1)
         pred = out[0, 1] > thresh
-        pred = pred.numpy().astype(np.int64)
+        pred = pred.cpu().numpy().astype(np.int64)
     return pred
 
 
