@@ -68,13 +68,11 @@ segment:
     - cls_overlays
     - metrics
   # Constrained classification: list of allowed classes
-  constrain_classifier:
-    - 1M-Mx
-    - 1M-Qt
-    - 2M-Mx
-    - 2M-Qt
-    - 3M-Qt
-    - 1M-Tm
+  constrain_classifier_configs:
+    - [1M-Qt, 2M-Qt, 3M-Qt, 1M-Mx, 2M-Mx, 1M-Tm]  # all classes, no constraints
+    - [1M-Qt, 1M-Mx]
+    - [3M-Qt, 1M-Mx]
+    - [1M-Qt, 3M-Qt, 1M-Mx]
 
 ## EMcapsulin patch dataset creation based on segmentation
 patchifyseg:

@@ -9,6 +9,6 @@ if [[ $# -ne 1 ]] ; then
 fi
 
 # Config settings, comma-separated
-TR_GROUP=all,all2,all3,hek,hek2
+TR_GROUP=all,all2,all3,hek,hek2,dro,mice
 
 emcaps-segment --multirun tr_group=${TR_GROUP} segment.inp_path=$1

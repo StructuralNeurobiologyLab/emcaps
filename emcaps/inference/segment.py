@@ -129,13 +129,7 @@ def main(cfg: DictConfig) -> None:
     METRICS_KEYS = ['dsc', 'iou', 'precision', 'recall']
 
     # allowed_classes_for_classification = utils.CLASS_GROUPS['simple_hek']
-    allowed_classes_for_classification = cfg.segment.constrain_classifier
-
-    constraint_signature = ''  # Unconstrained
-    if allowed_classes_for_classification != utils.CLASS_GROUPS['simple_hek']:
-        constraint_signature = '_constrained'
-        for ac in allowed_classes_for_classification:
-            constraint_signature = f'{constraint_signature}_{ac}'
+    all_enctypes = utils.CLASS_GROUPS['simple_hek']
 
     pre_predict_transform = transforms.Compose([
         transforms.Normalize(mean=cfg.dataset_mean, std=cfg.dataset_std)
@@ -299,20 +293,27 @@ def main(cfg: DictConfig) -> None:
             elif classifier_path == '' or classifier_path is None:
                 logger.info(f'Classifier not specified. Skipping classification.')
             else:
-                rprops, cls_relabeled = iu.compute_rprops(
-                    image=raw_img,
-                    lab=cout > 0,
-                    classifier_variant=classifier_path,
-                    return_relabeled_seg=True,
-                    allowed_classes=allowed_classes_for_classification,
-                    minsize=minsize
-                )
-                cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
-                iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls.jpg'), cls_ov)
-                cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
-                iio.imwrite(eu(f'{results_path}/{basename}_cls.png'), cls)
+                for ccc in cfg.segment.constrain_classifier_configs:
+                    constraint_signature = ''  # Unconstrained
+                    if set(ccc) != set(all_enctypes):
+                        constraint_signature = '_constrained'
+                        for ac in ccc:
+                            constraint_signature = f'{constraint_signature}_{ac}'
 
-                iu.save_properties_to_xlsx(properties=rprops, xlsx_out_path=results_path / f'{basename}_cls_table.xlsx')
+                    rprops, cls_relabeled = iu.compute_rprops(
+                        image=raw_img,
+                        lab=cout > 0,
+                        classifier_variant=classifier_path,
+                        return_relabeled_seg=True,
+                        allowed_classes=ccc,
+                        minsize=minsize
+                    )
+                    cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+                    iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls{constraint_signature}.jpg'), cls_ov)
+                    cls = utils.render_skimage_overlay(img=None, lab=cls_relabeled, colors=iu.skimage_color_cycle)
+                    iio.imwrite(eu(f'{results_path}/{basename}_cls{constraint_signature}.png'), cls)
+
+                    iu.save_properties_to_xlsx(properties=rprops, xlsx_out_path=results_path / f'{basename}_cls_table{constraint_signature}.xlsx')
 
         if use_database and 'error_maps' in desired_outputs:
             # Create error image

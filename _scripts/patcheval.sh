@@ -1,8 +1,6 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-# set +o braceexpand -o noglob +o histexpand
-
 # Perform quantitative classification evaluation.
 
 # Sweeps over different configurations sequentially. Can be parallelized using a hydra launcher
