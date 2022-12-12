@@ -67,6 +67,8 @@ segment:
     - probmaps
     - cls_overlays
     - metrics
+  # Minimum circularity measure for segmented particle shapes (4*pi*area / perimeter^2). Value can be between 0 and 1. High values mean more strict filtering. Value 1 will filter out everything that does not have a perfect circle shape. 0 disables filtering.
+  min_circularity: 0.8
   # Constrained classification: list of allowed classes
   constrain_classifier_configs:
     - [1M-Qt, 2M-Qt, 3M-Qt, 1M-Mx, 2M-Mx, 1M-Tm]  # all classes, no constraints

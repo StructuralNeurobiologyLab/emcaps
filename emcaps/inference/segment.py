@@ -121,7 +121,6 @@ def main(cfg: DictConfig) -> None:
     # (Path(cfg.segment.results_root) / '.hydra_outputs').symlink_to(_hydra_cwd)
 
     tta_num = cfg.segment.tta_num
-    minsize = cfg.minsize
     segmenter_path = cfg.segment.segmenter
     classifier_path = cfg.segment.classifier
     thresh = cfg.segment.thresh
@@ -238,7 +237,7 @@ def main(cfg: DictConfig) -> None:
 
         # Postprocessing:
         cout = sm.remove_small_holes(cout, 2000)
-        cout = sm.remove_small_objects(cout, minsize)
+        cout = sm.remove_small_objects(cout, cfg.minsize)
 
         # Make iio.imwrite-able
         cout = cout.astype(np.uint8) * 255
@@ -304,9 +303,10 @@ def main(cfg: DictConfig) -> None:
                         image=raw_img,
                         lab=cout > 0,
                         classifier_variant=classifier_path,
+                        minsize=cfg.minsize,
+                        min_circularity=cfg.segment.min_circularity,
                         return_relabeled_seg=True,
                         allowed_classes=ccc,
-                        minsize=minsize
                     )
                     cls_ov = utils.render_skimage_overlay(img=raw_img, lab=cls_relabeled, colors=iu.skimage_color_cycle)
                     iio.imwrite(eu(f'{results_path}/{basename}_overlay_cls{constraint_signature}.jpg'), cls_ov)

@@ -47,7 +47,7 @@ logger.addHandler(fh)
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Running on {device}')
+# print(f'Running on {device}')
 
 DTYPE = torch.float16 if 'cuda' in str(device) else torch.float32
 
@@ -64,9 +64,6 @@ CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 # TODO: Determine color map in class_info.yaml
 from emcaps.utils.inference_utils import class_colors, skimage_color_cycle
-
-print(class_colors)
-print(skimage_color_cycle)
 
 _global_state = {}
 
