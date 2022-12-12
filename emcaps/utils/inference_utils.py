@@ -259,13 +259,14 @@ def compute_rprops(
     check_image(raw, normalized=False)
 
     # remove artifacts connected to image border
+    cleaned_lab = lab.copy()  # Can be modified without changing lab inplace
     if noborder:
-        lab = clear_border(lab)
-    lab = ndimage.binary_fill_holes(lab).astype(lab.dtype)
-    cleared = sm.remove_small_objects(lab, minsize)
+        cleaned_lab = clear_border(cleaned_lab)
+    cleaned_lab = ndimage.binary_fill_holes(cleaned_lab)
+    cleaned_lab = sm.remove_small_objects(cleaned_lab, minsize)
 
     # label image regions
-    cc, n_comps = ndimage.label(cleared)
+    cc, n_comps = ndimage.label(cleaned_lab)
 
     rprops = regionprops(cc, raw)
 
