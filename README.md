@@ -6,15 +6,31 @@ This repository contains code for the machine learning part of the paper "Geneti
 
 ## Installation
 
-- Get the project from GitHub (either clone or download zip and extract), then `cd` to the project root.
+First obtain the project sources (either clone or download zip and extract) and `cd` to the project root. Then choose one of the following installation paths:
 
-- From the project directory execute:
 
-    ```
+### Option 1: with `pip` / virtual environment
+
+Create and activate a new virtual environment, then from the project directory execute:
+
+    pip install .
+
+If you encounter PyTorch issues with this setup, please [install PyTorch manually following the official instructions](https://pytorch.org/get-started/locally/)
+
+If you want to use the napari-based GUI, you will also need to [install one of qtpy's supported Qt backends](https://github.com/spyder-ide/qtpy/blob/master/README.md#requirements), for example PyQt5:
+
+    pip install pyqt5
+
+This has to be done manually since none of the backends is compatible with all platforms and pip can't auto-select an optimal one.
+
+
+### Option 2: with `conda`
+
+From the project directory execute:
+
     conda env create -f environment.yml
     conda activate emcaps
     pip install --no-deps -e .
-    ```
 
 
 ## Running the code
