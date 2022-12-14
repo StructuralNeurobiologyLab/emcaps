@@ -91,21 +91,21 @@ def get_default_overlay_output_path() -> str:
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Segmenting...'})
 def make_seg_widget(
     pbar: widgets.ProgressBar,
-    image: ImageData,
-    segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all_v15',
-    threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
+    Image: ImageData,
+    Segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all_v15',
+    Threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
+    Minimum_particle_size: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
 ) -> FunctionWorker[LayerDataTuple]:
 
     @thread_worker(connect={'returned': pbar.hide})
     def seg() -> LayerDataTuple:
-        img_normalized = iu.normalize(image)
+        img_normalized = iu.normalize(Image)
 
-        pred = iu.segment(img_normalized, thresh=threshold, segmenter_variant=segmenter_variant)
+        pred = iu.segment(img_normalized, thresh=Threshold, segmenter_variant=Segmenter_variant)
 
         # Postprocessing:
         pred = sm.remove_small_holes(pred, 2000)
-        pred = sm.remove_small_objects(pred, minsize)
+        pred = sm.remove_small_objects(pred, Minimum_particle_size)
 
         meta = dict(
             name='segmentation',
@@ -124,34 +124,34 @@ def make_seg_widget(
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
 def make_regions_widget(
     pbar: widgets.ProgressBar,
-    image: ImageData,
-    labels: LabelsData,
-    classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_all_v15',
-    allowed_classes: Annotated[list[str], {'choices': utils.CLASS_GROUPS['simple_hek'], 'allow_multiple': True}] = utils.CLASS_GROUPS['simple_hek'],
-    minsize: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
-    maxsize: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
-    mincircularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
-    shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'none',
-    inplace_relabel: bool = True,
-    xlsx_output_path: str = get_default_xlsx_output_path(),
+    Image: ImageData,
+    Labels: LabelsData,
+    Classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_all_v15',
+    Allowed_classes: Annotated[list[str], {'choices': utils.CLASS_GROUPS['simple_hek'], 'allow_multiple': True}] = utils.CLASS_GROUPS['simple_hek'],
+    Minimum_particle_size: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
+    Maximum_particle_size: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
+    Minimum_circularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
+    Shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'none',
+    Relabel_inplace: bool = True,
+    Table_output_path: str = get_default_xlsx_output_path(),
     # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
 ) -> FunctionWorker[LayerDataTuple]:
 
-    xlp = xlsx_output_path
+    xlp = Table_output_path
 
     @thread_worker(connect={'returned': pbar.hide})
     def regions() -> LayerDataTuple:
         # img_normalized = normalize(image)
 
         properties = iu.compute_rprops(
-            image=image,
-            lab=labels,
-            classifier_variant=classifier_variant,
-            minsize=minsize,
-            maxsize=maxsize,
-            min_circularity=mincircularity,
-            inplace_relabel=inplace_relabel,
-            allowed_classes=allowed_classes
+            image=Image,
+            lab=Labels,
+            classifier_variant=Classifier_variant,
+            minsize=Minimum_particle_size,
+            maxsize=Maximum_particle_size,
+            min_circularity=Minimum_circularity,
+            inplace_relabel=Relabel_inplace,
+            allowed_classes=Allowed_classes
         )
 
         nonlocal xlp
@@ -162,11 +162,11 @@ def make_regions_widget(
 
         # If inplace_relabel is true, this has modified the labels from the
         # caller in place without napari suspecting anything, so we'll refresh manually
-        if inplace_relabel:
+        if Relabel_inplace:
             for layer in napari.current_viewer().layers:
                 layer.refresh()
 
-        if shape_type == 'none':
+        if Shape_type == 'none':
             # Return early, don't construct a shape layer
             return
 
@@ -190,7 +190,7 @@ def make_regions_widget(
 
         meta = dict(
             name='regions',
-            shape_type=shape_type,
+            shape_type=Shape_type,
             # edge_color_cycle=color_cycle,
             # face_color_cycle=color_cycle,
             # face_colormap=napcolormap,
@@ -202,7 +202,7 @@ def make_regions_widget(
             features=properties['class_id'],
         )
 
-        match shape_type:
+        match Shape_type:
             case 'ellipse':
                 meta.update({
                     'edge_color': 'white',
@@ -215,11 +215,11 @@ def make_regions_widget(
                 })
             # case 'none' is already handled by the early return above
             case _:
-                raise ValueError(f'Unsupported shape_type {shape_type}')
+                raise ValueError(f'Unsupported shape_type {Shape_type}')
 
         return (bbox_rects, meta, 'shapes')
 
-    if labels is None:
+    if Labels is None:
         raise ValueError('Please select segmentation labels for region analysis')
 
     pbar.show()
@@ -227,26 +227,26 @@ def make_regions_widget(
 
 
 def render_overlay(
-    image: ImageData,
-    labels: LabelsData
+    Image: ImageData,
+    Labels: LabelsData
 ) -> LayerDataTuple:
-    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=skimage_color_cycle)
+    overlay = utils.render_skimage_overlay(img=Image, lab=Labels, colors=skimage_color_cycle)
     meta = dict(name='overlay')
     return (overlay, meta, 'image')
 
 
 def export_overlay(
-    image: ImageData,
-    labels: LabelsData,
-    output_path: str = get_default_overlay_output_path(),
+    Image: ImageData,
+    Labels: LabelsData,
+    Output_path: str = get_default_overlay_output_path(),
 ) -> None:
     # # TODO: HACK
     # if (segpath := _global_state.get('seg_path')) is not None:
     #     output_path = segpath.with_stem(segpath.stem.replace('thresh', 'cls'))
 
-    overlay = utils.render_skimage_overlay(img=image, lab=labels, colors=skimage_color_cycle)
-    iio.imwrite(output_path, overlay)
-    show_info(f'Exported overlay to {output_path}')
+    overlay = utils.render_skimage_overlay(img=Image, lab=Labels, colors=skimage_color_cycle)
+    iio.imwrite(Output_path, overlay)
+    show_info(f'Exported overlay to {Output_path}')
 
 
 def main():
@@ -257,7 +257,7 @@ def main():
     args = parser.parse_args()
     ipaths = args.paths
 
-    viewer = napari.Viewer(title='EMcapsulin demo')
+    viewer = napari.Viewer(title='EMcapsulin segmentation and classification')
 
     if ipaths == ['test136']:
         eip = Path('~/emc/emcapsulin/136/136.png').expanduser()
@@ -295,7 +295,7 @@ def main():
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
     viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
-    viewer.window.add_function_widget(render_overlay, name='Render overlay image', area='right')
+    # viewer.window.add_function_widget(render_overlay, name='Render overlay image', area='right')
     viewer.window.add_function_widget(export_overlay, name='Render and export overlay image', area='right')
 
     napari.run()
