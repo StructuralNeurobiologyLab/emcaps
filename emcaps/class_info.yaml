@@ -24,9 +24,21 @@ class_ids_v5:
   3M-Qt_and_1M-Tm:     18
   MICE_2M-Qt:          19
 
+# Class ids with 0 and 1 reserved for "background" and "invalid" - since DRO classes are no longer used.
+class_ids_bgi:
+  background: 0
+  invalid: 1
+  1M-Mx:     2
+  1M-Qt:     3
+  2M-Mx:     4
+  2M-Qt:     5
+  3M-Qt:     6
+  1M-Tm:     7
 
-class_colors:
-  default: yellow
+
+class_name_colors:
+  background: transparent
+  invalid: yellow
   1M-Mx:   blue
   2M-Mx:   cyan
   1M-Qt:   magenta

@@ -81,15 +81,10 @@ def make_bbox(bbox_extents):
     return bbox_rect
 
 
+class_name_colors = utils.class_info['class_name_colors']
+class_ids_bgi = utils.class_info['class_ids_bgi']
 class_colors = {
-    0:                  'transparent',
-    1:                  'yellow',
-    utils.CLASS_IDS['1M-Mx']: 'blue',
-    utils.CLASS_IDS['1M-Qt']: 'magenta',
-    utils.CLASS_IDS['2M-Mx']: 'cyan',
-    utils.CLASS_IDS['2M-Qt']: 'red',
-    utils.CLASS_IDS['3M-Qt']: 'orange',
-    utils.CLASS_IDS['1M-Tm']: 'green',
+    class_ids_bgi[k]: v for k, v in class_name_colors.items()
 }
 
 color_cycle = []
@@ -100,15 +95,7 @@ for i in sorted(class_colors.keys()):
 skimage_color_cycle = color_cycle.copy()[1:]
 
 
-# named_class_colors = utils.class_info['class_colors']
-# class_colors = {
-#     utils.CLASS_IDS.get(k, 1): v for k, v in named_class_colors.items()
-# }
-# color_cycle = []
-# for i in sorted(class_colors.keys()):
-#     col = class_colors[i]
-#     color_cycle.append(col)
-# skimage_color_cycle = color_cycle.copy()
+
 
 
 # Load model registry

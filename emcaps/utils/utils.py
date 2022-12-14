@@ -72,7 +72,6 @@ OLD_CLASS_IDS = class_info['class_ids']  # Use v5 class names
 OLD_CLASS_NAMES = {v: k for k, v in OLD_CLASS_IDS.items()}
 OLDNAMES_TO_V5NAMES = class_info['_oldnames_to_v5names']
 V5NAMES_TO_OLDNAMES = {v: k for k, v in OLDNAMES_TO_V5NAMES.items()}
-CLASS_COLORS = class_info['class_colors']
 
 
 def render_skimage_overlay(img: Optional[np.ndarray], lab: np.ndarray, bg_label=0, alpha=0.5, **label2rgb_kwargs) -> np.ndarray:
