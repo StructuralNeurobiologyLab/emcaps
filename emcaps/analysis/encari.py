@@ -166,6 +166,13 @@ def make_regions_widget(
             for layer in napari.current_viewer().layers:
                 layer.refresh()
 
+
+        majority_class_name = iu.compute_majority_class_name(class_preds=properties['class_id'])
+
+        text_display =  f'Majority vote: {majority_class_name}'
+        print(f'\n{text_display}')
+        show_info(text_display)
+
         if Shape_type == 'none':
             # Return early, don't construct a shape layer
             return
@@ -182,11 +189,6 @@ def make_regions_widget(
             'translation': [-3, 0],
         }
 
-        majority_class_name = iu.compute_majority_class_name(class_preds=properties['class_id'])
-
-        text_display =  f'Majority vote: {majority_class_name}'
-        print(f'\n{text_display}')
-        show_info(text_display)
 
         meta = dict(
             name='regions',
