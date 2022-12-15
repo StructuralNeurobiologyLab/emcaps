@@ -83,8 +83,11 @@ def make_bbox(bbox_extents):
 
 class_name_colors = utils.class_info['class_name_colors']
 class_ids_bgi = utils.class_info['class_ids_bgi']
+
+# Convert to float RGBA (all elements in range [0, 1]) because both napari and skimage expect this range
 class_colors = {
-    class_ids_bgi[k]: v for k, v in class_name_colors.items()
+    class_ids_bgi[k]: np.array(v, dtype=np.float32) / 255.
+    for k, v in class_name_colors.items()
 }
 
 color_cycle = []
@@ -92,10 +95,8 @@ for i in sorted(class_colors.keys()):
     col = class_colors[i]
     color_cycle.append(col)
 
+# For skimage rendering the background gets special treatment and needs to be removed from the color cycle.
 skimage_color_cycle = color_cycle.copy()[1:]
-
-
-
 
 
 # Load model registry

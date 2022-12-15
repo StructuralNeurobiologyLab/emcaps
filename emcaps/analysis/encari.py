@@ -119,7 +119,7 @@ def make_seg_widget(
     pbar.show()
     return seg()
 
-
+# TODO: Turn this back into a segmentation widget that actually returns a layer, now that regions are usually no longer required.
 # TODO: GUI progress indicator
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
 def make_regions_widget(

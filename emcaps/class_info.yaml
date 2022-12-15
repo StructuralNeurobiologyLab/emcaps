@@ -36,16 +36,16 @@ class_ids_bgi:
   1M-Tm:     7
 
 
+# RGBA values in uint8 range (internally converted to floats between 0 and 1)
 class_name_colors:
-  background: transparent
-  invalid: yellow
-  1M-Mx:   blue
-  2M-Mx:   cyan
-  1M-Qt:   magenta
-  2M-Qt:   red
-  3M-Qt:   orange
-  1M-Tm:   green
-
+  background: [0, 0, 0, 0]
+  invalid: [255, 255, 255, 255]
+  1M-Qt:   [130, 180, 187, 255]
+  2M-Qt:   [38, 119, 120, 255]
+  3M-Qt:   [37, 94, 121, 255]
+  1M-Mx:   [174, 60, 96, 255]
+  2M-Mx:   [223, 71, 60, 255]
+  1M-Tm:   [243, 195, 60, 255]
 
 label_name: encapsulins
 
