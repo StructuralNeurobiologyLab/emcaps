@@ -108,7 +108,7 @@ def make_seg_widget(
         pred = sm.remove_small_objects(pred, Minimum_particle_size)
 
         meta = dict(
-            name='segmentation',
+            name='Segmentation',
             color=class_colors.copy(),
             seed=0,
         )
@@ -119,8 +119,7 @@ def make_seg_widget(
     pbar.show()
     return seg()
 
-# TODO: Turn this back into a segmentation widget that actually returns a layer, now that regions are usually no longer required.
-# TODO: GUI progress indicator
+
 @magic_factory(pbar={'visible': False, 'max': 0, 'label': 'Analyzing regions...'})
 def make_regions_widget(
     pbar: widgets.ProgressBar,
@@ -131,8 +130,8 @@ def make_regions_widget(
     Minimum_particle_size: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     Maximum_particle_size: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
     Minimum_circularity: Annotated[float, {"min": 0.0, "max": 1.0, "step": 0.1}] = 0.8,
-    Shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'none']}] = 'none',
-    Relabel_inplace: bool = True,
+    Shape_type: Annotated[str, {'choices': ['ellipse', 'rectangle', 'dense']}] = 'dense',
+    Relabel_inplace: bool = False,
     Table_output_path: str = get_default_xlsx_output_path(),
     # xlsx_output_path: Path = Path(get_default_xlsx_output_path()),  # Path picker always expects existing files, so use str instead:
 ) -> FunctionWorker[LayerDataTuple]:
@@ -143,7 +142,7 @@ def make_regions_widget(
     def regions() -> LayerDataTuple:
         # img_normalized = normalize(image)
 
-        properties = iu.compute_rprops(
+        properties, relabeled_seg = iu.compute_rprops(
             image=Image,
             lab=Labels,
             classifier_variant=Classifier_variant,
@@ -151,7 +150,8 @@ def make_regions_widget(
             maxsize=Maximum_particle_size,
             min_circularity=Minimum_circularity,
             inplace_relabel=Relabel_inplace,
-            allowed_classes=Allowed_classes
+            allowed_classes=Allowed_classes,
+            return_relabeled_seg=True
         )
 
         nonlocal xlp
@@ -173,10 +173,15 @@ def make_regions_widget(
         print(f'\n{text_display}')
         show_info(text_display)
 
-        if Shape_type == 'none':
+        if Shape_type == 'dense':
             # Return early, don't construct a shape layer
-            return
-
+            meta = dict(
+                name='Classification',
+                color=class_colors.copy(),
+                seed=0,
+            )
+            return (relabeled_seg, meta, 'labels')
+            
 
         bbox_rects = iu.make_bbox([properties[f'bbox-{i}'] for i in range(4)])
         text_parameters = {
@@ -193,11 +198,6 @@ def make_regions_widget(
         meta = dict(
             name='regions',
             shape_type=Shape_type,
-            # edge_color_cycle=color_cycle,
-            # face_color_cycle=color_cycle,
-            # face_colormap=napcolormap,
-            # edge_colormap=napcolormap,
-            # opacity=0.35,
             properties=properties,
             text=text_parameters,
             metadata={'majority_class_name': majority_class_name},
@@ -296,9 +296,9 @@ def main():
         viewer.add_labels(lab > 0, name=lab_path.name, seed=0, color=class_colors.copy())
 
     viewer.window.add_dock_widget(make_seg_widget(), name='Segmentation', area='right')
-    viewer.window.add_dock_widget(make_regions_widget(), name='Region analysis', area='right')
+    viewer.window.add_dock_widget(make_regions_widget(), name='Classification', area='right')
     # viewer.window.add_function_widget(render_overlay, name='Render overlay image', area='right')
-    viewer.window.add_function_widget(export_overlay, name='Render and export overlay image', area='right')
+    viewer.window.add_function_widget(export_overlay, name='Export overlay image', area='right')
 
     napari.run()
 
