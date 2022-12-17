@@ -30,7 +30,7 @@ From the project directory execute:
 
     conda env create -f environment.yml
     conda activate emcaps
-    pip install --no-deps -e .
+    pip install .
 
 
 ## Running the code
