@@ -154,7 +154,7 @@ For running hydra-enabled code with custom configuration you can either point to
 
 ## Dataset
 
-If you want to train own models and/or do quantitative evaluation on the official data, please find the data [here](https://drive.google.com/drive/folders/1S-dwZx0kHY3HuIiAXMyFlezsfOJmwYut?usp=share_link) (TODO: Insert official data link here) and extract it to `~/emc/emcapsulin`.
+If you want to train own models and/or do quantitative evaluation on the official data, please find the data [here](https://drive.google.com/drive/folders/1S-dwZx0kHY3HuIiAXMyFlezsfOJmwYut?usp=share_link) and extract it to `~/emc/emcapsulin`.
 
 
 

@@ -15,7 +15,7 @@ sheet_path: ${path_prefix}/emcapsulin/emcapsulin_data.xlsx
 # Where to write results of splitdataset.py
 isplit_data_path: ${path_prefix}/emcapsulin/isplitdata_${v}
 # Data selection: spreadsheet column name for training and validation subsets
-tr_group: all
+tr_group: all2
 # Optionally specify different evaluation group (-> cross-domain generalization test).
 # Special value "everything" means every image that belongs to any group is used.
 ev_group: everything

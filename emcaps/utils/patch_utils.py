@@ -75,29 +75,6 @@ def measure_inner_disk_radius(hprofile, center_nhood=2, discrete=False):
         return np.nan
     return inner_radius
 
-    # # Starting from inner radius outwards, find first crossing of bg_thresh value:
-    # # 1. "right" index: where bg_thresh was already crossed (exceeding)
-    # outer_right_x = np.argmax(hprofile[inner_right_x:] >= bg_thresh)
-    # # Clip at boundary
-    # if len(hprofile) - 1 > outer_right_x:
-    #     print(f'{outer_right_x=}')
-    # outer_right_x = np.clip(outer_right_x, a_min=None, a_max=len(hprofile) - 1)
-    # # 2. "left" index: Index immediately before bg_thresh crossing
-    # outer_left_x = outer_right_x - 1
-    # if discrete:
-    #     # Return discrete index (-> floor)
-    #     outer_radius = outer_left_x
-    # else:
-    #     # 3. Approximate crossing's continuous location by doing inverse linear interpolation
-    #     outer_right_y = hprofile[outer_right_x]
-    #     outer_left_y = hprofile[outer_left_x]
-    #     # Interpolate reverse function to get intersection point
-    #     # TODO: Ensure ordering of interpolation args
-    #     outer_x = np.interp(bg_thresh, [outer_left_y, outer_right_y], [outer_left_x, outer_left_x])
-    #     outer_radius = outer_x
-
-    # return inner_radius, outer_radius
-
 
 def measure_outer_disk_radius(mask: np.ndarray, discrete: bool = False) -> float:
     """Measure the average distance between the center and the boundary of the seg mask -> r2"""
@@ -161,8 +138,6 @@ def __proto_concentric_average(img, pad_to=None):
         padded_profile = np.pad(profile, (before, after))
         # padded_profile = np.pad(profile, (0, after))
         profile = padded_profile
-    # avg = _profile_concentric_average(profile=profile, n=img.shape[0])
-    # TODO: avg is somehow black in the middle, but should be black outside...
     avg = _profile_concentric_average(profile=profile, n=len(profile))
     return avg
 
@@ -190,15 +165,6 @@ def concentric_max(img, steps=360):
 
 
 if __name__ == '__main__':
-    # plt.rcParams.update({'font.family': 'Arial'})
-
-
-    # avg = True  # Plot average profile on top
-    # avg = False  # Plot demo patch profile instead
-
-
-    # patch_path = Path('~/tumpatches').expanduser()
-    # patch_path = Path('~/tum/patches_v2_hek_bgmask_enctype_prefix/raw/').expanduser()
     patch_path = Path('~/tum/patches_v2_hek_enctype_prefix/raw/').expanduser()
     mask_path = patch_path.parent / 'mask'
 

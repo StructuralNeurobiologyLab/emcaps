@@ -94,7 +94,6 @@ def main(cfg: DictConfig) -> None:
     ])
     thresh = cfg.patchifyseg.thresh
 
-    # TODO: Move these constants to cfg
     N_EVAL_SAMPLES = 30
     EC_REGION_RADIUS = cfg.patchifyseg.ec_region_radius
     EC_MIN_AREA = cfg.minsize

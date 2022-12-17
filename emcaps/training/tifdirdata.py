@@ -122,9 +122,6 @@ class EncPatchData(data.Dataset):
     def __getitem__(self, index):
         index %= len(self.meta)  # Wrap around to support epoch_multiplier
         inp = self.inps[index]
-        if True:
-            pass
-            # inp = concentric_average(inp)  # TODO
         target = self.targets[index]
         fname = self.meta.patch_fname.iloc[index]
         label_name = target

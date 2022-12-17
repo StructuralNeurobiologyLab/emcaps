@@ -2,8 +2,6 @@
 raw images and a model trained with `segtrain.py`."""
 
 
-# TODO: Reconfigure to do one example batch processing run based on single table database sheet
-
 import logging
 import os
 from pathlib import Path
@@ -117,8 +115,7 @@ def find_vx_val_images(isplit_data_path: Path | str, group_name: str, sheet_path
 @hydra.main(version_base='1.2', config_path='../conf', config_name='config')
 def main(cfg: DictConfig) -> None:
     _hydra_cwd = hydra.core.hydra_config.HydraConfig.get()['run']['dir']
-    logger.info(f'Writing logs and config to {_hydra_cwd}')
-    # (Path(cfg.segment.results_root) / '.hydra_outputs').symlink_to(_hydra_cwd)
+    logger.info(f'Writing logs and full config to {_hydra_cwd}')
 
     tta_num = cfg.segment.tta_num
     segmenter_path = cfg.segment.segmenter

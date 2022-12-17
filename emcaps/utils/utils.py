@@ -2,8 +2,6 @@
 Utility functions and resources.
 """
 
-# TODO: Eliminate duplicated code elsewhere by importing from here.
-
 import os
 import platform
 import tempfile

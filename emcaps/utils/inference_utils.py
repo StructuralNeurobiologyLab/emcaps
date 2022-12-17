@@ -252,6 +252,7 @@ def compute_rprops(
         cleaned_lab = clear_border(cleaned_lab)
     cleaned_lab = ndimage.binary_fill_holes(cleaned_lab)
     cleaned_lab = sm.remove_small_objects(cleaned_lab, minsize)
+    # cleaned_lab = sm.binary_erosion(cleaned_lab, footprint=sm.disk(3))  # Uncomment to erode before cc labeling
 
     # label image regions
     cc, n_comps = ndimage.label(cleaned_lab)

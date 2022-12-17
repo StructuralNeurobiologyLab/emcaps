@@ -62,13 +62,9 @@ CLASS_IDS = class_info['class_ids_v5']
 CLASS_NAMES = {v: k for k, v in CLASS_IDS.items()}
 
 
-# TODO: Determine color map in class_info.yaml
 from emcaps.utils.inference_utils import class_colors, skimage_color_cycle
 
 _global_state = {}
-
-
-# TODO: Support invalidation for low-confidence predictions
 
 
 def get_default_xlsx_output_path() -> str:
@@ -242,7 +238,7 @@ def export_overlay(
     Labels: LabelsData,
     Output_path: str = get_default_overlay_output_path(),
 ) -> None:
-    # # TODO: HACK
+    ## HACK
     # if (segpath := _global_state.get('seg_path')) is not None:
     #     output_path = segpath.with_stem(segpath.stem.replace('thresh', 'cls'))
 

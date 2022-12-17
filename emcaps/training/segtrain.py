@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-# TODO: Only use ignoring on TmEnc
-
-
 """
 2D semantic segmentation training script
 """
