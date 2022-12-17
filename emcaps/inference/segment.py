@@ -14,7 +14,6 @@ from omegaconf import DictConfig
 import imageio.v3 as iio
 import skimage
 import torch
-import yaml
 import pandas as pd
 import torch.backends.cudnn
 
@@ -32,7 +31,6 @@ from elektronn3.inference import Predictor
 from elektronn3.data import transforms
 
 from emcaps import utils
-from emcaps.utils import get_old_enctype, get_v5_enctype, OLDNAMES_TO_V5NAMES, clean_int, ensure_not_inverted, get_meta
 from emcaps.utils import inference_utils as iu
 
 torch.backends.cudnn.benchmark = True

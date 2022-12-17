@@ -9,10 +9,7 @@ built with eclassify_analysis.py.
 import matplotlib.pyplot as plt
 import numpy as np
 import imageio.v3 as iio
-import os
-import sys
 from pathlib import Path
-from scipy.signal import find_peaks
 from scipy.interpolate import interp1d
 from skimage.transform import rotate
 import tqdm
@@ -368,5 +365,3 @@ if __name__ == '__main__':
 
     plt.savefig('/tmp/patchprofiles_compared.pdf')
     # plt.show()
-
-    # import IPython ; IPython.embed(); raise SystemExit

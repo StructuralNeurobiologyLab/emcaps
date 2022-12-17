@@ -1,7 +1,7 @@
 # Based on scikit-image code (skimage.color.colorlabel): https://github.com/scikit-image/scikit-image/blob/6423c5f81167e9b673583d6d37d9fff2b8fc84e7/skimage/color/colorlabel.py
 # Original copyright (C) 2009-2022 the scikit-image team, BSD-3 License
 
-# Changes by mdraw:
+# Changes by Martin Drawitsch:
 # - label2rgb: Preserve label IDs when coloring labels
 # - Add color_dict_rgba
 

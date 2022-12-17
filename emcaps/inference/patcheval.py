@@ -5,7 +5,6 @@ Supports majority votes.
 """
 
 import random
-from typing import Literal
 from pathlib import Path
 
 import hydra
@@ -23,9 +22,6 @@ from omegaconf import DictConfig, OmegaConf
 import elektronn3
 elektronn3.select_mpl_backend('auto')
 
-from elektronn3.training import metrics
-from elektronn3.data import transforms
-from elektronn3.inference import Predictor
 
 from emcaps.analysis.cf_matrix import plot_confusion_matrix
 from emcaps import utils
