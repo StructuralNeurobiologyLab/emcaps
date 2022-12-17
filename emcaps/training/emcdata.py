@@ -21,7 +21,7 @@ from torch.utils import data
 
 from emcaps import utils
 
-logger = logging.getLogger('emcaps-tifdirdata')
+logger = logging.getLogger('emcaps-emcdata')
 
 
 @lru_cache(maxsize=1024)

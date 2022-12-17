@@ -31,7 +31,7 @@ from elektronn3.models.unet import UNet
 from elektronn3.modules.loss import CombinedLoss, DiceLoss
 from elektronn3.training import SWA, Backup, Trainer, metrics
 
-from emcaps.training.tifdirdata import EncSegData
+from emcaps.training.emcdata import EncSegData
 
 
 

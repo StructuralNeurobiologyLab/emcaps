@@ -30,7 +30,7 @@ from elektronn3.data import transforms
 import cv2; cv2.setNumThreads(0); cv2.ocl.setUseOpenCL(False)
 import albumentations
 
-from emcaps.training.tifdirdata import EncPatchData
+from emcaps.training.emcdata import EncPatchData
 from emcaps.models.effnetv2 import effnetv2_m
 from emcaps import utils
 
