@@ -19,12 +19,10 @@ import napari.utils
 import numpy as np
 import torch
 import yaml
-import pandas as pd
 from magicgui import magic_factory, widgets
 from napari.qt.threading import FunctionWorker, thread_worker
 from napari.types import ImageData, LabelsData, LayerDataTuple
 from napari.utils.notifications import show_info
-from scipy import ndimage
 from skimage import morphology as sm
 from typing_extensions import Annotated
 
@@ -88,7 +86,7 @@ def get_default_overlay_output_path() -> str:
 def make_seg_widget(
     pbar: widgets.ProgressBar,
     Image: ImageData,
-    Segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all_v15',
+    Segmenter_variant: Annotated[str, {'choices': list(iu.segmenter_urls.keys())}] = 'unet_all2_v15',
     Threshold: Annotated[float, {"min": 0, "max": 1, "step": 0.1}] = 0.5,
     Minimum_particle_size: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
 ) -> FunctionWorker[LayerDataTuple]:
@@ -121,7 +119,7 @@ def make_regions_widget(
     pbar: widgets.ProgressBar,
     Image: ImageData,
     Labels: LabelsData,
-    Classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_all_v15',
+    Classifier_variant: Annotated[str, {'choices': list(iu.classifier_urls.keys())}] = 'effnet_all2_v15',
     Allowed_classes: Annotated[list[str], {'choices': utils.CLASS_GROUPS['simple_hek'], 'allow_multiple': True}] = utils.CLASS_GROUPS['simple_hek'],
     Minimum_particle_size: Annotated[int, {"min": 0, "max": 1000, "step": 50}] = 60,
     Maximum_particle_size: Annotated[int, {"min": 1, "max": 2000, "step": 50}] = 1000,
@@ -136,8 +134,6 @@ def make_regions_widget(
 
     @thread_worker(connect={'returned': pbar.hide})
     def regions() -> LayerDataTuple:
-        # img_normalized = normalize(image)
-
         properties, relabeled_seg = iu.compute_rprops(
             image=Image,
             lab=Labels,
@@ -238,7 +234,7 @@ def export_overlay(
     Labels: LabelsData,
     Output_path: str = get_default_overlay_output_path(),
 ) -> None:
-    ## HACK
+    ## Uncomment for fast cls overlay export based on segment.py results
     # if (segpath := _global_state.get('seg_path')) is not None:
     #     output_path = segpath.with_stem(segpath.stem.replace('thresh', 'cls'))
 
@@ -257,15 +253,6 @@ def main():
 
     viewer = napari.Viewer(title='EMcapsulin segmentation and classification')
 
-    if ipaths == ['test136']:
-        eip = Path('~/emc/emcapsulin/136/136.png').expanduser()
-        ilp = Path('~/emc/emcapsulin/136/136_label_enc_3M-Qt.png').expanduser()
-        eimg = iio.imread(eip)[600:900, 600:900].copy()
-        elab = iio.imread(ilp)[600:900, 600:900].copy() > 0
-        viewer.add_image(eimg, name='img')
-        viewer.add_labels(elab, name='lab', seed=0, color=class_colors.copy())
-        ipaths = []
-
     if ipaths and len(ipaths) > 0:
         img_path = Path(ipaths[0]).expanduser()
         img = iio.imread(img_path)
@@ -274,12 +261,8 @@ def main():
 
         _global_state['src_path'] = img_path
         _global_state['src_name'] = img_path.stem
-        # Reassign default paths based on updated image source info
-        # TODO: WIP, Make this actually reassign paths:
-        # make_regions_widget.xlsx_output_path = get_default_xlsx_output_path()
-        # export_overlay.output_path = get_default_overlay_output_path()
 
-        # # TEMPORARY HACK for fast segmap opening TODO remove/rewrite
+        ## Uncomment for fast segmap opening based on segment.py results
         # seg_path = img_path.with_stem(img_path.stem.replace('raw', 'thresh'))
         # seg = iio.imread(seg_path)
         # seg = (seg > 0).astype(np.int32)
