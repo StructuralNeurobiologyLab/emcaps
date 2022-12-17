@@ -4,6 +4,7 @@ typical size of encapsulin particles, by median or by finding the first KDE
 peak.
 """
 
+# TODO: Adapt to config system.
 
 import os
 from pathlib import Path
@@ -11,7 +12,6 @@ from os.path import expanduser as eu
 
 import numpy as np
 import imageio.v3 as iio
-from numpy.core.fromnumeric import ndim
 import skimage
 
 from skimage import morphology as sm

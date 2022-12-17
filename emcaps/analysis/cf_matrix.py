@@ -1,7 +1,7 @@
 """ Confusion matrix visualization
 based on https://github.com/DTrimarchi10/confusion_matrix, (C) Dennis Trimarchi
 
-Changes:
+Changes by Martin Drawitsch:
 - Support percentage normalization over true or pred conditions
 - ax-based instead of figure-based
 - Remove group_name support
