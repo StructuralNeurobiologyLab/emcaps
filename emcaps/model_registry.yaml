@@ -1,5 +1,4 @@
 segmenter_urls:
-  # Current
   unet_all_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/unet_all_v15.pts
   unet_all2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/unet_all2_v15.pts
   unet_all3_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/unet_all3_v15.pts
@@ -8,38 +7,9 @@ segmenter_urls:
   unet_hek2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/unet_hek2_v15.pts
   unet_mice_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/unet_mice_v15.pts
 
-  # Old
-  unet_all_v13: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v13_all_240k.pts
-  unet_all_v10c: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10c_all_240k.pts
-  unet_all_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_200k.pts
-  unet_hek_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_160k.pts
-  unet_dro_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_dro_160k.pts
-  unet_mice_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_mice_240k.pts
-  unet_qttm_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_qttm_240k.pts
-  unet_onlytm_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_onlytm_160k.pts
-  unet_all_notm_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_all_notm_200k.pts
-  unet_hek_notm_v10: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_v10_hek_notm_160k.pts
-  unet_hek_v8: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_hek_160k.pts
-  unet_qttm_v8: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v8_qttmpatterns_160k.pts
-  unet_all_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_all_160k.pts
-  unet_hek_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_hek_160k.pts
-  unet_dro_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/unet_gdl_v7_dro_160k.pts
-
 classifier_urls:
-  # Current
   effnet_all_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_all_v15.pts
   effnet_all2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_all2_v15.pts
   effnet_all3_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_all3_v15.pts
-  effnet_dro_v15: NA
-  effnet_dro2_v15: NA
   effnet_hek_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_hek_v15.pts
   effnet_hek2_v15: https://github.com/mdraw/emcaps-models/releases/download/v15/effnet_hek2_v15.pts
-  effnet_mice_v15: NA
-
-  # Old
-  effnet_m_all_v14: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v14_all_120k.pts
-  effnet_m_all_v10c: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v10c_all_80k.pts
-  effnet_m_hek_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_hek_80k.pts
-  effnet_s_hek_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_hek_80k.pts
-  effnet_m_dro_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_m_v7_dro_80k.pts
-  effnet_s_dro_v7: https://github.com/mdraw/emcaps-models/releases/download/emcaps-models/effnet_s_v7_dro_80k.pts
