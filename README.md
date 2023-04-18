@@ -1,7 +1,10 @@
-# Code for EMcapsulins - "Genetically encoded barcodes for correlative volume electron microscopy"
+# Source code for "Genetically encoded barcodes for correlative volume electron microscopy"
 
-This repository contains code for the machine learning part of the paper "Genetically encoded barcodes for correlative volume electron microscopy" (TODO: Put a reference here when it's published).
+This repository contains all code for the sequential ML pipeline of the paper [Genetically encoded barcodes for correlative volume electron microscopy](https://www.nature.com/articles/s41587-023-01713-y).
 
+Pretrained models can be found as release artifacts [here](https://github.com/StructuralNeurobiologyLab/emcaps/releases/tag/models). They are automatically downloaded and cached when needed by the code.
+
+![Screenshot of the interactive GUI tool for segmentation and EMcapsulin particle classification (encari).](encari-screenshot.jpg)
 
 
 ## Installation
