@@ -1,4 +1,4 @@
-![PyPI](https://img.shields.io/pypi/v/emcaps) ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/StructuralNeurobiologyLab/emcaps/python-publish.yml)
+[![PyPI](https://img.shields.io/pypi/v/emcaps)](https://pypi.org/project/emcaps/) [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/StructuralNeurobiologyLab/emcaps/python-publish.yml)](https://github.com/StructuralNeurobiologyLab/emcaps/actions)
 
 # Source code for "Genetically encoded barcodes for correlative volume electron microscopy"
 
