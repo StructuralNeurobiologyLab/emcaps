@@ -1,3 +1,5 @@
+![PyPI](https://img.shields.io/pypi/v/emcaps) ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/StructuralNeurobiologyLab/emcaps/python-publish.yml)
+
 # Source code for "Genetically encoded barcodes for correlative volume electron microscopy"
 
 This repository contains all code for the sequential ML pipeline of the paper [Genetically encoded barcodes for correlative volume electron microscopy](https://www.nature.com/articles/s41587-023-01713-y).
@@ -9,27 +11,35 @@ Pretrained models can be found as release artifacts [here](https://github.com/St
 
 ## Installation
 
-First obtain the project sources (either clone or download zip and extract) and `cd` to the project root. Then choose one of the following installation paths:
+### Option 1: From PyPI (with `pip`)
+
+You can install the project with scripts and all dependencies by running
+
+    pip install emcaps
 
 
-### Option 1: with `pip` / virtual environment
+Notes:
+- It is recommended to use a new [virtual environment](https://virtualenv.pypa.io/en/latest/) for this.
 
-Create and activate a new virtual environment, then from the project directory execute:
+- If you encounter PyTorch issues with this setup, please [install PyTorch manually following the official instructions](https://pytorch.org/get-started/locally/)
+
+- If you want to use the napari-based GUI, you will also need to [install one of qtpy's supported Qt backends](https://github.com/spyder-ide/qtpy/blob/master/README.md#requirements), for example PyQt5:
+
+      pip install pyqt5
+
+    This has to be done manually since none of the backends is compatible with all platforms and pip can't auto-select an optimal one.
+
+
+### Option 2: From sources (with `pip` or `conda`)
+
+First obtain the [project sources](https://github.com/StructuralNeurobiologyLab/emcaps) (either clone or [download zip](https://github.com/StructuralNeurobiologyLab/emcaps/archive/refs/heads/master.zip) and extract) and `cd` to the project root.
+
+If you want to install all dependencies and the package itself with `pip`, just run
 
     pip install .
 
-If you encounter PyTorch issues with this setup, please [install PyTorch manually following the official instructions](https://pytorch.org/get-started/locally/)
 
-If you want to use the napari-based GUI, you will also need to [install one of qtpy's supported Qt backends](https://github.com/spyder-ide/qtpy/blob/master/README.md#requirements), for example PyQt5:
-
-    pip install pyqt5
-
-This has to be done manually since none of the backends is compatible with all platforms and pip can't auto-select an optimal one.
-
-
-### Option 2: with `conda`
-
-From the project directory execute:
+Alternatively, if you want to install the dependencies with `conda`, run the following commands:
 
     conda env create -f environment.yml
     conda activate emcaps
