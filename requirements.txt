@@ -1,6 +1,4 @@
-# elektronn3 @ git+git://github.com/ELEKTRONN/elektronn3.git@emcaps#egg=elektronn3
-elektronn3 @ https://github.com/ELEKTRONN/elektronn3/archive/refs/heads/emcaps.zip
-
+elektronn3>=0.1.0,<0.2.0
 albumentations>=1.0.3
 hydra-core>=1.2.0
 imageio>=2.19.3

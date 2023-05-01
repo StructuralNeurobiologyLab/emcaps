@@ -33,4 +33,4 @@ dependencies:
 
   - pip
   - pip:
-    - git+https://github.com/ELEKTRONN/elektronn3.git@emcaps#egg=elektronn3
+    - elektronn3=0.1.0
